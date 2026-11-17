@@ -39,8 +39,9 @@ Uppmätt på en MacBook Air med Apple Silicon, med testljudet `tva-talare.m4a` (
 | whisper.cpp med Metal (standard på Apple Silicon) | **7,2 s** | 1,8 s |
 | faster-whisper på processorn | 18,3 s | 1,9 s |
 
-Räknat på samma sätt tar ett möte på en timme runt 8 minuter med Metal. Det är en uppskattning
-utifrån ett kort klipp; ett riktigt långt möte är inte uppmätt.
+Räknat på samma sätt tar ett möte på en timme runt 8–10 minuter med Metal. DTW-justeringen, som
+används när talare delas upp, kostar cirka 20 % (se "Vad som är testat"). Det är en uppskattning
+utifrån korta klipp; ett riktigt långt möte är inte uppmätt.
 
 ## Installera
 
@@ -206,11 +207,13 @@ Provat 2026-11-17 i en Linux-miljö utan grafikprocessor, med samma Python- och 
 - `installera.sh` och `halsokoll/prov.sh` gick gröna med båda motorerna, och `whisper-cli` använde
   Metal (tiderna ovan).
 - Ett riktigt samtal mellan två personer spelades in via webbsidan i Chrome. Det avslöjade att
-  pyannote inte hittade talarbytena, och det ledde till metoden ovan.
+  pyannote inte hittade talarbytena, och det ledde till metoden ovan. Med den nya metoden blev
+  bytena rätt även på Macen.
+- DTW (utan flash attention) kostade lite: för samtalet på 48 s gick transkriberingen från 5,9 till
+  7,1 s, och totalt tog det 8,3 s med talaruppdelningen.
 
 **Inte provat än:**
 
-- hur mycket DTW (utan flash attention) kostar i tid med Metal när talare delas upp;
 - automatiskt motorval (`MOTOR=auto`) på Mac: på MacBook Air var whisper.cpp vald uttryckligen;
 - inspelning via webbsidan i **Safari** (Safari spelar in i ett annat format än Chrome);
 - riktiga möten med personer som avbryter varandra.
