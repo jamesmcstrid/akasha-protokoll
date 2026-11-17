@@ -66,16 +66,15 @@ function installningar() {
            kalla: $("kalla").value };
 }
 
+// Bara hur man spelar in (mikrofon eller digitalt) sparas mellan besoken. Antal talare och namn
+// ar olika for varje mote: ett sparat "1 - dela inte upp" gjorde att nasta mote inte delades upp.
 function sparaVal() {
-  localStorage.setItem("akasha-meet-val", JSON.stringify(
-    { talare: $("talare").value, ord: $("ord").value, kalla: $("kalla").value }));
+  localStorage.setItem("akasha-meet-val", JSON.stringify({ kalla: $("kalla").value }));
 }
 
 function hamtaVal() {
   try {
     const v = JSON.parse(localStorage.getItem("akasha-meet-val") || "{}");
-    if (v.talare) $("talare").value = v.talare;
-    if (v.ord) $("ord").value = v.ord;
     if (v.kalla === "digitalt" && kanDelaFlik()) $("kalla").value = "digitalt";
   } catch { /* ignorera */ }
   visaKallaHjalp();
