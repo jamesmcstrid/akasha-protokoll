@@ -117,7 +117,7 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 | `ORDLISTA` | tom | Ord som alltid ska stavas rätt, t.ex. företagets namn |
 | `DATAKATALOG` | `~/AkashaMeet` | Var inspelningar och texter sparas |
 | `PORT` | `8611` | Webbsidans port |
-| `TALARE_TROSKEL` | `0.8` | Bara för "Vet inte – gissa". Högre värde ger färre talare |
+| `TALARE_TROSKEL` | `0.6` | Två röster som liknar varandra mer än så räknas som samma person (0–1) |
 | `MAX_MB` | `1024` | Största fil som går att ladda upp |
 
 ## Felsökning
@@ -128,7 +128,7 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 | Sidan öppnas inte | `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`. Läs loggen `~/AkashaMeet/akasha-meet.log` |
 | "Inte redo" uppe till höger | Håll muspekaren över texten för att se orsaken. Oftast saknas modellerna: `bash mac/hamta-modeller.sh` |
 | "Fick inte tillgång till mikrofonen" | Tillåt mikrofonen för sidan i webbläsarens inställningar, och för webbläsaren i Systeminställningar → Integritet och säkerhet → Mikrofon |
-| Fel antal talare | Ange antalet i stället för "Vet inte", och tryck **Gör om** i listan |
+| Fel antal talare, eller "bara 1 röst gick att skilja åt" | Tryck **Gör om** i listan med rätt antal. Rösterna skiljs lättare åt om ni sitter på ungefär samma avstånd från datorn |
 | Inspelningen fastnade på "Spelar in" | Tryck **Avsluta och transkribera** i listan |
 
 ## Hur det fungerar
@@ -142,9 +142,10 @@ app/app.py (Flask, bara 127.0.0.1) ── sparar i ~/AkashaMeet ── köar ett
   └─ bakgrundstråd, ett jobb åt gången:
        1. avkodar ljudet (PyAV)
        2. KB-Whisper medium: text med tidsstämpel per ord        app/motor.py
-       3. sherpa-onnx: vem pratar när                            app/talare.py
-          (pyannote segmentation-3.0 + NeMo TitaNet small)
-       4. varje ord får den talare som pratade då → repliker
+       3. vem pratar när:                                        app/talare.py
+          röstavtryck (NeMo TitaNet small via sherpa-onnx) i fönster om 1,5 s
+          längs talet, uppdelade i lika många grupper som antalet talare
+       4. varje ord får gruppen som fönstren runt ordet liknar mest → repliker
        5. sparar .json och .md                                   app/lagring.py, app/export.py
 ```
 
@@ -158,11 +159,39 @@ app/app.py (Flask, bara 127.0.0.1) ── sparar i ~/AkashaMeet ── köar ett
 
 Köra enhetstesterna: `venv/bin/python -m unittest discover -s tester`
 
+## Talaruppdelningen
+
+Första versionen använde pyannote för att hitta talarbyten. I det första riktiga samtalet, två
+personer inspelade med en MacBook Airs mikrofon, hittade den inga byten alls, och nästan allt hamnade
+hos Talare 1. Nu används en annan metod som klarar samma inspelning:
+
+1. whisper ger varje ord en tidsstämpel. Med whisper.cpp används DTW-justering för detta, eftersom
+   de vanliga ordtiderna kunde hamna 0,6 s fel. DTW kräver att flash attention är av, så det slås
+   bara på när talare ska delas upp.
+2. Röstavtryck (NeMo TitaNet small) tas i glidande fönster om 1,5 sekunder där det pratas. Nästan
+   tysta fönster hoppas över.
+3. Avtrycken delas upp i lika många grupper som antalet talare. Är två grupper nästan lika
+   (`TALARE_TROSKEL`) är det samma person. Då slås de ihop, och sidan säger till att färre röster
+   gick att skilja åt i stället för att hitta på en talare. "Vet inte – gissa" provar 2, 3, 4 …
+   grupper och stannar innan två grupper blir för lika, eller innan någon talare får mindre än
+   1,5 s eget tal.
+4. Varje ord får den grupp som fönstren närmast ordet liknar mest.
+
+Utvärderat på ordnivå, med båda motorerna:
+
+- **Tre konstgjorda dialoger med facit:** 100 % rätt talare, både med angivet antal och med "Vet inte".
+- **Två inspelningar med bara en röst:** delades inte upp, med 2 angivet blev det en varning.
+- **Det riktiga samtalet:** fick 2 talare med båda sätten. Bytena hamnade mellan rätt ord
+  ("…det visste jag inte" | "kan du säga…"), och det korta "vad sa du?" blev en egen replik.
+  Ett "mhm" mitt i en lång replik hamnade hos fel person.
+
+Korta inpass på under en sekund är svårast. Underlaget är fortfarande litet.
+
 ## Vad som är testat
 
 Provat 2026-11-17 i en Linux-miljö utan grafikprocessor, med samma Python- och biblioteksversioner:
 
-- **Enhetstester:** 35 st, gröna. De täcker talaruppdelning, lagring av inspelningar i delar,
+- **Enhetstester:** 41 st, gröna. De täcker talaruppdelning, lagring av inspelningar i delar,
   export, skydd mot andra webbsidor och alla API-flöden.
 - **`installera.sh` från början:** med en ersättare för launchd. Modellnedladdningen med
   sha256-kontroll gick igenom.
@@ -172,13 +201,18 @@ Provat 2026-11-17 i en Linux-miljö utan grafikprocessor, med samma Python- och 
   - inspelning, stopp, talaruppdelning, namn, kopiera, nedladdning, uppladdning och radering;
   - en inspelning där fliken stängdes mitt i, som sedan avslutades och transkriberades från listan.
 
-**På en MacBook Air med Apple Silicon:** `installera.sh` och `halsokoll/prov.sh` gick gröna med båda
-motorerna. `whisper-cli` använde Metal (tiderna ovan).
+**På en MacBook Air med Apple Silicon:**
+
+- `installera.sh` och `halsokoll/prov.sh` gick gröna med båda motorerna, och `whisper-cli` använde
+  Metal (tiderna ovan).
+- Ett riktigt samtal mellan två personer spelades in via webbsidan i Chrome. Det avslöjade att
+  pyannote inte hittade talarbytena, och det ledde till metoden ovan.
 
 **Inte provat än:**
 
+- hur mycket DTW (utan flash attention) kostar i tid med Metal när talare delas upp;
 - automatiskt motorval (`MOTOR=auto`) på Mac: på MacBook Air var whisper.cpp vald uttryckligen;
-- inspelning via webbsidan på en riktig Mac, i Chrome och i **Safari** (Safari spelar in i ett annat format);
+- inspelning via webbsidan i **Safari** (Safari spelar in i ett annat format än Chrome);
 - riktiga möten med personer som avbryter varandra.
 
 Om inspelningen krånglar i Safari: använd Chrome.
@@ -190,6 +224,5 @@ Om inspelningen krånglar i Safari: använd Chrome.
 | [KB-Whisper medium](https://huggingface.co/KBLab/kb-whisper-medium) (KBLab, Kungliga biblioteket) | Apache-2.0 |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | MIT |
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2.0 |
-| pyannote segmentation-3.0 (CNRS), via sherpa-onnx | MIT |
 | NeMo TitaNet small (NVIDIA), via sherpa-onnx | CC-BY-4.0 |
 | Testljud: [Google FLEURS](https://huggingface.co/datasets/google/fleurs) | CC-BY-4.0 |

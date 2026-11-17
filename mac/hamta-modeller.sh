@@ -2,7 +2,7 @@
 # Hamtar modellerna till MODELLKATALOG (standard: modeller/ i repot) och kontrollerar sha256.
 # Revisionerna ar lasta, sa alla far exakt samma vikter.
 #
-#   bash mac/hamta-modeller.sh ggml talare    # whisper.cpp (1,5 GB) + talare (46 MB): Apple Silicon
+#   bash mac/hamta-modeller.sh ggml talare    # whisper.cpp (1,5 GB) + talare (40 MB): Apple Silicon
 #   bash mac/hamta-modeller.sh faster talare  # faster-whisper (1,5 GB) + talare. Samma som utan argument
 # mac/installera.sh valjer sjalv vilka som behovs.
 set -euo pipefail
@@ -60,14 +60,9 @@ ggml() {
 }
 
 talare() {
-  echo "== Talaridentifiering: pyannote segmentation-3.0 (MIT) och NeMo TitaNet small (CC-BY-4.0)"
-  hf_hamta csukuangfj/sherpa-onnx-pyannote-segmentation-3-0 \
-    9403a6902bb58e3d5ae8c7e77c3422de279db2e0 "$MODELLER/talare" model.onnx LICENSE
-  mv "$MODELLER/talare/model.onnx" "$MODELLER/talare/segmentation-3-0.onnx"
+  echo "== Talaridentifiering: rostmodellen NeMo TitaNet small (NVIDIA, CC-BY-4.0, 40 MB)"
   hf_hamta csukuangfj/speaker-embedding-models \
     0743f301363dec56491a490f6d6cbc9d67f9a3bf "$MODELLER/talare" nemo_en_titanet_small.onnx
-  kontrollera "$MODELLER/talare/segmentation-3-0.onnx" \
-    220ad67ca923bef2fa91f2390c786097bf305bceb5e261d4af67b38e938e1079
   kontrollera "$MODELLER/talare/nemo_en_titanet_small.onnx" \
     ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e
 }

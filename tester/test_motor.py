@@ -21,6 +21,26 @@ class TestValjMotor(unittest.TestCase):
         self.assertEqual(self.val("whispercpp", system="Linux"), "whispercpp")
 
 
+class TestDtwOrdtider(unittest.TestCase):
+    def seg(self, text, *tokens):
+        return {"text": text, "tokens": [{"text": t, "t_dtw": d} for t, d in tokens]}
+
+    def test_tider_fran_dtw_utan_skiljetecken(self):
+        raw = [
+            self.seg(" kylan?", ("[_BEG_]", 0), (" k", 2226), ("ylan", 2250), ("?", 2364)),
+            self.seg(" nej", (" ne", 2370), ("j", 2382)),
+            self.seg(" inte", (" inte", 2462)),
+        ]
+        self.assertEqual(motor.dtw_ordtider(raw), [
+            (22.06, 22.5, " kylan?"),  # "?" pa 23,64 raknas inte
+            (23.5, 23.82, " nej"),
+            (24.42, 24.62, " inte"),  # borjar 0,2 s fore, men inte fore nej:s slut
+        ])
+
+    def test_utan_dtw_blir_det_none(self):
+        self.assertIsNone(motor.dtw_ordtider([self.seg(" du", (" du", -1))]))
+
+
 class TestOrdTillSegment(unittest.TestCase):
     def test_delar_efter_meningsslut(self):
         ord_lista = [(0.0, 0.4, " Hej"), (0.4, 0.8, " Bo."), (1.0, 1.5, " Ska"), (1.5, 2.0, " vi?")]

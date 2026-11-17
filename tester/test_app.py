@@ -15,7 +15,12 @@ import talare
 
 H = {"X-Akasha-Meet": "1"}
 ORD = [(0.0, 0.5, " Hej"), (0.5, 1.0, " Bo."), (1.5, 2.0, " Hej"), (2.0, 2.5, " Anna.")]
-TURER = [(0.0, 1.2, 0), (1.4, 3.0, 1)]
+
+
+def falsk_dela_upp(samples, ord_lista, antal, framsteg=None):
+    if framsteg:
+        framsteg(1.0)
+    return talare.repliker(ord_lista, [0, 0, 1, 1]), 2, None
 
 
 def falsk_avkoda(sokvag):
@@ -45,7 +50,7 @@ class TestApp(unittest.TestCase):
             mock.patch.object(motor, "transkribera", falsk_transkribera),
             mock.patch.object(motor, "problem", lambda: None),
             mock.patch.object(talare, "problem", lambda: None),
-            mock.patch.object(talare, "vem_pratar_nar", lambda s, a, framsteg=None: TURER),
+            mock.patch.object(talare, "dela_upp", falsk_dela_upp),
         ]
         for p in self.patchar:
             p.start()
@@ -131,6 +136,15 @@ class TestApp(unittest.TestCase):
         res = self.klient.get(f"/api/inspelningar/{id_}").get_json()["resultat"]
         self.assertIn("inte uppdelad per talare", res["varning"])
         self.assertIsNone(res["talare"])
+
+    def test_varning_nar_farre_roster_an_angivet(self):
+        def en_rost(samples, ord_lista, antal, framsteg=None):
+            return talare.repliker(ord_lista, [0] * len(ord_lista)), 1, "Du angav 2 talare, men bara 1 röst gick att skilja åt."
+        with mock.patch.object(talare, "dela_upp", en_rost):
+            id_ = self.ladda_upp()
+        res = self.klient.get(f"/api/inspelningar/{id_}").get_json()["resultat"]
+        self.assertEqual(res["talare"], 1)
+        self.assertIn("bara 1 röst", res["varning"])
 
     def test_trasigt_ljud_ger_begripligt_fel(self):
         id_ = self.ladda_upp(innehall=b"trasig fil")

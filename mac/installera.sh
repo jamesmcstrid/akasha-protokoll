@@ -53,7 +53,7 @@ if [ "$AKTIV" = "whispercpp" ]; then
 else
   [ -f "$MODELLER/kb-whisper-medium/model.bin" ] || bash "$REPO/mac/hamta-modeller.sh" faster
 fi
-if [ -f "$MODELLER/talare/segmentation-3-0.onnx" ] && [ -f "$MODELLER/talare/nemo_en_titanet_small.onnx" ]; then
+if [ -f "$MODELLER/talare/nemo_en_titanet_small.onnx" ]; then
   echo "finns"
 else
   bash "$REPO/mac/hamta-modeller.sh" talare

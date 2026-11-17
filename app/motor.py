@@ -161,7 +161,10 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
         if CPU_TRADAR:
             cmd += ["-t", str(CPU_TRADAR)]
         if per_ord:
-            cmd += ["-ml", "1", "-sow"]  # ett segment per ord, med tidsstamplar
+            # Ett segment per ord. whisper.cpp:s vanliga ordtider ar ungefarliga (ett ord kunde
+            # hamna 0,6 s fel, sa att det fick fel talare). DTW ger tider som stammer med
+            # faster-whisper, men fungerar bara utan flash attention. Darfor bara har.
+            cmd += ["-ml", "1", "-sow", "--dtw", "medium", "-nfa", "-ojf"]
 
         p = subprocess.Popen(
             cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, errors="replace"
@@ -186,11 +189,37 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
     text = " ".join("".join(s.get("text", "") for s in raw).split())
     tider = [(s["offsets"]["from"] / 1000, s["offsets"]["to"] / 1000, s.get("text", "")) for s in raw]
     if per_ord:
+        tider = dtw_ordtider(raw) or tider
         return text, _ord_till_segment(tider), tider
     segs = [
         {"start": round(a, 2), "end": round(b, 2), "text": t.strip()} for a, b, t in tider if t.strip()
     ]
     return text, segs, []
+
+
+SKILJETECKEN = set(".,!?;:…\"'()-–")
+
+
+def dtw_ordtider(raw):
+    """Ordtider fran DTW (t_dtw per token, hundradels sekunder). None om DTW saknas.
+
+    t_dtw markerar ungefar var token slutar. Ordet slutar dar dess sista bokstavstoken slutar
+    (skiljetecken far ibland en sen tid och raknas inte), och borjar 0,2 s fore sin forsta token,
+    men aldrig fore foregaende ords slut.
+    """
+    ut, forra_slut = [], 0.0
+    for seg in raw:
+        tid = [t.get("t_dtw", -1) / 100 for t in seg.get("tokens", [])
+               if not t.get("text", "").startswith("[") and t.get("text", "").strip(" ").strip("".join(SKILJETECKEN))]
+        if not seg.get("text", "").strip():
+            continue
+        if not tid or min(tid) < 0:
+            return None  # DTW kordes inte (t.ex. aldre whisper.cpp)
+        slut = max(tid)
+        start = max(forra_slut, min(tid) - 0.2)
+        ut.append((round(start, 2), round(max(slut, start + 0.05), 2), seg["text"]))
+        forra_slut = slut
+    return ut
 
 
 def _ord_till_segment(ord_lista, max_tecken=200):

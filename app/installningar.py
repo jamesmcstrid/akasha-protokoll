@@ -29,13 +29,13 @@ MODELLKATALOG = _sokvag(_env("MODELLKATALOG", os.path.join(REPO, "modeller")))
 
 CT2_MODELL = os.path.join(MODELLKATALOG, "kb-whisper-medium")
 GGML_MODELL = os.path.join(MODELLKATALOG, "kb-whisper-medium-ggml", "ggml-model.bin")
-SEGMENTERINGSMODELL = os.path.join(MODELLKATALOG, "talare", "segmentation-3-0.onnx")
 ROSTMODELL = os.path.join(MODELLKATALOG, "talare", "nemo_en_titanet_small.onnx")
 
 CPU_TRADAR = int(_env("CPU_TRADAR", "0"))  # 0 = motorn valjer
 WHISPERCPP_BIN = _env("WHISPERCPP_BIN", "whisper-cli")
-# Bara for "vet inte" (auto). Hogre = farre talare. 0,7-0,9 gav ratt antal i proven.
-TALARE_TROSKEL = float(_env("TALARE_TROSKEL", "0.8"))
+# Tva rostgrupper som liknar varandra mer an sa har raknas som samma person. Uppmatt med TitaNet:
+# olika personer 0,09-0,56 (hogst i ett riktigt samtal med laptopmikrofon), samma person 0,80-0,90.
+TALARE_TROSKEL = float(_env("TALARE_TROSKEL", "0.6"))
 # Ord som alltid hjalper whisper att stava ratt (namn pa foretaget, facktermer).
 ORDLISTA = _env("ORDLISTA", "")
 MAX_MB = int(_env("MAX_MB", "1024"))

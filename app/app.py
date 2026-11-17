@@ -181,9 +181,10 @@ def kor(id_):
     if dela and ord_lista:
         lagring.uppdatera(id_, status="talare")
         _satt(id_, "talare", 0.0)
-        turer = talare.vem_pratar_nar(samples, antal, framsteg=lambda a: _satt(id_, "talare", a))
-        segment = talare.repliker(ord_lista, turer)
-        antal_talare = len({s["speaker"] for s in segment})
+        segment, antal_talare, talarvarning = talare.dela_upp(
+            samples, ord_lista, antal, framsteg=lambda a: _satt(id_, "talare", a)
+        )
+        varning = varning or talarvarning
     t2 = time.time()
 
     resultat = {
@@ -378,8 +379,9 @@ def transkribera_direkt():
     svar = {"text": text, "duration_s": round(len(samples) / SR, 2), "model": motor.modellnamn()}
     if antal != 1:
         t1 = time.time()
-        segment = talare.repliker(ord_lista, talare.vem_pratar_nar(samples, antal))
-        svar["speakers"] = len({s["speaker"] for s in segment})
+        segment, svar["speakers"], talarvarning = talare.dela_upp(samples, ord_lista, antal)
+        if talarvarning:
+            svar["warning"] = talarvarning
         svar["speakers_elapsed_s"] = round(time.time() - t1, 3)
     svar["segments"] = segment
     svar["elapsed_s"] = round(time.time() - t0, 3)
