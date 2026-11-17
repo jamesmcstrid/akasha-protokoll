@@ -25,7 +25,7 @@ Du får texten uppdelad per talare: **Talare 1**, **Talare 2** och så vidare, o
 
 ### Digitala möten (Google Meet, Slack)
 
-Välj **Digitalt i Chrome (t.ex. Google Meet eller Slack)** under "Var är mötet?". När du trycker
+Välj **Digitalt i Chrome (t.ex. Google Meet eller Slack)** under "Hur spelas mötet in?". När du trycker
 **Spela in** frågar Chrome vilken flik som ska delas: välj fliken med mötet och kryssa i
 **Dela även flikljud**. Det fungerar med hörlurar, och med alla möten som körs i en Chrome-flik:
 Google Meet, en Slack-huddle i Slack i Chrome (`app.slack.com`), Teams eller Zoom i webbläsaren.
@@ -38,8 +38,8 @@ Google Meet, en Slack-huddle i Slack i Chrome (`app.slack.com`), Teams eller Zoo
 - Alla i mötet ser inte att du spelar in, som de gör när Meet själv spelar in. Säg till.
 - Kör du mötet med högtalare tar Chromes ekosläckning bort mötesljudet från din mikrofonkanal.
 - Möten i **apparna** (Slack-appen, Teams, Zoom) har ingen flik att dela och stöds inte än. Öppna
-  mötet i Chrome, eller kör med högtalare och välj "I samma rum". En Mac-hjälpare som hämtar ljudet
-  direkt från apparna finns som förslag:
+  mötet i Chrome, eller kör med högtalare och välj "Med mikrofonen (samma rum eller högtalare)".
+  En Mac-hjälpare som hämtar ljudet direkt från apparna finns som förslag:
   [#1](https://github.com/jamesmcstrid/Akasha-Meet/issues/1).
 
 **Tips:**
