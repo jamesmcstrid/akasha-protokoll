@@ -1,4 +1,4 @@
-# Akasha Meet
+# <img src="app/static/elefant.svg" alt="" width="44" align="top"> Akasha Meet
 
 Transkribera möten på din egen Mac. Spela in direkt i webbläsaren, eller ladda upp en ljudfil.
 Du får texten uppdelad per talare: **Talare 1**, **Talare 2** och så vidare, och du kan byta till riktiga namn.
