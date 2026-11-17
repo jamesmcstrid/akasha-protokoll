@@ -1,0 +1,132 @@
+:root {
+  --bg: #f6f7f9;
+  --kort: #ffffff;
+  --text: #1c1f24;
+  --dampad: #5b6270;
+  --kant: #dde1e7;
+  --primar: #1f5fbf;
+  --primar-text: #ffffff;
+  --stopp: #b42318;
+  --varning-bg: #fff4e5;
+  --varning-text: #7a4100;
+  --fel: #b42318;
+  --ok: #1b7a3d;
+  --t1: #1f5fbf;
+  --t2: #a3410b;
+  --t3: #1b7a3d;
+  --t4: #7b2fbf;
+  --t5: #0b7a83;
+  --t6: #a3176a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171b;
+    --kort: #1e2126;
+    --text: #e8eaee;
+    --dampad: #a2a9b6;
+    --kant: #343842;
+    --primar: #4d8ef0;
+    --primar-text: #0b1220;
+    --stopp: #f0645a;
+    --varning-bg: #3a2a12;
+    --varning-text: #f5c27a;
+    --fel: #f0645a;
+    --ok: #5cc98a;
+    --t1: #7fb0ff;
+    --t2: #f2a066;
+    --t3: #6fd39a;
+    --t4: #c39bf5;
+    --t5: #5fd0d8;
+    --t6: #f28fc6;
+  }
+}
+
+* { box-sizing: border-box; }
+/* hidden maste vinna over klasser som satter display (t.ex. .knapp). */
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--text); line-height: 1.5; }
+main { max-width: 860px; margin: 0 auto; padding: 0 16px 48px; }
+
+.sidhuvud {
+  max-width: 860px; margin: 0 auto; padding: 24px 16px 8px;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;
+}
+h1 { margin: 0; font-size: 1.6rem; }
+h2 { margin: 0 0 12px; font-size: 1.15rem; }
+.underrubrik { margin: 2px 0 0; color: var(--dampad); }
+.tjanst { margin: 4px 0 0; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--kant); font-size: .85rem; }
+.tjanst.ok { color: var(--ok); }
+.tjanst.fel { color: var(--fel); }
+
+.kort { background: var(--kort); border: 1px solid var(--kant); border-radius: 12px; padding: 20px; margin-top: 16px; }
+
+.falt { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.falt-rad { display: flex; gap: 12px; flex-wrap: wrap; }
+.falt-rad .falt { min-width: 160px; }
+.falt-rad .bred { flex: 1; min-width: 240px; }
+label { font-weight: 600; font-size: .92rem; }
+.valfritt { font-weight: 400; color: var(--dampad); }
+input[type=text], select {
+  font: inherit; padding: 8px 10px; border: 1px solid var(--kant); border-radius: 8px;
+  background: var(--bg); color: var(--text);
+}
+input[type=text]:focus, select:focus, .knapp:focus-visible, .tid:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--primar) 45%, transparent); outline-offset: 1px;
+}
+
+.knappar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+.knapp {
+  font: inherit; font-weight: 600; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--kant);
+  background: var(--kort); color: var(--text); cursor: pointer; text-decoration: none; display: inline-block;
+}
+.knapp:hover { border-color: var(--primar); }
+.knapp:disabled { opacity: .5; cursor: not-allowed; }
+.primar { background: var(--primar); color: var(--primar-text); border-color: var(--primar); }
+.stopp { background: var(--stopp); color: #fff; border-color: var(--stopp); }
+.liten-knapp { padding: 4px 10px; font-size: .85rem; }
+.fara { color: var(--fel); }
+
+.inspelningspanel { display: flex; align-items: center; gap: 12px; margin: 8px 0; flex-wrap: wrap; }
+.pricka { width: 12px; height: 12px; border-radius: 50%; background: var(--stopp); animation: puls 1.2s infinite; }
+@keyframes puls { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .pricka { animation: none; } }
+.klocka { font-variant-numeric: tabular-nums; font-size: 1.3rem; font-weight: 600; }
+meter { width: 160px; }
+
+.meddelande { min-height: 1.5em; margin: 8px 0; }
+.meddelande.fel { color: var(--fel); }
+.varning { background: var(--varning-bg); color: var(--varning-text); padding: 8px 12px; border-radius: 8px; }
+.dampad { color: var(--dampad); }
+.liten { font-size: .85rem; }
+code { font-size: .85em; }
+
+.lista { list-style: none; margin: 0; padding: 0; }
+.lista li { border-top: 1px solid var(--kant); padding: 10px 0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.lista li:first-child { border-top: 0; }
+.post { flex: 1; min-width: 220px; text-align: left; background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.post:hover .post-rubrik { text-decoration: underline; }
+.post-rubrik { font-weight: 600; display: block; }
+.post-info { color: var(--dampad); font-size: .85rem; }
+.status { font-size: .85rem; }
+.status.fel { color: var(--fel); }
+.status.klar { color: var(--ok); }
+progress { width: 140px; vertical-align: middle; }
+
+.visningshuvud { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+audio { width: 100%; margin: 8px 0; }
+.namnrad { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin: 8px 0; }
+.namnrad .falt { margin: 0; min-width: 150px; }
+
+.transkript { margin-top: 8px; }
+.transkript p { margin: 0 0 10px; }
+.tid {
+  font: inherit; font-size: .8rem; font-variant-numeric: tabular-nums; color: var(--dampad);
+  background: none; border: 0; padding: 0 6px 0 0; cursor: pointer;
+}
+.tid:hover { color: var(--primar); text-decoration: underline; }
+.namn { font-weight: 700; margin-right: 4px; }
+.t1 { color: var(--t1); } .t2 { color: var(--t2); } .t3 { color: var(--t3); }
+.t4 { color: var(--t4); } .t5 { color: var(--t5); } .t6 { color: var(--t6); }

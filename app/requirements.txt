@@ -1,0 +1,6 @@
+flask==3.0.3
+waitress==3.0.0
+faster-whisper==1.0.3
+# faster-whisper 1.0.3 importerar requests men anger det inte som beroende.
+requests==2.34.2
+sherpa-onnx==2.0.1

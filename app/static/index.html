@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Akasha Meet</title>
+  <link rel="stylesheet" href="/static/stil.css">
+</head>
+<body>
+  <header class="sidhuvud">
+    <div>
+      <h1>Akasha Meet</h1>
+      <p class="underrubrik">Mötestranskribering på din egen Mac. Inget lämnar datorn.</p>
+    </div>
+    <p id="tjanst" class="tjanst" role="status">Kontrollerar…</p>
+  </header>
+
+  <main>
+    <section class="kort" aria-labelledby="ny-rubrik">
+      <h2 id="ny-rubrik">Ny transkribering</h2>
+
+      <div class="falt">
+        <label for="titel">Rubrik <span class="valfritt">(valfritt)</span></label>
+        <input id="titel" type="text" maxlength="200" placeholder="t.ex. Avstämning med Anna" autocomplete="off">
+      </div>
+
+      <div class="falt-rad">
+        <div class="falt">
+          <label for="talare">Hur många pratar?</label>
+          <select id="talare">
+            <option value="1">1 – dela inte upp</option>
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="auto">Vet inte – gissa</option>
+          </select>
+        </div>
+        <div class="falt bred">
+          <label for="ord">Namn och facktermer <span class="valfritt">(valfritt)</span></label>
+          <input id="ord" type="text" maxlength="500" placeholder="t.ex. Anna Berg, ISO 9001, ledningens genomgång" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="knappar">
+        <button id="spela-in" type="button" class="knapp primar">● Spela in</button>
+        <button id="stoppa" type="button" class="knapp stopp" hidden>■ Stoppa och transkribera</button>
+        <button id="valj-fil" type="button" class="knapp">Ladda upp ljudfil…</button>
+        <input id="fil" type="file" accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg,.flac,.mp4,.mov" hidden>
+      </div>
+
+      <div id="inspelningspanel" class="inspelningspanel" hidden>
+        <span class="pricka" aria-hidden="true"></span>
+        <span id="klocka" class="klocka">00:00</span>
+        <meter id="niva" min="0" max="1" value="0" aria-label="Ljudnivå"></meter>
+        <span id="sparat" class="dampad"></span>
+      </div>
+
+      <p id="meddelande" class="meddelande" role="status" aria-live="polite"></p>
+      <p class="dampad liten">Be alltid om lov innan du spelar in någon. Låt fliken vara öppen och datorn vaken
+        under mötet. Ljudet sparas löpande, så ett avbrott tar bara med sig de sista sekunderna.</p>
+    </section>
+
+    <section id="visning" class="kort" aria-labelledby="v-rubrik" hidden>
+      <div class="visningshuvud">
+        <div>
+          <h2 id="v-rubrik"></h2>
+          <p id="v-info" class="dampad"></p>
+        </div>
+        <button id="v-stang" type="button" class="knapp liten-knapp" aria-label="Stäng">Stäng</button>
+      </div>
+      <audio id="v-ljud" controls preload="none"></audio>
+      <p id="v-status" class="meddelande"></p>
+      <p id="v-varning" class="varning" hidden></p>
+
+      <div id="v-namn" class="namnrad" hidden></div>
+
+      <div id="v-atgarder" class="knappar" hidden>
+        <button id="v-kopiera" type="button" class="knapp">Kopiera texten</button>
+        <a id="v-md" class="knapp" href="#">Ladda ner .md</a>
+        <a id="v-txt" class="knapp" href="#">Ladda ner .txt</a>
+      </div>
+      <p class="dampad liten">Klicka på en tid för att lyssna. Kontrollera alltid texten mot ljudet.</p>
+      <div id="v-text" class="transkript"></div>
+    </section>
+
+    <section class="kort" aria-labelledby="lista-rubrik">
+      <h2 id="lista-rubrik">Inspelningar</h2>
+      <p class="dampad liten">Sparas i <code id="datakatalog">~/AkashaMeet</code> på den här datorn.</p>
+      <ul id="lista" class="lista"></ul>
+      <p id="tom" class="dampad">Inga inspelningar än.</p>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
