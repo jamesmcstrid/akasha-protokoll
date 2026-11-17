@@ -6,7 +6,7 @@ Du får texten uppdelad per talare: **Talare 1**, **Talare 2** och så vidare, o
 - **Allt stannar på datorn.** Tal till text och talaruppdelning görs lokalt. Inget skickas till
   någon molntjänst.
 - **Svensk taligenkänning** med [KB-Whisper](https://huggingface.co/KBLab/kb-whisper-medium) från
-  Kungliga biblioteket.
+  Kungliga biblioteket. På Mac med Apple Silicon används grafikprocessorn (Metal).
 - **Inspelningen tappas inte.** Ljudet sparas på disken var femte sekund under mötet.
 
 ## Använda
@@ -32,10 +32,15 @@ Du får texten uppdelad per talare: **Talare 1**, **Talare 2** och så vidare, o
 
 ### Hur lång tid tar det?
 
-Testat på en Linux-dator med 4 processorkärnor: 57 sekunder samtal tog cirka 26 sekunder, varav
-4 sekunder talaruppdelning. Ett möte på en timme tar alltså i storleksordningen en halvtimme på en
-sådan dator. Hur snabbt det går på en Mac är **inte uppmätt än**. Apple Silicon är troligen snabbare,
-och whisper.cpp-motorn (se nedan) kan använda grafikprocessorn.
+Uppmätt på en MacBook Air med Apple Silicon, med testljudet `tva-talare.m4a` (57 sekunder, två talare):
+
+| Motor | Totalt | varav talaruppdelning |
+|---|---|---|
+| whisper.cpp med Metal (standard på Apple Silicon) | **7,2 s** | 1,8 s |
+| faster-whisper på processorn | 18,3 s | 1,9 s |
+
+Räknat på samma sätt tar ett möte på en timme runt 8 minuter med Metal. Det är en uppskattning
+utifrån ett kort klipp; ett riktigt långt möte är inte uppmätt.
 
 ## Installera
 
@@ -44,14 +49,17 @@ Kräver: en Mac (helst Apple Silicon), [Homebrew](https://brew.sh) och cirka 4 G
 
 ```bash
 brew install python@3.12 git
-git clone https://github.com/jamesmcstrid/Akasha-Meet.git ~/akasha-meet
+git clone git@github.com:jamesmcstrid/Akasha-Meet.git ~/akasha-meet
 cd ~/akasha-meet
 bash mac/installera.sh
 ```
 
 Installationen skapar en Python-miljö och laddar ner modellerna (cirka 1,6 GB, bara första gången).
-Den lägger också in tjänsten så att den startar när du loggar in, och öppnar webbsidan. Första gången
+På Apple Silicon installerar den också `whisper-cpp` via Homebrew, så att grafikprocessorn används.
+Den lägger in tjänsten så att den startar när du loggar in, och öppnar webbsidan. Första gången
 du spelar in frågar webbläsaren om lov att använda mikrofonen.
+
+Repot är privat. Du behöver läsrätt till det och en SSH-nyckel kopplad till ditt GitHub-konto.
 
 Kontrollera att allt fungerar (tar några minuter):
 
@@ -85,19 +93,18 @@ Vill du ha den någon annanstans anger du `DATAKATALOG` i `.env`.
   ändrar något kräver en särskild header som en främmande sida inte får skicka.
 - Ingen språkmodell skriver om eller sammanfattar texten. Det whisper hör är det som står.
 
-## Snabbare med whisper.cpp (valfritt)
+## Motorerna
 
-Standardmotorn (faster-whisper) körs på processorn. whisper.cpp kan använda grafikprocessorn (Metal)
-på Apple Silicon:
+Det finns två motorer för taligenkänningen, med samma modell (KB-Whisper medium):
 
-```bash
-brew install whisper-cpp
-bash mac/hamta-modeller.sh ggml
-```
+- **whisper.cpp med Metal:** använder grafikprocessorn. Väljs automatiskt på Mac med Apple Silicon
+  (`MOTOR=auto`, standard). Ungefär tre gånger snabbare än processorn på en MacBook Air.
+- **faster-whisper:** körs på processorn och fungerar överallt, även på Intel-Mac. Används om
+  whisper.cpp inte finns.
 
-Ändra sedan `#MOTOR=faster` till `MOTOR=whispercpp` i `.env` och kör `bash mac/installera.sh` igen.
-Båda motorerna klarar provet, men om Metal faktiskt används och hur mycket snabbare det blir är
-**inte provat på en Mac än**.
+Vilken motor som används syns uppe till höger på webbsidan. Vill du tvinga fram en av dem sätter du
+`MOTOR=faster` eller `MOTOR=whispercpp` i `.env` och kör `bash mac/installera.sh` igen. Talaruppdelningen
+körs alltid på processorn.
 
 ## Inställningar
 
@@ -106,7 +113,7 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 
 | Inställning | Standard | Vad |
 |---|---|---|
-| `MOTOR` | `faster` | `faster` (processorn) eller `whispercpp` (Metal) |
+| `MOTOR` | `auto` | `auto` (Metal på Apple Silicon, annars processorn), `whispercpp` eller `faster` |
 | `ORDLISTA` | tom | Ord som alltid ska stavas rätt, t.ex. företagets namn |
 | `DATAKATALOG` | `~/AkashaMeet` | Var inspelningar och texter sparas |
 | `PORT` | `8611` | Webbsidans port |
@@ -155,7 +162,7 @@ Köra enhetstesterna: `venv/bin/python -m unittest discover -s tester`
 
 Provat 2026-11-17 i en Linux-miljö utan grafikprocessor, med samma Python- och biblioteksversioner:
 
-- **Enhetstester:** 30 st, gröna. De täcker talaruppdelning, lagring av inspelningar i delar,
+- **Enhetstester:** 35 st, gröna. De täcker talaruppdelning, lagring av inspelningar i delar,
   export, skydd mot andra webbsidor och alla API-flöden.
 - **`installera.sh` från början:** med en ersättare för launchd. Modellnedladdningen med
   sha256-kontroll gick igenom.
@@ -165,10 +172,13 @@ Provat 2026-11-17 i en Linux-miljö utan grafikprocessor, med samma Python- och 
   - inspelning, stopp, talaruppdelning, namn, kopiera, nedladdning, uppladdning och radering;
   - en inspelning där fliken stängdes mitt i, som sedan avslutades och transkriberades från listan.
 
+**På en MacBook Air med Apple Silicon:** `installera.sh` och `halsokoll/prov.sh` gick gröna med båda
+motorerna. `whisper-cli` använde Metal (tiderna ovan).
+
 **Inte provat än:**
 
-- på en riktig Mac (launchd, Metal);
-- inspelning i **Safari**, som spelar in i ett annat format än Chrome;
+- automatiskt motorval (`MOTOR=auto`) på Mac: på MacBook Air var whisper.cpp vald uttryckligen;
+- inspelning via webbsidan på en riktig Mac, i Chrome och i **Safari** (Safari spelar in i ett annat format);
 - riktiga möten med personer som avbryter varandra.
 
 Om inspelningen krånglar i Safari: använd Chrome.

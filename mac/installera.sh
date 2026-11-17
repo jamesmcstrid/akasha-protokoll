@@ -2,8 +2,9 @@
 # Installerar Akasha Meet for inloggad anvandare. Gar att kora igen (t.ex. efter git pull).
 #   bash mac/installera.sh
 #
-# Gor: venv med beroenden, hamtar modellerna (cirka 1,6 GB, bara forsta gangen), skapar .env,
-# lagger en launchd-agent som startar tjansten vid inloggning, och oppnar webbsidan.
+# Gor: venv med beroenden, valjer motor, hamtar modellerna (cirka 1,6 GB, bara forsta gangen),
+# skapar .env, lagger en launchd-agent som startar tjansten vid inloggning, och oppnar webbsidan.
+# Pa Mac med Apple Silicon installeras whisper-cpp (Homebrew) sa att grafikprocessorn anvands.
 # Kraver: Homebrew och python3.12 (brew install python@3.12).
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,7 +18,7 @@ command -v "$PY" >/dev/null || { echo "FEL: $PY saknas. Kor: brew install python
 
 [ -f "$REPO/.env" ] || { cp "$REPO/.env.example" "$REPO/.env"; echo "== skapade .env (standardinstallningar)"; }
 set -a; . "$REPO/.env"; set +a
-MOTOR="${MOTOR:-faster}"
+MOTOR="${MOTOR:-auto}"
 PORT="${PORT:-8611}"
 DATA="${DATAKATALOG:-$HOME/AkashaMeet}"; DATA="${DATA/#\~/$HOME}"
 MODELLER="${MODELLKATALOG:-$REPO/modeller}"; MODELLER="${MODELLER/#\~/$HOME}"
@@ -27,16 +28,35 @@ echo "== venv och beroenden"
 "$REPO/venv/bin/pip" install -q --upgrade pip
 "$REPO/venv/bin/pip" install -q -r "$REPO/app/requirements.txt"
 
-echo "== modeller i $MODELLER"
-if [ -f "$MODELLER/kb-whisper-medium/model.bin" ] && [ -f "$MODELLER/talare/nemo_en_titanet_small.onnx" ]; then
-  echo "finns redan"
-else
-  bash "$REPO/mac/hamta-modeller.sh"
+# Samma val som appen gor (app/motor.py, valj_motor): auto blir whisper.cpp med Metal pa
+# Apple Silicon, annars faster-whisper.
+CLI="${WHISPERCPP_BIN:-whisper-cli}"
+har_cli() { PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" command -v "$CLI" >/dev/null; }
+AKTIV="$MOTOR"
+if [ "$MOTOR" = "auto" ]; then
+  AKTIV=faster
+  if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
+    if ! har_cli && command -v brew >/dev/null; then
+      echo "== installerar whisper-cpp (Homebrew), sa att grafikprocessorn anvands"
+      brew install whisper-cpp
+    fi
+    if har_cli; then AKTIV=whispercpp; fi
+  fi
 fi
-if [ "$MOTOR" = "whispercpp" ]; then
-  PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" command -v "${WHISPERCPP_BIN:-whisper-cli}" >/dev/null \
-    || { echo "FEL: MOTOR=whispercpp men whisper-cli saknas. Kor: brew install whisper-cpp"; exit 1; }
+if [ "$AKTIV" = "whispercpp" ] && ! har_cli; then
+  echo "FEL: MOTOR=whispercpp men $CLI saknas. Kor: brew install whisper-cpp"; exit 1
+fi
+
+echo "== modeller i $MODELLER (motor: $AKTIV)"
+if [ "$AKTIV" = "whispercpp" ]; then
   [ -f "$MODELLER/kb-whisper-medium-ggml/ggml-model.bin" ] || bash "$REPO/mac/hamta-modeller.sh" ggml
+else
+  [ -f "$MODELLER/kb-whisper-medium/model.bin" ] || bash "$REPO/mac/hamta-modeller.sh" faster
+fi
+if [ -f "$MODELLER/talare/segmentation-3-0.onnx" ] && [ -f "$MODELLER/talare/nemo_en_titanet_small.onnx" ]; then
+  echo "finns"
+else
+  bash "$REPO/mac/hamta-modeller.sh" talare
 fi
 
 mkdir -p "$DATA" "$LA"
@@ -78,7 +98,7 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 if curl -s "http://127.0.0.1:$PORT/health" | grep -q '"status": *"ok"'; then
-  echo "Klart. Akasha Meet: http://127.0.0.1:$PORT  (motor: $MOTOR, inspelningar i $DATA)"
+  echo "Klart. Akasha Meet: http://127.0.0.1:$PORT  (motor: $AKTIV, inspelningar i $DATA)"
   command -v open >/dev/null && open "http://127.0.0.1:$PORT"
 else
   echo "Tjansten svarar inte som den ska. Se loggen: $LOGG"

@@ -32,7 +32,7 @@ def problem():
     """None om allt finns, annars vad som saknas."""
     for fil in (SEGMENTERINGSMODELL, ROSTMODELL):
         if not os.path.isfile(fil):
-            return "talarmodellerna saknas. Kor: bash mac/hamta-modeller.sh"
+            return "talarmodellerna saknas. Kor: bash mac/hamta-modeller.sh talare"
     try:
         import sherpa_onnx  # noqa: F401
     except ImportError:

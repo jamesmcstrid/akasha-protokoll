@@ -25,7 +25,7 @@ import export
 import lagring
 import motor
 import talare
-from installningar import DATAKATALOG, MAX_MB, MOTOR, ORDLISTA, PORT
+from installningar import DATAKATALOG, MAX_MB, ORDLISTA, PORT
 
 HEADER = "X-Akasha-Meet"
 VARDAR = {"127.0.0.1", "localhost", "::1"}
@@ -242,7 +242,7 @@ def health():
     fel = motor.problem()
     return jsonify(
         status="ok" if fel is None else "error",
-        motor=MOTOR,
+        motor=motor.AKTIV,
         modell=motor.modellnamn(),
         problem=fel,
         talare=talare.problem() or "ok",
@@ -393,7 +393,7 @@ def main():
     starta_arbetare()
     from waitress import serve
 
-    log.info("Akasha Meet: http://127.0.0.1:%s (motor %s, data i %s)", PORT, MOTOR, DATAKATALOG)
+    log.info("Akasha Meet: http://127.0.0.1:%s (motor %s, data i %s)", PORT, motor.AKTIV, DATAKATALOG)
     if motor.problem():
         log.warning("motorn ar inte redo: %s", motor.problem())
     serve(app, host="127.0.0.1", port=PORT, threads=8,

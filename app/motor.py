@@ -1,4 +1,5 @@
-"""Taligenkanning med KB-Whisper medium (KBLab, Kungliga biblioteket). Tva motorer, valj med MOTOR:
+"""Taligenkanning med KB-Whisper medium (KBLab, Kungliga biblioteket). Tva motorer, valj med MOTOR
+(standard auto: whisper.cpp pa Mac med Apple Silicon om det gar, annars faster-whisper):
 
   faster      faster-whisper (CTranslate2) i den har processen, pa CPU. Fungerar overallt.
               Modellen laddas vid forsta transkriberingen och ligger sedan kvar i minnet.
@@ -11,6 +12,7 @@ import collections
 import io
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -30,27 +32,48 @@ _las = threading.Lock()  # en transkribering at gangen: modellen tar 1-2 GB minn
 _faster_modell = None
 
 
+def valj_motor(onskad=MOTOR, system=None, har_cli=None, har_ggml=None):
+    """auto -> whispercpp pa Mac om whisper-cli och GGML-modellen finns, annars faster.
+
+    mac/installera.sh installerar whisper-cpp och GGML-modellen bara pa Apple Silicon, dar Metal
+    gjorde transkriberingen ungefar tre ganger snabbare an CPU (MacBook Air). Valet gors pa vad som
+    ar installerat och inte pa processortyp: en Python som kor via Rosetta ser x86_64 fast datorn
+    har Apple Silicon. faster och whispercpp valjs som de ar.
+    """
+    if onskad != "auto":
+        return onskad
+    system = system or platform.system()
+    har_cli = shutil.which(WHISPERCPP_BIN) is not None if har_cli is None else har_cli
+    har_ggml = os.path.isfile(GGML_MODELL) if har_ggml is None else har_ggml
+    if system == "Darwin" and har_cli and har_ggml:
+        return "whispercpp"
+    return "faster"
+
+
+AKTIV = valj_motor()  # bestams nar tjansten startar
+
+
 class MotorFel(Exception):
     """Motorn saknas, kraschar eller svarar fel."""
 
 
 def problem():
     """None om motorn ar redo, annars vad som saknas."""
-    if MOTOR == "faster":
+    if AKTIV == "faster":
         if not os.path.isfile(os.path.join(CT2_MODELL, "model.bin")):
-            return "KB-Whisper saknas. Kor: bash mac/hamta-modeller.sh"
+            return "KB-Whisper saknas. Kor: bash mac/installera.sh"
         return None
-    if MOTOR == "whispercpp":
+    if AKTIV == "whispercpp":
         if not shutil.which(WHISPERCPP_BIN):
             return f"{WHISPERCPP_BIN} saknas. Kor: brew install whisper-cpp"
         if not os.path.isfile(GGML_MODELL):
             return "KB-Whisper (GGML) saknas. Kor: bash mac/hamta-modeller.sh ggml"
         return None
-    return f"okand MOTOR={MOTOR!r}, anvand faster eller whispercpp"
+    return f"okand MOTOR={MOTOR!r}, anvand auto, faster eller whispercpp"
 
 
 def modellnamn():
-    return "KB-Whisper medium" + (" (whisper.cpp)" if MOTOR == "whispercpp" else "")
+    return "KB-Whisper medium" + (" (whisper.cpp, Metal)" if AKTIV == "whispercpp" else "")
 
 
 def avkoda(sokvag):
@@ -71,7 +94,7 @@ def transkribera(samples, per_ord=False, prompt="", framsteg=None):
     if fel:
         raise MotorFel(fel)
     with _las:
-        if MOTOR == "faster":
+        if AKTIV == "faster":
             return _faster(samples, per_ord, prompt, framsteg)
         return _whispercpp(samples, per_ord, prompt, framsteg)
 

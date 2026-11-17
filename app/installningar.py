@@ -16,8 +16,9 @@ def _sokvag(varde):
     return os.path.abspath(os.path.expanduser(varde))
 
 
-# faster = faster-whisper pa CPU (fungerar overallt). whispercpp = whisper.cpp med Metal (GPU).
-MOTOR = _env("MOTOR", "faster").lower()
+# auto = whisper.cpp med Metal (GPU) pa Mac med Apple Silicon om whisper-cli och modellen finns,
+#        annars faster-whisper pa CPU. Gar att tvinga med faster eller whispercpp.
+MOTOR = _env("MOTOR", "auto").lower()
 PORT = int(_env("PORT", "8611"))
 SPRAK = _env("SPRAK", "sv")
 
