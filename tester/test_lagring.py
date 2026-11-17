@@ -56,8 +56,11 @@ class TestLagring(unittest.TestCase):
             lagring.ny_inspelning(".exe", "", INST)
 
     def test_fran_fil_och_tom_fil(self):
-        m = lagring.fran_fil(FileStorage(io.BytesIO(b"ljud"), "möte.m4a"), "möte.m4a", "", INST)
-        self.assertEqual((m["status"], m["andelse"], m["titel"]), ("sparad", ".m4a", "möte"))
+        m = lagring.fran_fil(FileStorage(io.BytesIO(b"ljud"), "Storgatan 1 5.m4a"), "Storgatan 1 5.m4a", "", INST)
+        # Filnamnet (ofta en adress fran Rostmemon) blir aldrig rubrik och sparas inte.
+        self.assertEqual((m["status"], m["andelse"], m["titel"]), ("sparad", ".m4a", ""))
+        with open(os.path.join(hjalp.DATA, m["id"] + ".json"), encoding="utf-8") as f:
+            self.assertNotIn("Storgatan", f.read())
         with self.assertRaises(lagring.Fel):
             lagring.fran_fil(FileStorage(io.BytesIO(b""), "tom.m4a"), "tom.m4a", "", INST)
         self.assertEqual(len(lagring.lista()), 1)  # den tomma ar bortstadad

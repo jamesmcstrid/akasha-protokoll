@@ -15,6 +15,9 @@ Du får texten uppdelad per talare: **Talare 1**, **Talare 2** och så vidare, o
 2. Välj hur många som pratar. Skriv gärna in namn och facktermer som förekommer, så stavas de rätt.
 3. Tryck **Spela in**. När mötet är slut trycker du **Stoppa och transkribera**.
    Du kan också trycka **Ladda upp ljudfil…** och välja en fil, t.ex. från Röstmemon.
+   Filnamnet används aldrig som rubrik, eftersom Röstmemon döper inspelningar efter platsen
+   (en gatuadress). Utan rubrik heter inspelningen "Möte" och datum. Rubriken går att byta
+   efteråt med **Byt rubrik**.
 4. Vänta medan texten tas fram. Förloppet syns i listan. Det tar en stund för långa möten
    (se "Hur lång tid tar det?").
 5. Skriv in vad talarna heter och tryck **Spara namn**. Kopiera texten eller ladda ner den som

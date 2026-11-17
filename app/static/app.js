@@ -252,13 +252,13 @@ function laddaUpp(fil) {
   xhr.open("POST", "/api/inspelningar/fil");
   for (const [k, v] of Object.entries(HEADER)) xhr.setRequestHeader(k, v);
   xhr.upload.addEventListener("progress", (e) => {
-    if (e.lengthComputable) meddela(`Laddar upp ${fil.name}: ${Math.round((e.loaded / e.total) * 100)} %`);
+    if (e.lengthComputable) meddela(`Laddar upp: ${Math.round((e.loaded / e.total) * 100)} %`);
   });
   xhr.addEventListener("load", () => {
     let data = {};
     try { data = JSON.parse(xhr.responseText); } catch { /* inte JSON */ }
     if (xhr.status === 201) {
-      meddela(`${fil.name} är uppladdad och transkriberas nu.`);
+      meddela("Filen är uppladdad och transkriberas nu.");
       visa(data.id);
     } else {
       meddela(`Uppladdningen misslyckades: ${data.error || xhr.status}`, true);
@@ -369,6 +369,9 @@ async function visa(id, tyst = false) {
   v.hidden = false;
   v.dataset.status = m.status;
   $("v-rubrik").textContent = m.rubrik;
+  $("v-titel").placeholder = m.rubrik;
+  if (byttId) visaRubrikform(false);
+  v.dataset.titel = m.titel || "";
   const res = m.resultat;
   $("v-info").textContent = [m.info, res && res.motor].filter(Boolean).join(" · ");
   if (byttId) $("v-ljud").src = `/api/inspelningar/${id}/ljud`;
@@ -445,6 +448,26 @@ async function kopiera() {
   } catch (e) { meddela(`Kunde inte kopiera: ${e.message}`, true); }
 }
 
+function visaRubrikform(visa) {
+  $("v-rubrikform").hidden = !visa;
+  $("v-byt-rubrik").setAttribute("aria-expanded", String(visa));
+  if (visa) {
+    $("v-titel").value = $("visning").dataset.titel || "";
+    $("v-titel").focus();
+  }
+}
+
+async function sparaRubrik(e) {
+  e.preventDefault();
+  try {
+    const { rubrik } = await api("POST", `/api/inspelningar/${visadId}/titel`, { titel: $("v-titel").value });
+    visaRubrikform(false);
+    meddela(`Rubriken är ändrad till "${rubrik}".`);
+    visa(visadId, true);
+    uppdateraLista();
+  } catch (fel) { meddela(fel.message, true); }
+}
+
 function stangVisning() {
   visadId = null;
   $("visning").hidden = true;
@@ -459,6 +482,9 @@ $("valj-fil").addEventListener("click", () => $("fil").click());
 $("fil").addEventListener("change", () => { if ($("fil").files[0]) laddaUpp($("fil").files[0]); });
 $("v-kopiera").addEventListener("click", kopiera);
 $("v-stang").addEventListener("click", stangVisning);
+$("v-byt-rubrik").addEventListener("click", () => visaRubrikform($("v-rubrikform").hidden));
+$("v-rubrik-avbryt").addEventListener("click", () => visaRubrikform(false));
+$("v-rubrikform").addEventListener("submit", sparaRubrik);
 window.addEventListener("beforeunload", (e) => {
   if (inspelning) { e.preventDefault(); e.returnValue = ""; }
 });

@@ -116,6 +116,9 @@ code { font-size: .85em; }
 progress { width: 140px; vertical-align: middle; }
 
 .visningshuvud { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.visningshuvud .knappar { margin: 0; flex-shrink: 0; }
+.rubrikform { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 8px; }
+.rubrikform input { flex: 1; min-width: 200px; }
 audio { width: 100%; margin: 8px 0; }
 .namnrad { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin: 8px 0; }
 .namnrad .falt { margin: 0; min-width: 150px; }

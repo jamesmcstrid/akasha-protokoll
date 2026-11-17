@@ -107,6 +107,24 @@ class TestApp(unittest.TestCase):
         self.assertIn("Avst%C3%A4mning.txt", r.headers["Content-Disposition"])  # RFC 5987
         self.assertIn("[00:00] Anna: Hej Bo.", r.get_data(as_text=True))
 
+    def test_uppladdning_utan_rubrik_och_byte_av_rubrik(self):
+        r = self.klient.post("/api/inspelningar/fil", headers=H, content_type="multipart/form-data",
+                             data={"ljud": (io.BytesIO(b"ljud"), "Storgatan 1 5.m4a"), "talare": "2"})
+        id_ = r.get_json()["id"]
+        akasha._ko.join()
+        m = self.klient.get(f"/api/inspelningar/{id_}").get_json()
+        self.assertTrue(m["rubrik"].startswith("Möte "), m["rubrik"])
+        self.assertNotIn("Storgatan", json.dumps(m, ensure_ascii=False))
+
+        r = self.klient.post(f"/api/inspelningar/{id_}/titel", headers=H, json={"titel": "  Planering  "})
+        self.assertEqual(r.get_json(), {"titel": "Planering", "rubrik": "Planering"})
+        with open(lagring.textfil(id_), encoding="utf-8") as f:
+            self.assertTrue(f.read().startswith("# Planering\n"))
+        self.assertIn("Planering.md", self.klient.get(f"/api/inspelningar/{id_}/text.md").headers["Content-Disposition"])
+        r = self.klient.post(f"/api/inspelningar/{id_}/titel", headers=H, json={"titel": ""})
+        self.assertTrue(r.get_json()["rubrik"].startswith("Möte "))
+        self.assertEqual(self.klient.post(f"/api/inspelningar/{id_}/titel", json={"titel": "x"}).status_code, 403)
+
     def test_en_talare_delar_inte_upp(self):
         id_ = self.ladda_upp(talare_="1")
         res = self.klient.get(f"/api/inspelningar/{id_}").get_json()["resultat"]

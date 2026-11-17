@@ -68,8 +68,18 @@
           <h2 id="v-rubrik"></h2>
           <p id="v-info" class="dampad"></p>
         </div>
-        <button id="v-stang" type="button" class="knapp liten-knapp" aria-label="Stäng">Stäng</button>
+        <div class="knappar">
+          <button id="v-byt-rubrik" type="button" class="knapp liten-knapp" aria-expanded="false"
+            aria-controls="v-rubrikform">Byt rubrik</button>
+          <button id="v-stang" type="button" class="knapp liten-knapp">Stäng</button>
+        </div>
       </div>
+      <form id="v-rubrikform" class="rubrikform" hidden>
+        <label for="v-titel">Ny rubrik</label>
+        <input id="v-titel" type="text" maxlength="200" autocomplete="off">
+        <button type="submit" class="knapp liten-knapp primar">Spara</button>
+        <button id="v-rubrik-avbryt" type="button" class="knapp liten-knapp">Avbryt</button>
+      </form>
       <audio id="v-ljud" controls preload="none"></audio>
       <p id="v-status" class="meddelande"></p>
       <p id="v-varning" class="varning" hidden></p>

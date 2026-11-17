@@ -117,9 +117,12 @@ def ny_inspelning(andelse, titel, installningar):
 
 
 def fran_fil(filobjekt, filnamn, titel, installningar):
-    """Uppladdad fil (werkzeug FileStorage)."""
-    meta = _ny(os.path.splitext(filnamn or "")[1], titel or os.path.splitext(filnamn or "")[0],
-               installningar, "sparad")
+    """Uppladdad fil (werkzeug FileStorage).
+
+    Filnamnet anvands bara for att se filtypen, aldrig som rubrik och sparas inte: Rostmemon pa
+    iPhone dopar inspelningar efter platsen, sa filnamnet ar ofta en gatuadress.
+    """
+    meta = _ny(os.path.splitext(filnamn or "")[1], titel, installningar, "sparad")
     filobjekt.save(ljudfil(meta))
     if os.path.getsize(ljudfil(meta)) == 0:
         radera(meta["id"])

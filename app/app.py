@@ -306,6 +306,15 @@ def en_inspelning(id_):
     return jsonify(med_framsteg(lagring.las(id_)))
 
 
+@app.post("/api/inspelningar/<id_>/titel")
+def satt_titel(id_):
+    data = request.get_json(silent=True) or {}
+    meta = lagring.uppdatera(id_, titel=str(data.get("titel", "")).strip()[:200])
+    if meta.get("resultat"):
+        skriv_text(meta)
+    return jsonify(titel=meta["titel"], rubrik=export.rubrik(meta))
+
+
 @app.post("/api/inspelningar/<id_>/namn")
 def satt_namn(id_):
     data = request.get_json(silent=True) or {}
