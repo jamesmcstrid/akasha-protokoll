@@ -117,6 +117,7 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 
 | Problem | Gör så här |
 |---|---|
+| `Bootstrap failed: 5` vid installation | Uppdatera (`git pull`) och kör `bash mac/installera.sh` igen. Hjälper inte det: Systeminställningar → Allmänt → Inloggningsobjekt, tillåt `bash` i bakgrunden |
 | Sidan öppnas inte | `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`. Läs loggen `~/AkashaMeet/akasha-meet.log` |
 | "Inte redo" uppe till höger | Håll muspekaren över texten för att se orsaken. Oftast saknas modellerna: `bash mac/hamta-modeller.sh` |
 | "Fick inte tillgång till mikrofonen" | Tillåt mikrofonen för sidan i webbläsarens inställningar, och för webbläsaren i Systeminställningar → Integritet och säkerhet → Mikrofon |
