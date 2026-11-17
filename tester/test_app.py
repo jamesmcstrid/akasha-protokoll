@@ -155,6 +155,55 @@ class TestApp(unittest.TestCase):
         self.assertIn("inte uppdelad per talare", res["varning"])
         self.assertIsNone(res["talare"])
 
+    def inspelning_i_delar(self, installningar):
+        r = self.klient.post("/api/inspelningar", headers=H, json={"andelse": ".webm", **installningar})
+        id_ = r.get_json()["id"]
+        self.klient.post(f"/api/inspelningar/{id_}/del?nr=0", headers=H, data=b"ljud")
+        self.klient.post(f"/api/inspelningar/{id_}/klar", headers=H, json={"starta": True})
+        akasha._ko.join()
+        return id_
+
+    def test_digitalt_mote_ger_du_som_talare_1(self):
+        vanster = np.zeros(motor.SR * 3, dtype=np.float32)
+        hoger = np.ones(motor.SR * 3, dtype=np.float32) * 0.1
+        anrop = []
+
+        def falsk_kanaler(v, h, ord_lista, antal, framsteg=None):
+            anrop.append(antal)
+            return talare.repliker(ord_lista, [1, 1, 2, 2], fasta_nummer=True), 2, None
+        with mock.patch.object(motor, "avkoda_kanaler", lambda p: (vanster, hoger)), \
+             mock.patch.object(talare, "dela_upp_kanaler", falsk_kanaler):
+            id_ = self.inspelning_i_delar({"talare": "2", "kalla": "digitalt"})
+        m = self.klient.get(f"/api/inspelningar/{id_}").get_json()
+        self.assertEqual((m["status"], m["installningar"]["kalla"], anrop), ("klar", "digitalt", [2]))
+        self.assertEqual(m["namn"], {"1": "Du"})
+        with open(lagring.textfil(id_), encoding="utf-8") as f:
+            self.assertIn("**Du** (00:00): Hej Bo.", f.read())
+
+    def test_digitalt_men_mono_fil_delas_som_vanligt(self):
+        x = np.ones(motor.SR * 3, dtype=np.float32) * 0.1
+        with mock.patch.object(motor, "avkoda_kanaler", lambda p: (x, x.copy())):
+            id_ = self.inspelning_i_delar({"talare": "2", "kalla": "digitalt"})
+        m = self.klient.get(f"/api/inspelningar/{id_}").get_json()
+        self.assertEqual(m["status"], "klar")
+        self.assertEqual(m["namn"], {})  # ingen mikrofonkanal, alltsa inget "Du"
+
+    def test_kallan_behalls_nar_man_stoppar_eller_gor_om(self):
+        r = self.klient.post("/api/inspelningar", headers=H, json={"andelse": ".webm", "talare": "3", "kalla": "digitalt"})
+        id_ = r.get_json()["id"]
+        self.klient.post(f"/api/inspelningar/{id_}/del?nr=0", headers=H, data=b"ljud")
+        # Sidan skickar antal talare igen nar man stoppar, utan kalla.
+        self.klient.post(f"/api/inspelningar/{id_}/klar", headers=H, json={"starta": True, "talare": "2", "ord": ""})
+        akasha._ko.join()
+        self.assertEqual(lagring.las(id_)["installningar"], {"talare": "2", "ord": "", "kalla": "digitalt"})
+        self.klient.post(f"/api/inspelningar/{id_}/transkribera", headers=H, json={"talare": "4", "kalla": "rum"})
+        akasha._ko.join()
+        self.assertEqual(lagring.las(id_)["installningar"]["kalla"], "digitalt")
+
+    def test_okand_kalla_blir_rum(self):
+        r = self.klient.post("/api/inspelningar", headers=H, json={"kalla": "något annat"})
+        self.assertEqual(lagring.las(r.get_json()["id"])["installningar"]["kalla"], "rum")
+
     def test_varning_nar_farre_roster_an_angivet(self):
         def en_rost(samples, ord_lista, antal, framsteg=None):
             return talare.repliker(ord_lista, [0] * len(ord_lista)), 1, "Du angav 2 talare, men bara 1 röst gick att skilja åt."

@@ -19,6 +19,7 @@ import time
 from datetime import datetime
 from urllib.parse import urlparse
 
+import numpy as np
 from flask import Flask, jsonify, request, send_file
 
 import export
@@ -104,7 +105,9 @@ def tolka_installningar(data):
     except ValueError:
         raise lagring.Fel("Antal talare måste vara 1–10 eller auto.")
     ord_ = str((data or {}).get("ord", "")).strip()[:500]
-    return {"talare": antal, "ord": ord_}
+    # rum = en mikrofon i rummet. digitalt = mikrofonen i vanster kanal, motesfliken i hoger.
+    kalla = "digitalt" if str((data or {}).get("kalla", "")).strip() == "digitalt" else "rum"
+    return {"talare": antal, "ord": ord_, "kalla": kalla}
 
 
 def med_framsteg(meta):
@@ -139,6 +142,9 @@ def koa(id_, installningar=None):
         if meta["status"] == "spelar_in":
             raise lagring.Fel("Inspelningen pågår fortfarande.", 409)
         if installningar:
+            # Kallan (rum eller digitalt) hor till inspelningen: kanalerna i filen andras inte
+            # av att man stoppar eller gor om med ett annat antal talare.
+            installningar = {**installningar, "kalla": (meta.get("installningar") or {}).get("kalla", "rum")}
             meta["installningar"] = installningar
         meta["status"] = "koar"
         meta.pop("fel", None)
@@ -164,8 +170,18 @@ def kor(id_):
     _satt(id_, "transkriberar", 0.0)
 
     t0 = time.time()
+    kanaler = None
     try:
-        samples = motor.avkoda(lagring.ljudfil(meta))
+        if inst.get("kalla") == "digitalt":
+            vanster, hoger = motor.avkoda_kanaler(lagring.ljudfil(meta))
+            if talare.har_tva_kanaler(vanster, hoger):
+                kanaler = (vanster, hoger)
+                # Whisper far bada kanalerna: din rost och motet.
+                samples = np.clip(vanster + hoger, -1.0, 1.0)
+            else:
+                samples = (vanster + hoger) / 2
+        else:
+            samples = motor.avkoda(lagring.ljudfil(meta))
     except Exception as e:
         log.warning("kunde inte avkoda %s: %s", id_, e)
         raise lagring.Fel("Ljudet kunde inte läsas. Är inspelningen tom eller trasig?")
@@ -181,9 +197,14 @@ def kor(id_):
     if dela and ord_lista:
         lagring.uppdatera(id_, status="talare")
         _satt(id_, "talare", 0.0)
-        segment, antal_talare, talarvarning = talare.dela_upp(
-            samples, ord_lista, antal, framsteg=lambda a: _satt(id_, "talare", a)
-        )
+        if kanaler:
+            segment, antal_talare, talarvarning = talare.dela_upp_kanaler(
+                *kanaler, ord_lista, antal, framsteg=lambda a: _satt(id_, "talare", a)
+            )
+        else:
+            segment, antal_talare, talarvarning = talare.dela_upp(
+                samples, ord_lista, antal, framsteg=lambda a: _satt(id_, "talare", a)
+            )
         varning = varning or talarvarning
     t2 = time.time()
 
@@ -197,6 +218,9 @@ def kor(id_):
     }
     if varning:
         resultat["varning"] = varning
+    if kanaler and any(s.get("speaker") == 1 for s in segment) and not (meta.get("namn") or {}).get("1"):
+        # Talare 1 ar mikrofonen, alltsa den som spelade in.
+        lagring.uppdatera(id_, namn={**(meta.get("namn") or {}), "1": "Du"})
     meta = lagring.uppdatera(
         id_, status="klar", resultat=resultat,
         klar=datetime.now().astimezone().isoformat(timespec="seconds"),

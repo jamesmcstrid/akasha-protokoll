@@ -86,6 +86,65 @@ class TestDelaUpp(unittest.TestCase):
         self.assertEqual((hittade, rep[0]["text"]), (1, "hej"))
 
 
+class TestDigitaltMote(unittest.TestCase):
+    """Mikrofonen i vanster kanal, motesfliken i hoger."""
+
+    def kor(self, mik, motet, antal):
+        alla = sorted(mik + motet, key=lambda r: r[1])
+        ord_lista = ord_fran(alla)
+        langd = max(b for _, _, b, _ in alla) + 0.5
+        vanster = np.zeros(int(langd * SR), dtype=np.float32)
+        hoger = np.zeros(int(langd * SR), dtype=np.float32)
+        rng = np.random.default_rng(0)
+        for kanal, repliker_ in ((vanster, mik), (hoger, motet)):
+            for _, a, b, _ in repliker_:
+                kanal[int(a * SR):int(b * SR)] = rng.normal(scale=0.2, size=int(b * SR) - int(a * SR))
+        for_fonster = falska_avtryck(motet)
+        andras = [o for o, du in zip(ord_lista, talare.kanal_per_ord(vanster, hoger, ord_lista)) if not du]
+        starter = iter(talare.fonster_med_tal(andras, langd))
+        with mock.patch.object(talare, "_hamta_extraktor", lambda: None), \
+             mock.patch.object(talare, "_avtryck", lambda e, bit: for_fonster(next(starter))):
+            return talare.dela_upp_kanaler(vanster, hoger, ord_lista, antal)
+
+    MIK = [("du", 0.0, 4.0, "hej allihop nu kör vi"), ("du", 14.5, 18.0, "bra då säger vi så")]
+    MOTET = [("A", 4.5, 9.0, "hej hej hör ni mig"), ("B", 9.5, 14.0, "ja vi hör dig bra")]
+
+    def test_du_ar_alltid_talare_1_och_de_andra_delas_upp(self):
+        rep, hittade, varning = self.kor(self.MIK, self.MOTET, 3)
+        self.assertEqual([r["speaker"] for r in rep], [1, 2, 3, 1])
+        self.assertEqual(rep[0]["text"], "hej allihop nu kör vi")
+        self.assertEqual((hittade, varning), (3, None))
+
+    def test_tva_talare_betyder_du_och_en_till(self):
+        rep, hittade, _ = self.kor(self.MIK, self.MOTET, 2)
+        self.assertEqual([r["speaker"] for r in rep], [1, 2, 1])
+        self.assertEqual(hittade, 2)
+
+    def test_du_ar_talare_1_aven_om_nagon_annan_borjar(self):
+        motet = [("A", 0.0, 4.0, "välkomna till mötet idag")]
+        mik = [("du", 4.5, 8.0, "tack så mycket")]
+        rep, _, _ = self.kor(mik, motet, 2)
+        self.assertEqual([(r["speaker"], r["text"]) for r in rep], [(2, "välkomna till mötet idag"), (1, "tack så mycket")])
+
+    def test_osakert_ord_far_narmaste_sakra_ords_talare(self):
+        v = np.zeros(SR * 6, dtype=np.float32)
+        h = np.zeros(SR * 6, dtype=np.float32)
+        v[0:SR * 2] = 0.3          # du pratar 0-2 s
+        h[SR * 2:SR * 6] = 0.3     # motet pratar 2-6 s ...
+        h[int(SR * 3.9):int(SR * 4.3)] = 0.003  # ... utom ett svagt ord vid 4 s
+        v[int(SR * 3.9):int(SR * 4.3)] = 0.004  # dar mikrofonen bara har brus
+        h[int(SR * 0.9):int(SR * 1.3)] = 0.5    # och ett tydligt "ja" fran motet mitt i din replik
+        v[int(SR * 0.9):int(SR * 1.3)] = 0.01
+        ord_lista = [(0.2, 0.8, " hej"), (0.95, 1.25, " ja"), (1.4, 1.9, " du"),
+                     (2.5, 3.5, " vi"), (3.95, 4.25, " att"), (4.5, 5.5, " ses")]
+        self.assertEqual(talare.kanal_per_ord(v, h, ord_lista), [True, False, True, False, False, False])
+
+    def test_monofil_raknas_inte_som_tva_kanaler(self):
+        x = np.random.default_rng(1).normal(size=16000).astype(np.float32)
+        self.assertFalse(talare.har_tva_kanaler(x, x.copy()))
+        self.assertTrue(talare.har_tva_kanaler(x, np.zeros_like(x)))
+
+
 class TestDelar(unittest.TestCase):
     def test_fonster_bara_dar_det_pratas(self):
         ord_lista = [(0.0, 2.0, " a"), (10.0, 12.0, " b")]

@@ -144,6 +144,7 @@ meter::-moz-meter-bar { background: var(--ok); border-radius: 999px; }
 .meddelande { min-height: 1.5em; margin: 10px 0; }
 .meddelande.fel { color: var(--fel); }
 .varning { background: var(--varning-bg); color: var(--varning-text); padding: 10px 14px; border-radius: 12px; }
+.tips { margin: 2px 0 10px; padding: 10px 14px; border-radius: 12px; background: var(--yta); border-left: 3px solid var(--primar); font-size: 0.92rem; }
 .dampad { color: var(--dampad); }
 .liten { font-size: 0.85rem; }
 code { font-size: 0.85em; background: var(--yta); padding: 1px 6px; border-radius: 6px; }

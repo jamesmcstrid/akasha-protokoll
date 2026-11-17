@@ -83,6 +83,13 @@ def avkoda(sokvag):
     return decode_audio(sokvag, sampling_rate=SR)
 
 
+def avkoda_kanaler(sokvag):
+    """-> (vanster, hoger), float32, 16 kHz. En monofil ger tva lika kanaler."""
+    from faster_whisper.audio import decode_audio
+
+    return decode_audio(sokvag, sampling_rate=SR, split_stereo=True)
+
+
 def transkribera(samples, per_ord=False, prompt="", framsteg=None):
     """-> (text, segment, ord).
 

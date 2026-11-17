@@ -51,6 +51,16 @@ def multipart(falt, filfalt, filnamn):
     return b"".join(delar), {"Content-Type": f"multipart/form-data; boundary={grans}"}
 
 
+def vanta_klar(id_, max_s=900):
+    slut, meta = time.time() + max_s, {}
+    while time.time() < slut:
+        meta = json.loads(anrop("GET", f"/api/inspelningar/{id_}")[1])
+        if meta["status"] in ("klar", "fel", "avbruten"):
+            break
+        time.sleep(2)
+    return meta
+
+
 def talare_for(segment, fras):
     return {s["speaker"] for s in segment if fras.lower() in s["text"].lower()}
 
@@ -95,19 +105,35 @@ def main():
             kolla_tva(svar["segments"], svar.get("speakers"), f"tva talare (speakers={antal})",
                       f", {svar['elapsed_s']} s varav talare {svar.get('speakers_elapsed_s')} s")
 
-    # 4. hela flodet som webbsidan: ladda upp, vanta, namnge, ladda ner, radera
+    # 4. digitalt mote: mikrofonen i vanster kanal, motet i hoger (som en inspelning i Chrome)
+    kod, svar = anrop("POST", "/api/inspelningar", json.dumps(
+        {"andelse": ".webm", "talare": "3", "kalla": "digitalt", "titel": "Prov digitalt"}).encode(),
+        {"Content-Type": "application/json"})
+    if resultat(kod == 201, f"digitalt: ny inspelning http {kod}"):
+        id_ = json.loads(svar)["id"]
+        with open(os.path.join(TESTLJUD, "digitalt-mote.webm"), "rb") as f:
+            anrop("POST", f"/api/inspelningar/{id_}/del?nr=0", f.read(), {"Content-Type": "application/octet-stream"})
+        anrop("POST", f"/api/inspelningar/{id_}/klar", json.dumps({"starta": True}).encode(),
+              {"Content-Type": "application/json"})
+        meta = vanta_klar(id_)
+        res = meta.get("resultat") or {}
+        seg = res.get("segment", [])
+        du = talare_for(seg, "Carter") | talare_for(seg, "Afghanistan")
+        kvinna = talare_for(seg, "struktur") | talare_for(seg, "Forskarna")
+        man = talare_for(seg, "boulevard") | talare_for(seg, "Turkiet")
+        ok = (meta.get("status") == "klar" and du == {1} and meta.get("namn", {}).get("1") == "Du"
+              and len(kvinna) == 1 and len(man) == 1 and kvinna != man and 1 not in kvinna | man)
+        resultat(ok, f"digitalt: du={du} (namn {meta.get('namn', {}).get('1')}), kvinnan={kvinna}, "
+                     f"mannen={man} (facit: du 1, de andra olika), tider {res.get('tid_s')}")
+        anrop("POST", f"/api/inspelningar/{id_}/radera")
+
+    # 5. hela flodet som webbsidan: ladda upp, vanta, namnge, ladda ner, radera
     kropp, h = multipart({"talare": "2", "titel": "Prov akasha-meet"}, "ljud", "tva-talare.m4a")
     kod, svar = anrop("POST", "/api/inspelningar/fil", kropp, h)
     if not resultat(kod == 201, f"flode: uppladdning http {kod} {svar[:120]!r}"):
         return
     id_ = json.loads(svar)["id"]
-    slut = time.time() + 900
-    meta = {}
-    while time.time() < slut:
-        meta = json.loads(anrop("GET", f"/api/inspelningar/{id_}")[1])
-        if meta["status"] in ("klar", "fel", "avbruten"):
-            break
-        time.sleep(2)
+    meta = vanta_klar(id_)
     if resultat(meta.get("status") == "klar", f"flode: status {meta.get('status')} {meta.get('fel', '')}"):
         res = meta["resultat"]
         kolla_tva(res["segment"], res.get("talare"), "flode: talare", f", tider {res.get('tid_s')}")

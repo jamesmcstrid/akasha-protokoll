@@ -62,11 +62,13 @@ function meddela(text, fel = false) {
 }
 
 function installningar() {
-  return { talare: $("talare").value, ord: $("ord").value.trim(), titel: $("titel").value.trim() };
+  return { talare: $("talare").value, ord: $("ord").value.trim(), titel: $("titel").value.trim(),
+           kalla: $("kalla").value };
 }
 
 function sparaVal() {
-  localStorage.setItem("akasha-meet-val", JSON.stringify({ talare: $("talare").value, ord: $("ord").value }));
+  localStorage.setItem("akasha-meet-val", JSON.stringify(
+    { talare: $("talare").value, ord: $("ord").value, kalla: $("kalla").value }));
 }
 
 function hamtaVal() {
@@ -74,7 +76,22 @@ function hamtaVal() {
     const v = JSON.parse(localStorage.getItem("akasha-meet-val") || "{}");
     if (v.talare) $("talare").value = v.talare;
     if (v.ord) $("ord").value = v.ord;
+    if (v.kalla === "digitalt" && kanDelaFlik()) $("kalla").value = "digitalt";
   } catch { /* ignorera */ }
+  visaKallaHjalp();
+}
+
+// Flikljud gar bara att dela i Chrome och andra Chromium-webblasare (inte Safari eller Firefox).
+function kanDelaFlik() {
+  return !!navigator.mediaDevices?.getDisplayMedia && /Chrome|Chromium|Edg/.test(navigator.userAgent);
+}
+
+function visaKallaHjalp() {
+  const digitalt = $("kalla").value === "digitalt";
+  $("digital-hjalp").hidden = !digitalt;
+  if (digitalt && !kanDelaFlik()) {
+    meddela("Digitala möten kan bara spelas in i Chrome. Öppna sidan i Chrome, eller kör mötet med högtalare.", true);
+  }
 }
 
 // --- tjanstens status ----------------------------------------------------------------------
@@ -124,28 +141,31 @@ async function spelaIn() {
     return;
   }
   sparaVal();
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      // Whisper klarar sig bast med obehandlat ljud. Automatisk niva hjalper nar nagon sitter langre bort.
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
-    });
-  } catch (e) {
-    meddela("Fick inte tillgång till mikrofonen. Tillåt mikrofonen för den här sidan och försök igen.", true);
+  const inst = installningar();
+  if (inst.kalla === "digitalt" && !kanDelaFlik()) {
+    meddela("Digitala möten kan bara spelas in i Chrome.", true);
     return;
   }
-  const inst = installningar();
+  let ljud;
+  try {
+    ljud = await oppnaLjud(inst.kalla);
+  } catch (e) {
+    meddela(e.message, true);
+    return;
+  }
   let id;
   try {
     ({ id } = await api("POST", "/api/inspelningar", { andelse: format.andelse, ...inst }));
   } catch (e) {
-    stream.getTracks().forEach((t) => t.stop());
+    stangLjud(ljud);
     meddela(`Kunde inte starta: ${e.message}`, true);
     return;
   }
 
-  const rec = new MediaRecorder(stream, { mimeType: format.mime, audioBitsPerSecond: 64000 });
-  inspelning = { id, rec, stream, nr: 0, sparade: 0, ko: Promise.resolve(), start: Date.now(), fel: null };
+  const stream = ljud.stream;
+  const rec = new MediaRecorder(stream, {
+    mimeType: format.mime, audioBitsPerSecond: inst.kalla === "digitalt" ? 96000 : 64000 });
+  inspelning = { id, rec, ljud, nr: 0, sparade: 0, ko: Promise.resolve(), start: Date.now(), fel: null };
   rec.addEventListener("dataavailable", (e) => { if (e.data && e.data.size) skickaDel(e.data); });
   rec.start(DEL_MS);
 
@@ -160,8 +180,60 @@ async function spelaIn() {
   $("stoppa").hidden = false;
   $("inspelningspanel").hidden = false;
   $("sparat").textContent = "";
-  meddela("Spelar in. Ljudet sparas löpande på datorn.");
+  meddela(inst.kalla === "digitalt"
+    ? "Spelar in dig och mötet. Ljudet sparas löpande på datorn."
+    : "Spelar in. Ljudet sparas löpande på datorn.");
   uppdateraLista();
+}
+
+// Mikrofonen, och vid digitalt mote aven ljudet fran en delad flik. Mikrofonen hamnar i
+// vanster kanal och motet i hoger, sa att servern vet vad du sa och vad de andra sa.
+async function oppnaLjud(kalla) {
+  let mik;
+  try {
+    mik = await navigator.mediaDevices.getUserMedia({
+      // Whisper klarar sig bast med obehandlat ljud. Automatisk niva hjalper nar nagon sitter
+      // langre bort. Vid digitalt mote tar ekosläckningen bort motesljudet om du har hogtalare.
+      audio: { echoCancellation: kalla === "digitalt", noiseSuppression: false, autoGainControl: true },
+    });
+  } catch {
+    throw new Error("Fick inte tillgång till mikrofonen. Tillåt mikrofonen för den här sidan och försök igen.");
+  }
+  if (kalla !== "digitalt") return { stream: mik, kallor: [mik] };
+
+  let flik;
+  try {
+    flik = await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: "browser" },
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+               suppressLocalAudioPlayback: false },
+      preferCurrentTab: false, selfBrowserSurface: "exclude", surfaceSwitching: "include", systemAudio: "exclude",
+    });
+  } catch {
+    mik.getTracks().forEach((t) => t.stop());
+    throw new Error("Ingen flik delades. Tryck Spela in igen och välj fliken med mötet.");
+  }
+  flik.getVideoTracks().forEach((t) => t.stop()); // bara ljudet behovs
+  if (!flik.getAudioTracks().length) {
+    [mik, flik].forEach((s) => s.getTracks().forEach((t) => t.stop()));
+    throw new Error("Mötesljudet kom inte med. Välj fliken med mötet och kryssa i \"Dela även flikljud\".");
+  }
+  const ctx = new AudioContext();
+  const kanaler = ctx.createChannelMerger(2);
+  ctx.createMediaStreamSource(mik).connect(kanaler, 0, 0);
+  ctx.createMediaStreamSource(new MediaStream(flik.getAudioTracks())).connect(kanaler, 0, 1);
+  const mal = ctx.createMediaStreamDestination();
+  mal.channelCount = 2;
+  kanaler.connect(mal);
+  flik.getAudioTracks()[0].addEventListener("ended", () => {
+    if (inspelning) meddela("Mötesfliken delas inte längre. Nu spelas bara din mikrofon in.", true);
+  });
+  return { stream: mal.stream, kallor: [mik, flik], ctx };
+}
+
+function stangLjud(ljud) {
+  ljud.kallor.forEach((s) => s.getTracks().forEach((t) => t.stop()));
+  ljud.ctx?.close();
 }
 
 function skickaDel(blob) {
@@ -215,7 +287,7 @@ async function stoppa() {
   meddela("Sparar de sista sekunderna…");
   await new Promise((r) => { insp.rec.addEventListener("stop", r, { once: true }); insp.rec.stop(); });
   await insp.ko;
-  insp.stream.getTracks().forEach((t) => t.stop());
+  stangLjud(insp.ljud);
   clearInterval(insp.klocka);
   insp.ljudctx?.close();
   try { await insp.wakeLock?.release(); } catch { /* valfritt */ }
@@ -477,6 +549,7 @@ function stangVisning() {
 // --- start ---------------------------------------------------------------------------------
 
 $("spela-in").addEventListener("click", spelaIn);
+$("kalla").addEventListener("change", () => { meddela(""); visaKallaHjalp(); });
 $("stoppa").addEventListener("click", stoppa);
 $("valj-fil").addEventListener("click", () => $("fil").click());
 $("fil").addEventListener("change", () => { if ($("fil").files[0]) laddaUpp($("fil").files[0]); });

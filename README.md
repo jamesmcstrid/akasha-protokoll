@@ -23,6 +23,20 @@ Du får texten uppdelad per talare: **Talare 1**, **Talare 2** och så vidare, o
 5. Skriv in vad talarna heter och tryck **Spara namn**. Kopiera texten eller ladda ner den som
    `.md` eller `.txt`. Klicka på en tid för att lyssna på just det stället.
 
+### Digitala möten (Google Meet)
+
+Välj **Digitalt i Chrome (t.ex. Google Meet)** under "Var är mötet?". När du trycker **Spela in**
+frågar Chrome vilken flik som ska delas: välj fliken med mötet och kryssa i **Dela även flikljud**.
+Det fungerar med hörlurar.
+
+- Din mikrofon och mötet spelas in i varsin kanal. Det du säger blir därför alltid **Du** (Talare 1),
+  och bara de andra behöver delas upp efter röst.
+- Räkna med dig själv i "Hur många pratar?". Tre betyder du och två till.
+- Det fungerar bara i Chrome (och andra Chromium-webbläsare). Safari och Firefox kan inte dela
+  ljudet från en flik.
+- Alla i mötet ser inte att du spelar in, som de gör när Meet själv spelar in. Säg till.
+- Kör du mötet med högtalare tar Chromes ekosläckning bort mötesljudet från din mikrofonkanal.
+
 **Tips:**
 
 - Be alltid om lov innan du spelar in någon.
@@ -185,6 +199,9 @@ Utvärderat på ordnivå, med båda motorerna:
 
 - **Tre konstgjorda dialoger med facit:** 100 % rätt talare, både med angivet antal och med "Vet inte".
 - **Två inspelningar med bara en röst:** delades inte upp, med 2 angivet blev det en varning.
+- **Konstgjort digitalt möte** (`testljud/digitalt-mote.webm`: du i vänster kanal, en kvinna och en
+  annan man i höger): du blev alltid Talare 1, och de två andra blev två olika talare, med båda
+  motorerna, både med angivet antal och med "Vet inte".
 - **Det riktiga samtalet:** fick 2 talare med båda sätten. Bytena hamnade mellan rätt ord
   ("…det visste jag inte" | "kan du säga…"), och det korta "vad sa du?" blev en egen replik.
   Ett "mhm" mitt i en lång replik hamnade hos fel person.
@@ -195,12 +212,16 @@ Korta inpass på under en sekund är svårast. Underlaget är fortfarande litet.
 
 Provat 2026-11-17 i en Linux-miljö utan grafikprocessor, med samma Python- och biblioteksversioner:
 
-- **Enhetstester:** 41 st, gröna. De täcker talaruppdelning, lagring av inspelningar i delar,
+- **Enhetstester:** 51 st, gröna. De täcker talaruppdelning, lagring av inspelningar i delar,
   export, skydd mot andra webbsidor och alla API-flöden.
 - **`installera.sh` från början:** med en ersättare för launchd. Modellnedladdningen med
   sha256-kontroll gick igenom.
 - **`halsokoll/prov.sh`:** grön med båda motorerna. Två talare blev rätt både med känt antal och
   med "Vet inte".
+- **Digitalt möte i Chromium:** inspelning med mikrofonen i vänster kanal och en delad ljudström i
+  höger. Mannen i mikrofonen blev **Du** och kvinnan i "mötet" Talare 2. Chromes testläge kan inte
+  dela en riktig flik med ljud, så själva flikdelningen ersattes av en ljudström via samma
+  `getDisplayMedia`.
 - **Webbsidan i Chromium**, med en ljudfil som låtsasmikrofon:
   - inspelning, stopp, talaruppdelning, namn, kopiera, nedladdning, uppladdning och radering;
   - en inspelning där fliken stängdes mitt i, som sedan avslutades och transkriberades från listan.
@@ -217,6 +238,7 @@ Provat 2026-11-17 i en Linux-miljö utan grafikprocessor, med samma Python- och 
 
 **Inte provat än:**
 
+- ett riktigt Google Meet-möte, där Chromes flikväljare och "Dela även flikljud" används på riktigt;
 - automatiskt motorval (`MOTOR=auto`) på Mac: på MacBook Air var whisper.cpp vald uttryckligen;
 - inspelning via webbsidan i **Safari** (Safari spelar in i ett annat format än Chrome);
 - riktiga möten med personer som avbryter varandra.

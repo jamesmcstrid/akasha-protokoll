@@ -29,6 +29,7 @@ MIN_TAL_I_FONSTER = 0.3  # andel av fonstret som maste vara tal
 MIN_NIVA = 0.2  # fonster tystare an sa har (andel av mediannivan) hoppas over: brus, inte rost
 VIKT_SIGMA_S = 0.35  # fonster nara ordets mitt vager tyngst (gaussisk vikt), 0 = lika vikt
 MIN_GRUPP = 3  # "vet inte": en talare maste ha minst sa manga fonster (1,5 s eget tal)
+SAKER_KVOT = 2.0  # digitalt mote: ena kanalen maste vara sa har mycket starkare for ett sakert beslut
 
 _las = threading.Lock()
 _extraktor = None
@@ -196,14 +197,15 @@ def utan_tysta(samples, starter):
     return kvar if len(kvar) >= 2 else starter
 
 
-def repliker(ord_lista, etiketter):
+def repliker(ord_lista, etiketter, fasta_nummer=False):
     """Sla ihop ord i foljd med samma talare till repliker. Talarna numreras fran 1 i den
-    ordning de forst sager nagot. -> [{"start", "end", "speaker", "text"}]"""
+    ordning de forst sager nagot, eller far etiketten som nummer (fasta_nummer).
+    -> [{"start", "end", "speaker", "text"}]"""
     nummer, ut = {}, []
     for (start, slut, text), e in zip(ord_lista, etiketter):
         if not text.strip():
             continue
-        nr = nummer.setdefault(e, len(nummer) + 1)
+        nr = int(e) if fasta_nummer else nummer.setdefault(e, len(nummer) + 1)
         if ut and ut[-1]["speaker"] == nr:
             ut[-1]["end"] = slut
             ut[-1]["text"] += text
@@ -218,17 +220,12 @@ def repliker(ord_lista, etiketter):
 
 # --- hela kedjan ---------------------------------------------------------------------------
 
-def dela_upp(samples, ord_lista, antal, framsteg=None):
-    """-> (repliker, antal_hittade, varning eller None).
-
-    samples: float32, 16 kHz mono. ord_lista: [(start, slut, text)] fran whisper.
-    antal: int (kant antal) eller None (gissa, som mest AUTO_MAX).
-    """
-    ord_lista = [o for o in ord_lista if o[2].strip()]
+def _klustra(samples, ord_lista, antal, framsteg=None):
+    """Fonster, avtryck och grupper. -> (etikett per ord 0..k-1, antal_hittade, varning)."""
     langd = len(samples) / SR
     starter = utan_tysta(samples, fonster_med_tal(ord_lista, langd))
     if antal == 1 or len(starter) < 2:
-        return repliker(ord_lista, [0] * len(ord_lista)), 1, None
+        return [0] * len(ord_lista), 1, None
 
     with _las:
         extraktor = _hamta_extraktor()
@@ -253,6 +250,83 @@ def dela_upp(samples, ord_lista, antal, framsteg=None):
                    f"{'röst' if hittade == 1 else 'röster'} gick att skilja åt.")
     if framsteg:
         framsteg(1.0)
-    per_ord = etikett_per_ord(ord_lista, starter, X, centroider)
-    rep = repliker(ord_lista, per_ord)
+    return etikett_per_ord(ord_lista, starter, X, centroider), hittade, varning
+
+
+def dela_upp(samples, ord_lista, antal, framsteg=None):
+    """-> (repliker, antal_hittade, varning eller None).
+
+    samples: float32, 16 kHz mono. ord_lista: [(start, slut, text)] fran whisper.
+    antal: int (kant antal) eller None (gissa, som mest AUTO_MAX).
+    """
+    ord_lista = [o for o in ord_lista if o[2].strip()]
+    etiketter, _, varning = _klustra(samples, ord_lista, antal, framsteg)
+    rep = repliker(ord_lista, etiketter)
+    return rep, len({r["speaker"] for r in rep}), varning
+
+
+# --- digitala moten: mikrofonen i vanster kanal, motesfliken i hoger -----------------------
+
+def har_tva_kanaler(vanster, hoger):
+    """Falskt om filen egentligen ar mono (bada kanalerna lika)."""
+    if len(vanster) == 0 or len(vanster) != len(hoger):
+        return False
+    skillnad = np.sqrt(np.mean((vanster - hoger) ** 2))
+    niva = np.sqrt(np.mean(vanster ** 2) + np.mean(hoger ** 2)) + 1e-9
+    return skillnad / niva > 0.05
+
+
+def kanal_per_ord(vanster, hoger, ord_lista):
+    """True for ord som sags i mikrofonen (du), False for ord fran motet.
+
+    Ett ord avgors av kanalen bara om den ena ar minst dubbelt sa stark (SAKER_KVOT). Annars,
+    t.ex. ett svagt ord nar bada kanalerna ar nastan tysta, far ordet samma som narmaste sakra
+    ord. Ett tydligt kort "ja" fran motet ar fortfarande sakert och raknas som de andras.
+    """
+    beslut, saker = [], []
+    for a, b, _ in ord_lista:
+        i, j = max(0, int((a - 0.05) * SR)), int((b + 0.05) * SR)
+        v = float(np.sqrt(np.mean(vanster[i:j] ** 2))) if j > i else 0.0
+        h = float(np.sqrt(np.mean(hoger[i:j] ** 2))) if j > i else 0.0
+        beslut.append(v >= h)
+        saker.append(max(v, h) >= SAKER_KVOT * (min(v, h) + 1e-6))
+    sakra = [k for k, ok in enumerate(saker) if ok]
+    if not sakra:
+        return beslut
+    mitter = [(a + b) / 2 for a, b, _ in ord_lista]
+    ut = []
+    for k in range(len(ord_lista)):
+        if saker[k]:
+            ut.append(beslut[k])
+        else:
+            narmast = min(sakra, key=lambda n: abs(mitter[n] - mitter[k]))
+            ut.append(beslut[narmast])
+    return ut
+
+
+def dela_upp_kanaler(vanster, hoger, ord_lista, antal, framsteg=None):
+    """Digitalt mote. -> (repliker, antal_hittade, varning).
+
+    Talare 1 ar alltid du (mikrofonen). De andra (motesfliken) delas upp som vanligt, men bara
+    i hoger kanal. antal raknar med dig: 3 = du och tva till. None = gissa hur manga de andra ar.
+    """
+    ord_lista = [o for o in ord_lista if o[2].strip()]
+    min_rost = kanal_per_ord(vanster, hoger, ord_lista)
+    andras_ord = [o for o, du in zip(ord_lista, min_rost) if not du]
+    andra = None if antal is None else max(1, antal - 1)
+    etiketter_andra, _, varning = _klustra(hoger, andras_ord, andra, framsteg)
+    if varning and antal:
+        hittade = len(set(etiketter_andra))
+        varning = (f"Du angav {antal} talare (du och {antal - 1} till), men bland de andra gick bara "
+                   f"{hittade} {'röst' if hittade == 1 else 'röster'} att skilja åt.")
+    # Numrera de andra fran 2 i den ordning de forst sager nagot.
+    nummer, kvar = {}, iter(etiketter_andra)
+    etiketter = []
+    for du in min_rost:
+        if du:
+            etiketter.append(1)
+        else:
+            e = next(kvar)
+            etiketter.append(nummer.setdefault(e, len(nummer) + 2))
+    rep = repliker(ord_lista, etiketter, fasta_nummer=True)
     return rep, len({r["speaker"] for r in rep}), varning
