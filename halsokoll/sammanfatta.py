@@ -6,6 +6,7 @@ Utskriften innehåller inga ord ur mötet och inga namn, så den går att visa f
     bash halsokoll/sammanfatta.sh <id>       # en viss inspelning (id står i listan överst)
 """
 import collections
+import math
 import glob
 import json
 import os
@@ -100,11 +101,16 @@ def main():
 
     blk = 300 if langd <= 3600 else 600
     print(f"\n  Per {blk // 60} minuter (ord, och andel per talare):")
-    for b0 in range(0, int(langd) + 1, blk):
+    for b0 in range(0, max(1, math.ceil(langd)), blk):
         ord_per_talare = collections.Counter()
         for s in seg:
-            if b0 <= s["start"] < b0 + blk:
-                ord_per_talare[s["speaker"]] += len(s["text"].split())
+            # Orden fordelas jamnt over repliken, sa att en lang replik raknas i alla block den
+            # gar over och inte bara i det dar den borjar.
+            orden = len(s["text"].split())
+            steg = (s["end"] - s["start"]) / max(1, orden)
+            for i in range(orden):
+                if b0 <= s["start"] + (i + 0.5) * steg < b0 + blk:
+                    ord_per_talare[s["speaker"]] += 1
         n = sum(ord_per_talare.values())
         andelar = "  ".join(f"T{k} {v / n * 100:.0f}%" for k, v in sorted(ord_per_talare.items())) if n else ""
         print(f"    {tid(b0):>7}–{tid(min(b0 + blk, langd)):<7} {n:5} ord  {andelar}")
