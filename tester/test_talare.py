@@ -161,6 +161,42 @@ class TestDelar(unittest.TestCase):
         self.assertEqual(etiketter.tolist(), [0, 0, 0, 1, 1])
         self.assertEqual(len(c), 2)
 
+    @staticmethod
+    def grupper_med_likhet(likhet, fonster):
+        """Fonster for grupper vars medelavtryck har exakt de angivna likheterna."""
+        roster = np.linalg.cholesky(np.array(likhet))  # rad i = grupp i, roster @ roster.T = likhet
+        return np.repeat(roster, fonster, axis=0), np.repeat(np.arange(len(likhet)), fonster)
+
+    def test_sammanslagen_grupp_drar_inte_med_sig_en_tredje(self):
+        # Som i ett riktigt mote: A och D ar samma person, C en annan som liknar bada lite
+        # mindre an troskeln. A+D:s medelavtryck liknar C mer (0,604) an A och D gor var for sig.
+        # Alla tre har mycket tal (minuter i motet, har 100 s).
+        X, etiketter = self.grupper_med_likhet([[1.0, 0.91, 0.595],
+                                                [0.91, 1.0, 0.585],
+                                                [0.595, 0.585, 1.0]], [200, 200, 200])
+        nya, c = talare.sla_ihop_lika(X, etiketter, 0.6)
+        self.assertEqual(len(c), 2)
+        self.assertEqual(nya[0], nya[200])
+        self.assertNotEqual(nya[0], nya[400])
+
+    def test_kort_avvikelse_hos_samma_person_slas_ihop(self):
+        # Som i inspelningen med en person: tva stora grupper (0,78) och en grupp om 3 s som
+        # liknar dem lite mindre an troskeln var for sig, men den samlade rosten mer (0,625).
+        X, etiketter = self.grupper_med_likhet([[1.0, 0.78, 0.62],
+                                                [0.78, 1.0, 0.56],
+                                                [0.62, 0.56, 1.0]], [100, 100, 6])
+        nya, c = talare.sla_ihop_lika(X, etiketter, 0.6)
+        self.assertEqual(len(c), 1)
+
+    def test_en_person_i_tre_delar_slas_ihop(self):
+        # Som i testljudet: en person som k-means delat i tre grupper (0,91, 0,63 och 0,61).
+        X, etiketter = self.grupper_med_likhet([[1.0, 0.91, 0.63],
+                                                [0.91, 1.0, 0.61],
+                                                [0.63, 0.61, 1.0]], [200, 200, 200])
+        nya, c = talare.sla_ihop_lika(X, etiketter, 0.6)
+        self.assertEqual(len(c), 1)
+        self.assertEqual(set(nya.tolist()), {0})
+
     def test_repliker_och_numrering(self):
         ord_lista = [(0, 1, " Hej"), (1, 2, " Bo."), (2, 3, " Hej"), (3, 4, "san."), (4, 5, " Ja.")]
         rep = talare.repliker(ord_lista, [7, 7, 3, 3, 7])

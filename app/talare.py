@@ -3,14 +3,15 @@
 Metod (fonster och klustring):
   1. Talet delas i glidande fonster om 1,5 s (steg 0,5 s). Var det finns tal vet vi fran
      whispers ordtider.
-  2. En rostmodell (3D-Speaker ERes2Net, VoxCeleb, via sherpa-onnx) gor ett rostavtryck per fonster.
+  2. En rostmodell (NeMo TitaNet small, via sherpa-onnx) gor ett rostavtryck per fonster.
   3. Avtrycken delas upp i sa manga grupper som antalet talare (k-means med cosinusavstand).
-     Grupper som ar nastan lika slas ihop: da ar det samma person. "Vet inte": provar 2, 3, ...
+     Grupper som ar nastan lika slas ihop (snittet av likheterna mellan de ursprungliga
+     grupperna, se sla_ihop_lika): da ar det samma person. "Vet inte": provar 2, 3, ...
      grupper och stannar innan tva grupper blir for lika.
   4. Varje ord far den grupp som fonstren runt ordet liknar mest.
 
 Varfor inte pyannote: i ett riktigt samtal inspelat med en laptopmikrofon hittade pyannotes
-segmentering inga talarbyten alls, medan fonstermetoden hittade dem (se README).
+segmentering inga talarbyten alls, medan fonstermetoden hittade dem (se docs/TEKNIK.md).
 Ingen modell ror texten: whisper transkriberar, och har far varje ord en talare.
 """
 import os
@@ -29,6 +30,7 @@ MIN_TAL_I_FONSTER = 0.3  # andel av fonstret som maste vara tal
 MIN_NIVA = 0.2  # fonster tystare an sa har (andel av mediannivan) hoppas over: brus, inte rost
 VIKT_SIGMA_S = 0.35  # fonster nara ordets mitt vager tyngst (gaussisk vikt), 0 = lika vikt
 MIN_GRUPP = 3  # "vet inte": en talare maste ha minst sa manga fonster (1,5 s eget tal)
+STOR_GRUPP_S = 30.0  # sammanslagning: grupper med minst sa mycket tal jamfors grupp for grupp
 SAKER_KVOT = 2.0  # digitalt mote: ena kanalen maste vara sa har mycket starkare for ett sakert beslut
 
 _las = threading.Lock()
@@ -121,24 +123,43 @@ def kmeans(X, k, forsok=10, seed=0):
 
 
 def sla_ihop_lika(X, etiketter, troskel):
-    """Sla ihop grupper vars medelavtryck liknar varandra mer an troskel (samma person)."""
-    etiketter = etiketter.copy()
-    while True:
-        grupper = sorted(set(etiketter.tolist()))
-        if len(grupper) < 2:
-            break
-        c = np.array([X[etiketter == g].mean(0) for g in grupper])
-        c /= np.linalg.norm(c, axis=1, keepdims=True) + 1e-9
-        likhet = c @ c.T
-        np.fill_diagonal(likhet, -1.0)
-        i, j = np.unravel_index(np.argmax(likhet), likhet.shape)
-        if likhet[i, j] <= troskel:
-            break
-        etiketter[etiketter == grupper[j]] = grupper[i]
+    """Sla ihop grupper som liknar varandra mer an troskel (samma person).
+
+    Likheten mellan tva grupper, som kan vara sammanslagna redan, mats pa tva satt:
+    - Bada har minst STOR_GRUPP_S tal: snittet av likheterna mellan de ursprungliga grupperna,
+      viktat med antal fonster. Den sammanslagna gruppens medelavtryck hamnar mellan delarna och
+      blir mer likt en tredje grupp an nagon av delarna ar. I ett riktigt mote med fem personer
+      forsvann darfor en talare med 17 minuters tal, trots att den liknade bada delarna mindre
+      an troskeln.
+    - Annars: likheten mellan medelavtrycken. En kort grupps medelavtryck ar osakert och jamfors
+      hellre med den storre gruppens samlade rost. Sa slas korta avvikelser hos en och samma
+      person ihop (i en inspelning med en person: en grupp om 3 s som annars blev en egen talare).
+    """
     grupper = sorted(set(etiketter.tolist()))
-    c = np.array([X[etiketter == g].mean(0) for g in grupper])
-    c /= np.linalg.norm(c, axis=1, keepdims=True) + 1e-9
-    return np.array([grupper.index(e) for e in etiketter]), c
+    c = _centroider(X, etiketter)
+    likhet = c @ c.T
+    n = np.array([np.sum(etiketter == g) for g in grupper], dtype=float)
+    stor = STOR_GRUPP_S / STEG_S  # fonster
+    kluster = [[i] for i in range(len(grupper))]
+    while len(kluster) > 1:
+        medel = [_medelavtryck(X[np.isin(etiketter, [grupper[i] for i in k])]) for k in kluster]
+        basta, par = -2.0, None
+        for p in range(len(kluster)):
+            for q in range(p + 1, len(kluster)):
+                if min(n[kluster[p]].sum(), n[kluster[q]].sum()) >= stor:
+                    vikt = np.outer(n[kluster[p]], n[kluster[q]])
+                    lik = float(np.sum(vikt * likhet[np.ix_(kluster[p], kluster[q])]) / vikt.sum())
+                else:
+                    lik = float(medel[p] @ medel[q])
+                if lik > basta:
+                    basta, par = lik, (p, q)
+        if basta <= troskel:
+            break
+        p, q = par
+        kluster[p] += kluster.pop(q)
+    karta = {grupper[i]: k for k, medlemmar in enumerate(kluster) for i in medlemmar}
+    nya = np.array([karta[e] for e in etiketter.tolist()])
+    return nya, _centroider(X, nya)
 
 
 def gissa_antal(X, troskel, max_antal=None):
@@ -159,6 +180,11 @@ def gissa_antal(X, troskel, max_antal=None):
             break
         basta = (etiketter, c)
     return basta
+
+
+def _medelavtryck(X):
+    v = X.mean(0)
+    return v / (np.linalg.norm(v) + 1e-9)
 
 
 def _centroider(X, etiketter):

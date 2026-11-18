@@ -68,9 +68,9 @@ Google Meet, en Slack-huddle i Slack i Chrome (`app.slack.com`), Teams eller Zoo
 
 ### Hur lång tid tar det?
 
-På en MacBook Air med Apple Silicon tog ett samtal på 57 sekunder 7 sekunder att transkribera och
-dela upp per talare. Ett möte på en timme tar alltså runt 8–10 minuter. Det är en uppskattning
-utifrån korta klipp; ett riktigt långt möte är inte uppmätt.
+På en MacBook Air med Apple Silicon tog ett möte på 1 timme och 24 minuter 12 minuter att
+transkribera och dela upp per talare, alltså drygt 8 minuter per timme möte. Förloppet syns i
+listan.
 
 ## Installera
 
@@ -145,7 +145,8 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 | `Bootstrap failed: 5` vid installation | Uppdatera (`git pull`) och kör `bash mac/installera.sh` igen. Hjälper inte det: Systeminställningar → Allmänt → Inloggningsobjekt, tillåt `bash` i bakgrunden |
 | "Fick inte tillgång till mikrofonen" | Tillåt mikrofonen för sidan i webbläsarens inställningar, och för webbläsaren i Systeminställningar → Integritet och säkerhet → Mikrofon |
 | Texten är inte uppdelad per talare | Kontrollera att "Hur många pratar?" inte står på 1, och tryck **Gör om** i listan |
-| Fel antal talare, eller "bara 1 röst gick att skilja åt" | Tryck **Gör om** med rätt antal. Rösterna skiljs lättare åt om ni sitter på ungefär samma avstånd från datorn |
+| Fel antal talare, eller "bara 1 röst gick att skilja åt" | Tryck **Gör om** med rätt antal. Ange inte fler än som pratar; är du osäker, välj **Vet inte – gissa**. Rösterna skiljs lättare åt om ni sitter på ungefär samma avstånd från datorn. Är ni många i rummet hjälper en konferensmikrofon mitt på bordet |
+| Du vill visa någon hur det gick, utan att dela texten | `bash halsokoll/sammanfatta.sh` skriver ut tider, talare och tecken på fel, men inga ord ur mötet. `bash halsokoll/talardiagnos.sh` visar varför det blev så många talare. Se [docs/TEKNIK.md](docs/TEKNIK.md) |
 | Mötesljudet saknas i ett digitalt möte | Kryssade du i **Dela även flikljud**? Det går bara i Chrome. Gör en ny inspelning |
 | Inspelningen fastnade på "Spelar in" | Tryck **Avsluta och transkribera** i listan |
 
