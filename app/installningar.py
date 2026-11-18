@@ -27,8 +27,19 @@ SPRAK = _env("SPRAK", "sv")
 DATAKATALOG = _sokvag(_env("DATAKATALOG", "~/AkashaMeet"))
 MODELLKATALOG = _sokvag(_env("MODELLKATALOG", os.path.join(REPO, "modeller")))
 
-CT2_MODELL = os.path.join(MODELLKATALOG, "kb-whisper-medium")
-GGML_MODELL = os.path.join(MODELLKATALOG, "kb-whisper-medium-ggml", "ggml-model.bin")
+# KB-Whisper medium (standard) eller large. Large gor farre fel men tar langre tid.
+MODELL = _env("MODELL", "medium").lower()
+# storlek: (katalog for faster-whisper, fil for whisper.cpp, DTW-forinstallning i whisper.cpp)
+STORLEKAR = {
+    "medium": ("kb-whisper-medium", os.path.join("kb-whisper-medium-ggml", "ggml-model.bin"), "medium"),
+    # large: KBLab:s kvantiserade GGML (q5_0, 1,1 GB) i stallet for 3,1 GB. KB-Whisper large
+    # bygger pa whisper-large-v3, darav DTW-forinstallningen.
+    "large": ("kb-whisper-large", os.path.join("kb-whisper-large-ggml", "ggml-model-q5_0.bin"), "large.v3"),
+}
+_storlek = STORLEKAR.get(MODELL, STORLEKAR["medium"])
+CT2_MODELL = os.path.join(MODELLKATALOG, _storlek[0])
+GGML_MODELL = os.path.join(MODELLKATALOG, _storlek[1])
+DTW = _storlek[2]
 ROSTMODELL = os.path.join(MODELLKATALOG, "talare", "nemo_en_titanet_small.onnx")
 
 CPU_TRADAR = int(_env("CPU_TRADAR", "0"))  # 0 = motorn valjer

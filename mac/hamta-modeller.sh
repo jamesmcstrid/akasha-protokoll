@@ -1,9 +1,11 @@
 #!/bin/bash
 # Hamtar modellerna till MODELLKATALOG (standard: modeller/ i repot) och kontrollerar sha256.
-# Revisionerna ar lasta, sa alla far exakt samma vikter.
+# Revisionerna ar lasta, sa alla far exakt samma vikter. Storleken (medium eller large) styrs av
+# MODELL i .env.
 #
-#   bash mac/hamta-modeller.sh ggml talare    # whisper.cpp (1,5 GB) + talare (40 MB): Apple Silicon
-#   bash mac/hamta-modeller.sh faster talare  # faster-whisper (1,5 GB) + talare. Samma som utan argument
+#   bash mac/hamta-modeller.sh ggml talare    # whisper.cpp + talare (40 MB): Apple Silicon
+#   bash mac/hamta-modeller.sh faster talare  # faster-whisper + talare. Samma som utan argument
+#   medium: 1,5 GB i bada fallen. large: 1,1 GB for whisper.cpp, 3,1 GB for faster-whisper.
 # mac/installera.sh valjer sjalv vilka som behovs.
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -11,8 +13,21 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 MODELLER="${MODELLKATALOG:-$REPO/modeller}"
 MODELLER="${MODELLER/#\~/$HOME}"
 PY="${PYTHON:-python3.12}"
-KB_REPO="KBLab/kb-whisper-medium"
-KB_REV="0abe10b9d7f75d0902656e5c06c5c4d549604dc5"
+MODELL="${MODELL:-medium}"
+case "$MODELL" in
+  medium)
+    KB_REV="0abe10b9d7f75d0902656e5c06c5c4d549604dc5"
+    CT2_SHA="4a4a32952026bcfa0bcfaa76b0b006f232ffba6a8f5bccbcb12e4a1153a40494"
+    GGML_FIL="ggml-model.bin"
+    GGML_SHA="1b7842bc1c3f79fb3bf043a0a3590961d625a49ef3ccbdceb00e738c5dd8b015" ;;
+  large)
+    KB_REV="d5d5984b4d8f7c4847a8ea203f1976285fb28300"
+    CT2_SHA="69ed56887f68417f651d50fd5f225c60dfc0f9515bef85bb0f1404825c6f01de"
+    GGML_FIL="ggml-model-q5_0.bin"  # kvantiserad (1,1 GB), som KBLab rekommenderar for whisper.cpp
+    GGML_SHA="6d2863812d7410322bb7d8647a5c7260761300fa946714c9ed66d22bb30bcb19" ;;
+  *) echo "FEL: MODELL=$MODELL, ska vara medium eller large" >&2; exit 2 ;;
+esac
+KB_REPO="KBLab/kb-whisper-$MODELL"
 
 # hf_hamta REPO REVISION KATALOG FIL...  (tillfallig venv med huggingface_hub)
 hf_hamta() {
@@ -45,18 +60,16 @@ kontrollera() {
 }
 
 faster() {
-  echo "== KB-Whisper medium for faster-whisper (KBLab, Apache-2.0)"
-  hf_hamta "$KB_REPO" "$KB_REV" "$MODELLER/kb-whisper-medium" \
+  echo "== KB-Whisper $MODELL for faster-whisper (KBLab, Apache-2.0)"
+  hf_hamta "$KB_REPO" "$KB_REV" "$MODELLER/kb-whisper-$MODELL" \
     model.bin config.json preprocessor_config.json tokenizer.json vocabulary.json
-  kontrollera "$MODELLER/kb-whisper-medium/model.bin" \
-    4a4a32952026bcfa0bcfaa76b0b006f232ffba6a8f5bccbcb12e4a1153a40494
+  kontrollera "$MODELLER/kb-whisper-$MODELL/model.bin" "$CT2_SHA"
 }
 
 ggml() {
-  echo "== KB-Whisper medium for whisper.cpp (KBLab, Apache-2.0)"
-  hf_hamta "$KB_REPO" "$KB_REV" "$MODELLER/kb-whisper-medium-ggml" ggml-model.bin
-  kontrollera "$MODELLER/kb-whisper-medium-ggml/ggml-model.bin" \
-    1b7842bc1c3f79fb3bf043a0a3590961d625a49ef3ccbdceb00e738c5dd8b015
+  echo "== KB-Whisper $MODELL for whisper.cpp (KBLab, Apache-2.0)"
+  hf_hamta "$KB_REPO" "$KB_REV" "$MODELLER/kb-whisper-$MODELL-ggml" "$GGML_FIL"
+  kontrollera "$MODELLER/kb-whisper-$MODELL-ggml/$GGML_FIL" "$GGML_SHA"
 }
 
 talare() {

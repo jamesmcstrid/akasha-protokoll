@@ -130,6 +130,7 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 | Inställning | Standard | Vad |
 |---|---|---|
 | `MOTOR` | `auto` | `auto` väljer whisper.cpp med Metal på Apple Silicon och faster-whisper på processorn annars. Går att tvinga med `whispercpp` eller `faster` (kör då `bash mac/installera.sh` igen) |
+| `MODELL` | `medium` | `large` gör färre fel men tar längre tid och behöver 1,1 GB till. Kör `bash mac/installera.sh` efter att du ändrat, så hämtas modellen |
 | `ORDLISTA` | tom | Ord som alltid ska stavas rätt, till exempel företagets namn |
 | `DATAKATALOG` | `~/AkashaMeet` | Var inspelningar och texter sparas |
 | `PORT` | `8611` | Webbsidans port |
@@ -146,7 +147,7 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 | "Fick inte tillgång till mikrofonen" | Tillåt mikrofonen för sidan i webbläsarens inställningar, och för webbläsaren i Systeminställningar → Integritet och säkerhet → Mikrofon |
 | Texten är inte uppdelad per talare | Kontrollera att "Hur många pratar?" inte står på 1, och tryck **Gör om** i listan |
 | Fel antal talare, eller "bara 1 röst gick att skilja åt" | Tryck **Gör om** med rätt antal. Ange inte fler än som pratar; är du osäker, välj **Vet inte – gissa**. Rösterna skiljs lättare åt om ni sitter på ungefär samma avstånd från datorn. Är ni många i rummet hjälper en konferensmikrofon mitt på bordet |
-| Du vill visa någon hur det gick, utan att dela texten | `bash halsokoll/sammanfatta.sh` skriver ut tider, talare och tecken på fel, men inga ord ur mötet. `bash halsokoll/talardiagnos.sh` visar varför det blev så många talare. Se [docs/TEKNIK.md](docs/TEKNIK.md) |
+| Du vill visa någon hur det gick, utan att dela texten | `bash halsokoll/sammanfatta.sh` skriver ut tider, talare och tecken på fel, men inga ord ur mötet. `bash halsokoll/talardiagnos.sh` visar varför det blev så många talare, och `bash halsokoll/jamfor.sh <id A> <id B>` jämför två transkriberingar av samma möte. Se [docs/TEKNIK.md](docs/TEKNIK.md) |
 | Mötesljudet saknas i ett digitalt möte | Kryssade du i **Dela även flikljud**? Det går bara i Chrome. Gör en ny inspelning |
 | Inspelningen fastnade på "Spelar in" | Tryck **Avsluta och transkribera** i listan |
 

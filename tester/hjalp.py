@@ -8,6 +8,7 @@ DATA = tempfile.mkdtemp(prefix="akasha-meet-test-")
 os.environ["DATAKATALOG"] = DATA
 os.environ["MODELLKATALOG"] = os.path.join(DATA, "inga-modeller")
 os.environ["MOTOR"] = "faster"
+os.environ["MODELL"] = "medium"
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app"))
 
 

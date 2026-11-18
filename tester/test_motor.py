@@ -1,6 +1,8 @@
 import unittest
+from unittest import mock
 
 import hjalp  # noqa: F401
+import installningar
 import motor
 
 
@@ -19,6 +21,25 @@ class TestValjMotor(unittest.TestCase):
     def test_tvingat_val_galler(self):
         self.assertEqual(self.val("faster"), "faster")
         self.assertEqual(self.val("whispercpp", system="Linux"), "whispercpp")
+
+
+class TestModell(unittest.TestCase):
+    def test_large_far_egen_fil_och_dtw(self):
+        katalog, ggml, dtw = installningar.STORLEKAR["large"]
+        self.assertEqual(katalog, "kb-whisper-large")
+        self.assertTrue(ggml.endswith("ggml-model-q5_0.bin"))
+        self.assertEqual(dtw, "large.v3")  # KB-Whisper large bygger pa whisper-large-v3
+
+    def test_medium_ar_standard(self):
+        self.assertEqual(installningar.MODELL, "medium")
+        self.assertEqual(installningar.DTW, "medium")
+        self.assertTrue(installningar.GGML_MODELL.endswith("kb-whisper-medium-ggml/ggml-model.bin"))
+
+    def test_namn_och_okand_storlek(self):
+        with mock.patch.object(motor, "MODELL", "large"):
+            self.assertTrue(motor.modellnamn().startswith("KB-Whisper large"))
+        with mock.patch.object(motor, "MODELL", "jatte"):
+            self.assertIn("MODELL", motor.problem())
 
 
 class TestDtwOrdtider(unittest.TestCase):

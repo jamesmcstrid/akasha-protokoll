@@ -83,6 +83,9 @@ Utvärderat på ordnivå, med båda motorerna:
   hittades. `halsokoll/talardiagnos.sh` visade att fyra röster gick att skilja åt, men att en
   person med 17 minuters tal hade slagits ihop med mötesledaren. Tidsmönstret bekräftade det: när
   den personen pratade mer pratade mötesledaren mindre. Därför ändrades sammanslagningen (punkt 3).
+  Omkört med den nya sammanslagningen blev det fyra talare. Personen fick 20 % av taltiden, med
+  samma tidsmönster som i diagnosen, och mötesledarens andel sjönk från 74 till 53 %. Den femte
+  personen gick fortfarande inte att skilja ut.
 - **Tre möten ur AMI-korpusen** (engelska, riktiga möten med 3–4 personer, en mikrofon mitt i
   rummet, 30–48 min): med rätt antal angivet blev 75, 83 och 89 % av orden rätt talare. Med en
   talare för mycket angiven blev antalet ändå rätt. "Vet inte" gav rätt antal i två av tre möten.
@@ -100,7 +103,7 @@ mer lika varandra.
 
 ## Se hur det gick, utan att visa texten
 
-Två verktyg skriver bara ut siffror och tider, inga ord ur mötet och inga namn. Utskriften går
+Tre verktyg skriver bara ut siffror och tider, inga ord ur mötet och inga namn. Utskriften går
 alltså att visa för någon annan.
 
 ```bash
@@ -118,6 +121,17 @@ bash halsokoll/talardiagnos.sh
 Räknar om röstavtrycken (runt en minut per timme möte) och visar grupperna innan något slås
 ihop: hur lika de är, hur många talare det blir med olika `TALARE_TROSKEL`, och när varje grupp
 pratar. Ändrar ingenting.
+
+```bash
+bash halsokoll/jamfor.sh <id A> <id B>
+```
+
+Jämför två transkriberingar av samma möte: samma ljud med olika modeller, eller samma möte
+inspelat med två enheter (datorn och en telefon). Visar hur stor andel av orden som skiljer, totalt
+och per tiominutersblock, om talarna stämmer överens och hur mycket inspelningarna är förskjutna i
+tid. Skillnaderna med text sparas i `jamforelser/` i inspelningsmappen. Att två transkriberingar
+stämmer överens betyder inte att de är rätt, eftersom samma modell gör samma fel på namn och
+facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
 ## Vad som är testat
 

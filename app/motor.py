@@ -1,5 +1,6 @@
-"""Taligenkanning med KB-Whisper medium (KBLab, Kungliga biblioteket). Tva motorer, valj med MOTOR
-(standard auto: whisper.cpp pa Mac med Apple Silicon om det gar, annars faster-whisper):
+"""Taligenkanning med KB-Whisper (KBLab, Kungliga biblioteket), medium eller large (MODELL).
+Tva motorer, valj med MOTOR (standard auto: whisper.cpp pa Mac med Apple Silicon om det gar,
+annars faster-whisper):
 
   faster      faster-whisper (CTranslate2) i den har processen, pa CPU. Fungerar overallt.
               Modellen laddas vid forsta transkriberingen och ligger sedan kvar i minnet.
@@ -22,7 +23,8 @@ import wave
 
 import numpy as np
 
-from installningar import CPU_TRADAR, CT2_MODELL, GGML_MODELL, MOTOR, SPRAK, WHISPERCPP_BIN
+from installningar import (CPU_TRADAR, CT2_MODELL, DTW, GGML_MODELL, MODELL, MOTOR, SPRAK, STORLEKAR,
+                           WHISPERCPP_BIN)
 
 SR = 16000
 BEAM = 5
@@ -59,6 +61,8 @@ class MotorFel(Exception):
 
 def problem():
     """None om motorn ar redo, annars vad som saknas."""
+    if MODELL not in STORLEKAR:
+        return f"okand MODELL={MODELL!r}, anvand medium eller large"
     if AKTIV == "faster":
         if not os.path.isfile(os.path.join(CT2_MODELL, "model.bin")):
             return "KB-Whisper saknas. Kor: bash mac/installera.sh"
@@ -73,7 +77,7 @@ def problem():
 
 
 def modellnamn():
-    return "KB-Whisper medium" + (" (whisper.cpp, Metal)" if AKTIV == "whispercpp" else "")
+    return f"KB-Whisper {MODELL}" + (" (whisper.cpp, Metal)" if AKTIV == "whispercpp" else "")
 
 
 def avkoda(sokvag):
@@ -171,7 +175,7 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
             # Ett segment per ord. whisper.cpp:s vanliga ordtider ar ungefarliga (ett ord kunde
             # hamna 0,6 s fel, sa att det fick fel talare). DTW ger tider som stammer med
             # faster-whisper, men fungerar bara utan flash attention. Darfor bara har.
-            cmd += ["-ml", "1", "-sow", "--dtw", "medium", "-nfa", "-ojf"]
+            cmd += ["-ml", "1", "-sow", "--dtw", DTW, "-nfa", "-ojf"]
 
         p = subprocess.Popen(
             cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, errors="replace"
