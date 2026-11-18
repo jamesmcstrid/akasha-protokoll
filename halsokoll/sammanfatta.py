@@ -50,6 +50,9 @@ def main():
         val = [m for m in alla if m.get("status") in ("klar", "fel")]
     if not val:
         sys.exit("Hittade ingen färdig inspelning.")
+    pagar = [m["id"] for m in alla if m.get("status") not in ("klar", "fel")]
+    if pagar:
+        print(f"\nOBS: {', '.join(pagar)} är inte klar än. Kör igen när den står som klar i listan.")
 
     m = val[-1]
     r = m.get("resultat") or {}
