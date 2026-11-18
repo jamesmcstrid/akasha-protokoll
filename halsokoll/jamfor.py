@@ -123,15 +123,19 @@ def main():
               + (f"   (motsvarar B:T{karta[ta_]})" if ta_ in karta else ""))
 
     print(f"\nPer {BLOCK_S // 60} minuter (tid i A):")
-    print("  block            ord   skiljer  samma talare")
+    print("  block            ord   skiljer  samma talare   B-A (s)")
     for b0 in range(0, int(slut) + 1, BLOCK_S):
         inom = [op for op in opkoder if op[1] < len(a) and b0 <= a[min(op[1], len(a) - 1)][2] < b0 + BLOCK_S]
         antal = sum(1 for w in a if b0 <= w[2] < b0 + BLOCK_S)
         par = [(i, j) for i, j in lika if b0 <= a[i][2] < b0 + BLOCK_S]
         talare_lika = sum(1 for i, j in par if karta.get(a[i][3]) == b[j][3])
+        # Tidsskillnad for samma ord (median). Ska vara ungefar lika i alla block; ett hopp betyder
+        # att den ena transkriberingens tider har hamnat fel i det blocket.
+        diff = sorted(b[j][2] - a[i][2] for i, j in par)
+        median = f"{diff[len(diff) // 2]:+9.1f}" if diff else "        -"
         if antal:
             print(f"  {tid(b0):>7}–{tid(min(b0 + BLOCK_S, slut)):<7} {antal:6} {skillnad(inom) / antal:8.1%}"
-                  f"  {talare_lika / max(1, len(par)):11.1%}")
+                  f"  {talare_lika / max(1, len(par)):11.1%} {median}")
 
     katalog = os.path.join(DATAKATALOG, "jamforelser")
     os.makedirs(katalog, mode=0o700, exist_ok=True)
