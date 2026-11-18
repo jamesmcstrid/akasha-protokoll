@@ -8,11 +8,15 @@ webbsidor i samma webblasare anropar den:
 
 Transkriberingar kors en i taget i en bakgrundstrad. Webbsidan fragar efter framsteg.
 """
+import contextlib
 import io
 import logging
 import os
+import platform
 import queue
 import re
+import shutil
+import subprocess
 import tempfile
 import threading
 import time
@@ -169,7 +173,7 @@ def kor(id_):
         dela = False
     _satt(id_, "transkriberar", 0.0)
 
-    t0 = time.time()
+    t0 = time.monotonic()  # star still nar datorn sover: tiden blir arbetstid
     kanaler = None
     try:
         if inst.get("kalla") == "digitalt":
@@ -192,7 +196,7 @@ def kor(id_):
     text, segment, ord_lista = motor.transkribera(
         samples, per_ord=dela, prompt=prompt, framsteg=lambda a: _satt(id_, "transkriberar", a)
     )
-    t1 = time.time()
+    t1 = time.monotonic()
     antal_talare = None
     if dela and ord_lista:
         lagring.uppdatera(id_, status="talare")
@@ -206,7 +210,7 @@ def kor(id_):
                 samples, ord_lista, antal, framsteg=lambda a: _satt(id_, "talare", a)
             )
         varning = varning or talarvarning
-    t2 = time.time()
+    t2 = time.monotonic()
 
     resultat = {
         "text": text,
@@ -228,11 +232,33 @@ def kor(id_):
     skriv_text(meta)
 
 
+@contextlib.contextmanager
+def hall_vaken():
+    """Pa Mac: lat inte datorn somna av sig sjalv medan ett jobb pagar (caffeinate -i).
+    Ett stangt lock sover anda, och da pausas jobbet tills locket oppnas."""
+    process = None
+    if platform.system() == "Darwin" and shutil.which("caffeinate"):
+        try:
+            process = subprocess.Popen(["caffeinate", "-i"])
+        except OSError as e:
+            log.warning("kunde inte starta caffeinate: %s", e)
+    try:
+        yield
+    finally:
+        if process:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+
+
 def _arbetare():
     while True:
         id_ = _ko.get()
         try:
-            kor(id_)
+            with hall_vaken():
+                kor(id_)
         except lagring.Fel as e:
             lagring.uppdatera(id_, status="fel", fel=str(e))
         except motor.MotorFel as e:

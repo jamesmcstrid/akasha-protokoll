@@ -270,5 +270,25 @@ class TestApp(unittest.TestCase):
         self.assertEqual(svar["segments"][1]["text"], "Hej Anna.")
 
 
+
+class TestHallVaken(unittest.TestCase):
+    def test_caffeinate_startas_och_stoppas_pa_mac(self):
+        process = mock.Mock()
+        with mock.patch.object(akasha.platform, "system", return_value="Darwin"), \
+             mock.patch.object(akasha.shutil, "which", return_value="/usr/bin/caffeinate"), \
+             mock.patch.object(akasha.subprocess, "Popen", return_value=process) as popen:
+            with akasha.hall_vaken():
+                popen.assert_called_once_with(["caffeinate", "-i"])
+                process.terminate.assert_not_called()
+        process.terminate.assert_called_once()
+
+    def test_inget_pa_andra_system(self):
+        with mock.patch.object(akasha.platform, "system", return_value="Linux"), \
+             mock.patch.object(akasha.subprocess, "Popen") as popen:
+            with akasha.hall_vaken():
+                pass
+        popen.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -61,6 +61,8 @@ Google Meet, en Slack-huddle i Slack i Chrome (`app.slack.com`), Teams eller Zoo
 - **Be alltid om lov innan du spelar in någon.** I ett digitalt möte ser de andra inte att du
   spelar in, som de gör när Meet själv spelar in. Säg till.
 - Låt fliken vara öppen och datorn vaken. Om locket stängs slutar inspelningen.
+- Medan texten tas fram somnar datorn inte av sig själv. Stänger du locket pausas
+  transkriberingen och fortsätter när du öppnar det igen.
 - Om fliken stängs eller datorn startas om ligger inspelningen kvar i listan som "Spelar in".
   Tryck **Avsluta och transkribera**, så transkriberas det som hann sparas.
 - Kontrollera texten mot ljudet innan du använder den. Taligenkänning gör fel, särskilt på namn,
