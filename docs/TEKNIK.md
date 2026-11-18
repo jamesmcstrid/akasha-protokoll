@@ -101,6 +101,25 @@ I AMI-proven kommer ordtiderna från korpusens utskrifter, inte från whisper. A
 Korta inpass på under en sekund är svårast, och personer som sitter långt från mikrofonen låter
 mer lika varandra.
 
+## Medium eller large
+
+`MODELL=large` ger KB-Whisper large, KBLab:s största modell. För whisper.cpp används KBLab:s
+kvantiserade version (q5_0, 1,1 GB). Enligt KBLab gör large cirka 15–25 % färre fel än medium.
+Provat i Linux-miljön, med whisper.cpp på processorn och samma inställningar som när talare delas
+upp:
+
+- **40 meningar ur FLEURS** (svenska, uppläst, 715 ord): 6,4 % fel ord med medium och 5,5 % med
+  large. Large var bättre i 9 meningar och sämre i 8, så provet är för litet för att säga mer än
+  att large verkar något bättre.
+- **Testljudet med två talare:** båda gav rätt talare, och båda tappade ett par ord, på olika
+  ställen.
+- **Tid:** för en minut ljud tog large ungefär lika lång tid som medium. För 40 korta klipp tog
+  large 2,4 gånger så lång tid, men då laddas modellen om för varje klipp. Med Metal på Mac är det
+  inte uppmätt än.
+
+Det som avgör är ett riktigt möte: transkribera samma ljud med båda och jämför med
+`halsokoll/jamfor.sh` (nedan).
+
 ## Se hur det gick, utan att visa texten
 
 Tre verktyg skriver bara ut siffror och tider, inga ord ur mötet och inga namn. Utskriften går
