@@ -280,9 +280,13 @@ audio { width: 100%; margin: 10px 0; }
   display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; flex-shrink: 0; border-radius: 50%;
   background: var(--primar); color: var(--primar-text); font-size: 0.85rem; font-weight: 700;
 }
-.steg .namnrad { margin: 0; }
-/* Faltens standardbredd gjorde att tre namn inte fick plats pa en rad. */
-.steg .namnrad .falt { flex: 1 1 9rem; min-width: 0; }
+/* Ett rutnat: tre talare far plats pa en rad i ett brett fonster, en per rad i ett smalt, och
+   en fjarde hamnar under den forsta i stallet for att breda ut sig over hela raden. */
+.steg .namnrad {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+  gap: 12px; margin: 0; position: relative; padding-bottom: 28px; /* plats for kvittot */
+}
+.steg .namnrad .falt { min-width: 0; }
 .steg .namnrad input[type=text] { width: 100%; min-width: 0; }
 #v-atgarder { display: contents; }
 #v-kopierat { margin: 0; }
@@ -291,6 +295,13 @@ audio { width: 100%; margin: 10px 0; }
 .namnrad { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin: 10px 0; padding: 14px; border-radius: 14px; background: var(--yta); }
 .namnrad .falt { margin: 0; min-width: 150px; }
 .namnrad input[type=text] { background: var(--kort); }
+/* Etiketten och Lyssna-knappen pa samma rad. Knappen ar lika bred nar den visar "Stoppa". */
+.namnfalt-huvud { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.namnfalt-huvud label { min-width: 0; }
+.namnfalt-huvud .lyssna { flex: none; min-width: 5.6rem; padding: 4px 10px; white-space: nowrap; text-align: center; }
+/* Kvittot ligger i rutans nedre kant, sa att inget hoppar nar "Sparat" kommer och gar. */
+.namn-kvitto { position: absolute; left: 14px; right: 14px; bottom: 6px; margin: 0; font-size: 0.85rem; line-height: 1.3; color: var(--ok); }
+.namn-kvitto.fel { color: var(--fel); }
 
 .transkript { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
 .transkript p { margin: 0; padding: 10px 14px 10px 16px; border-radius: 4px 14px 14px 4px; background: var(--yta); border-left: 3px solid var(--kant); }
@@ -300,23 +311,34 @@ audio { width: 100%; margin: 10px 0; }
 .transkript p:has(.t4) { border-left-color: var(--t4); }
 .transkript p:has(.t5) { border-left-color: var(--t5); }
 .transkript p:has(.t6) { border-left-color: var(--t6); }
+/* Tid, namn och "?" ar 24 px hoga sa att de ar lata att trafla, men radhojden ar densamma
+   som textens (ca 25 px), sa att raderna inte glesnar. Negativ marginal till vanster: klickytan
+   blir storre utan att texten flyttar sig. Samma klasser i forklaringen, sa exemplen ser likadana ut. */
 .tid {
-  font: inherit; font-size: 0.78rem; font-variant-numeric: tabular-nums; color: var(--dampad);
-  background: none; border: 0; padding: 0 8px 0 0; cursor: pointer; border-radius: 6px;
+  display: inline-block; min-height: 24px; vertical-align: top;
+  font: inherit; font-size: 0.78rem; line-height: 24px; font-variant-numeric: tabular-nums; color: var(--dampad);
+  background: none; border: 0; padding: 0 8px 0 6px; margin-left: -6px; cursor: pointer; border-radius: 6px;
 }
 .tid:hover { color: var(--primar); text-decoration: underline; }
-.namn { font-weight: 700; margin-right: 6px; }
-button.namn { font: inherit; font-weight: 700; background: none; border: 0; padding: 0 2px; cursor: pointer; border-radius: 6px; }
+.namn { display: inline-block; min-height: 24px; line-height: 24px; vertical-align: top; font-weight: 700; margin-right: 6px; }
+button.namn { font: inherit; font-weight: 700; line-height: 24px; background: none; border: 0; padding: 0 4px; margin-left: -4px; cursor: pointer; border-radius: 6px; }
 button.namn:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
 
 .transkript p.osaker { border-left-style: dashed; box-shadow: inset 0 0 0 1px var(--varning-bg); }
 .transkript p.vald-osaker { box-shadow: inset 0 0 0 2px var(--varning-text); }
 .osaker-tecken {
-  display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 999px; font-size: 0.75rem;
-  font-weight: 700; background: var(--varning-bg); color: var(--varning-text); vertical-align: 1px;
+  display: inline-grid; place-items: center; width: 24px; height: 24px; margin-right: 6px; padding: 0;
+  vertical-align: top; border: 0; border-radius: 50%; font: inherit; font-size: 0.8rem; font-weight: 700;
+  line-height: 1; background: var(--varning-bg); color: var(--varning-text);
 }
+button.osaker-tecken { cursor: pointer; }
+button.osaker-tecken:hover { box-shadow: inset 0 0 0 1.5px var(--varning-text); }
 .osakert-ord { text-decoration: underline dotted var(--varning-text); text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
+/* I texten gar osakra ord att klicka pa for att lyssna (inte nar understrykningarna ar dolda). */
+.transkript .osakert-ord { cursor: pointer; border-radius: 3px; }
+.transkript .osakert-ord:hover { background: var(--varning-bg); }
 .dolj-osakra-ord .osakert-ord { text-decoration: none; }
+.transkript.dolj-osakra-ord .osakert-ord { cursor: auto; background: none; }
 
 /* Forklaringen: markeringarna sa som de ser ut i texten, med en kort text till var och en */
 .forklaring { font-size: 0.9rem; }
@@ -339,9 +361,12 @@ button.namn:hover { text-decoration: underline dotted; text-underline-offset: 3p
 }
 .kontrollrad audio { flex: 1 1 240px; min-width: 0; height: 40px; margin: 0; }
 .kontrollrad .knapp { white-space: nowrap; }
+.osakra-lage { font-size: 0.85rem; color: var(--dampad); font-variant-numeric: tabular-nums; white-space: nowrap; }
 @media (max-width: 520px) {
   .kontrollrad { gap: 6px 8px; }
   .kontrollrad .knapp { padding: 6px 10px; }
+  /* Lite mindre luft i kanterna, sa att raknaren far plats bredvid knapparna. */
+  .kontrollrad { padding-left: 14px; padding-right: 14px; }
 }
 /* Utan text finns inget att bladdra i: ljudet och "Ladda ner ljudet" blir en vanlig rad. */
 .utan-text .kontrollrad { position: static; margin: 14px 0 0; padding: 0; border-bottom: 0; }
@@ -353,7 +378,7 @@ button.namn:hover { text-decoration: underline dotted; text-underline-offset: 3p
 .talarval {
   position: absolute; z-index: 10; width: max-content; max-width: min(380px, calc(100vw - 16px));
   padding: 12px 14px; background: var(--kort); border: 1px solid var(--kant); border-radius: 14px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18); overflow: auto; /* hogsta hojd satts fran app.js */
 }
 .talarval-rubrik { margin: 0 0 4px; font-weight: 700; }
 .talarval .citat { margin: 0 0 6px; color: var(--dampad); font-style: italic; overflow-wrap: anywhere; }

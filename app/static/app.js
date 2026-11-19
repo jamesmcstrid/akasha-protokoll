@@ -29,6 +29,9 @@ let visadMeta = null; // inspelningen som visas, med text: behovs nar talare ska
 let doljOsakraOrd = false;
 let senastOsakra = -1; // senaste replik som "Nasta osakra" visade
 let pollTimer = null;
+let namnLage = null; // talarnamnen som sparats eller halls pa att sparas: { id, sparade, ko, vantar }
+let prov = null; // pagaende rostprov fran en Lyssna-knapp: { knapp, start, slut, timer }
+let talarvalAnkare = null; // det som oppnade talarvalsrutan, dit fokus gar tillbaka
 
 // --- hjalpfunktioner -----------------------------------------------------------------------
 
@@ -759,28 +762,166 @@ function namnFor(m, nr) {
   return ((m.namn || {})[String(nr)] || "").trim() || `Talare ${nr}`;
 }
 
+// Namnfalten byggs bara om nar talarna andras (eller en annan inspelning visas). Annars skulle
+// det man skriver i ett falt, och fokus, forsvinna nar visningen ritas om efter en rattning.
 function renderaNamn(m) {
   const rad = $("v-namn");
   const nummer = talarnummer(m);
+  if (!namnLage || namnLage.id !== m.id) {
+    namnLage = { id: m.id, sparade: { ...(m.namn || {}) }, ko: Promise.resolve(), vantar: 0 };
+  } else if (namnLage.vantar) {
+    m.namn = { ...namnLage.sparade }; // svaret kan vara aldre an ett namn som sparas just nu
+  } else {
+    namnLage.sparade = { ...(m.namn || {}) };
+  }
+  const nyckel = `${m.id}:${nummer.join()}`;
+  if (rad.dataset.nyckel === nyckel) { uppdateraLyssnaKnappar(m); return; }
+  const sammaInspelning = (rad.dataset.nyckel || "").startsWith(`${m.id}:`);
+  const skrivet = {};
+  if (sammaInspelning) for (const f of rad.querySelectorAll("input[data-talare]")) skrivet[f.dataset.talare] = f.value;
+  const fokusId = rad.contains(document.activeElement) ? document.activeElement.id : null;
+  if (prov && rad.contains(prov.knapp)) stoppaProv(true);
+  rad.dataset.nyckel = nyckel;
   rad.replaceChildren();
   rad.hidden = nummer.length === 0;
   if (!nummer.length) return;
   for (const nr of nummer) {
-    const falt = el("input", { type: "text", id: `namn-${nr}`, maxlength: "60",
-      placeholder: `Talare ${nr}`, value: (m.namn || {})[String(nr)] || "" });
-    rad.append(el("div", { class: "falt" }, el("label", { for: `namn-${nr}`, class: `t${((nr - 1) % 6) + 1}` },
-      `Talare ${nr} heter`), falt));
+    const falt = el("input", { type: "text", id: `namn-${nr}`, maxlength: "60", autocomplete: "off",
+      placeholder: `Talare ${nr}`, "data-talare": String(nr),
+      value: skrivet[nr] ?? ((m.namn || {})[String(nr)] || ""),
+      onblur: () => sparaNamn(nr),
+      onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); sparaNamn(nr, true); } } });
+    const lyssna = el("button", { type: "button", id: `lyssna-${nr}`, class: "knapp liten-knapp lyssna",
+      "data-talare": String(nr), onclick: (e) => vaxlaProv(nr, e.currentTarget) }, "▶ Lyssna");
+    // Lyssna-knappen star pa etikettens rad, sa att faltet far hela bredden.
+    rad.append(el("div", { class: "falt" }, el("div", { class: "namnfalt-huvud" },
+      el("label", { for: `namn-${nr}`, class: farg(nr) }, `Talare ${nr} heter`), lyssna), falt));
   }
-  rad.append(el("button", { type: "button", class: "knapp", onclick: () => sparaNamn(m, nummer) }, "Spara namn"));
+  rad.append(el("p", { id: "v-namn-kvitto", class: "namn-kvitto", role: "status" }));
+  uppdateraLyssnaKnappar(m);
+  if (fokusId && $(fokusId)) $(fokusId).focus({ preventScroll: true });
 }
 
-async function sparaNamn(m, nummer) {
-  const namn = {};
-  for (const nr of nummer) namn[nr] = $(`namn-${nr}`).value.trim();
-  try {
-    await api("POST", `/api/inspelningar/${m.id}/namn`, namn);
-    visa(m.id, true);
-  } catch (e) { meddela(e.message, true); }
+// Sparas nar man lamnar faltet eller trycker Enter. Bara det har faltet skickas med sitt nya
+// varde; de andra skickas som de senast sparades, sa att det man borjat skriva i nasta falt
+// inte sparas halvfardigt (och falten ritas inte om, sa att det inte forsvinner heller).
+function sparaNamn(nr, igen = false) {
+  const m = visadMeta;
+  const falt = $(`namn-${nr}`);
+  if (!m || !falt || !namnLage || namnLage.id !== m.id) return;
+  const lage = namnLage;
+  const nyckel = String(nr);
+  const varde = falt.value.trim();
+  if (varde === (lage.sparade[nyckel] || "") && !(igen && falt.dataset.fel)) return;
+  lage.sparade = { ...lage.sparade, [nyckel]: varde };
+  if (!varde) delete lage.sparade[nyckel]; // tomt falt: talaren heter "Talare N" igen
+  m.namn = { ...lage.sparade };
+  uppdateraNamnen(m); // direkt, sa att ett klick pa ett namn i texten redan visar det nya
+  const namn = { ...lage.sparade };
+  lage.vantar++;
+  lage.ko = lage.ko.then(async () => {
+    try {
+      await api("POST", `/api/inspelningar/${lage.id}/namn`, namn);
+      delete falt.dataset.fel;
+      if (lage === namnLage) namnKvitto("Sparat");
+    } catch (e) {
+      falt.dataset.fel = "1"; // Enter forsoker igen, aven om namnet inte andrats
+      if (lage === namnLage) namnKvitto(`Namnet sparades inte: ${e.message}`, true);
+    } finally {
+      lage.vantar--;
+    }
+  });
+}
+
+let namnKvittoTimer = null;
+function namnKvitto(text, fel = false) {
+  const k = $("v-namn-kvitto");
+  if (!k) return;
+  clearTimeout(namnKvittoTimer);
+  k.textContent = text;
+  k.classList.toggle("fel", fel);
+  if (!fel) namnKvittoTimer = setTimeout(() => { k.textContent = ""; }, 4000); // ett kvitto, inget som ligger kvar
+}
+
+// Namnen star pa flera stallen: i texten, i forklaringen och pa Lyssna-knapparna.
+function uppdateraNamnen(m) {
+  for (const e of $("visning").querySelectorAll(".namn[data-talare]")) {
+    const namn = namnFor(m, Number(e.dataset.talare));
+    e.textContent = `${namn}:`;
+    if (e.tagName === "BUTTON") e.setAttribute("aria-label", `${namn}, byt talare`);
+  }
+  uppdateraLyssnaKnappar(m);
+}
+
+function uppdateraLyssnaKnappar(m) {
+  for (const k of $("v-namn").querySelectorAll("button.lyssna")) {
+    const nr = Number(k.dataset.talare);
+    const namn = namnFor(m, nr);
+    const vem = namn === `Talare ${nr}` ? namn : `${namn} (Talare ${nr})`;
+    const spelar = !!prov && prov.knapp === k;
+    k.textContent = spelar ? "■ Stoppa" : "▶ Lyssna";
+    k.setAttribute("aria-label", spelar ? `Stoppa provet på ${vem}` : `Lyssna på ${vem}`);
+  }
+}
+
+// --- lyssna -------------------------------------------------------------------------------
+
+// All uppspelning fran sidan gar har igenom. Ett pagaende rostprov avbryts, sa att dess stopp
+// inte pausar det man startar nu.
+function spelaFran(t) {
+  stoppaProv(false);
+  const a = $("v-ljud");
+  a.currentTime = t;
+  a.play().catch(() => { /* t.ex. om ljudet inte gar att spela */ });
+}
+
+// Ett prov pa talarens rost: den langsta repliken som inte ar osaker (finns ingen, den langsta).
+function provReplik(m, nr) {
+  const egna = ((m.resultat && m.resultat.segment) || []).filter((s) => s.speaker === nr);
+  const sakra = egna.filter((s) => !s.osaker_talare);
+  const urval = sakra.length ? sakra : egna;
+  return urval.reduce((b, s) => (!b || s.end - s.start > b.end - b.start ? s : b), null);
+}
+
+function vaxlaProv(nr, knapp) {
+  if (prov && prov.knapp === knapp) { stoppaProv(true); return; }
+  const s = provReplik(visadMeta, nr);
+  if (!s) return;
+  spelaFran(s.start);
+  const a = $("v-ljud");
+  const detta = { knapp, start: s.start, slut: Math.min(s.end, s.start + 10) };
+  // Ljudets egen tid jamfors, inte klockan: provet blir lika langt aven om ljudet laddar en stund.
+  detta.timer = setInterval(() => { if (prov === detta && a.currentTime >= detta.slut) stoppaProv(true); }, 100);
+  prov = detta;
+  uppdateraLyssnaKnappar(visadMeta);
+}
+
+function stoppaProv(pausa) {
+  const p = prov;
+  if (!p) return;
+  prov = null;
+  clearInterval(p.timer);
+  if (pausa) $("v-ljud").pause();
+  if (visadMeta) uppdateraLyssnaKnappar(visadMeta);
+}
+
+// Uppskattad tid for ord k, som _tid_vid i rattning.py: andelen tecken fore ordet.
+function ordTid(s, k) {
+  const tecken = s.text.trim().split(/\s+/).map((o) => [...o].length + 1);
+  const fore = tecken.slice(0, k).reduce((a, b) => a + b, 0);
+  const alla = tecken.reduce((a, b) => a + b, 0);
+  return s.start + (s.end - s.start) * (fore / Math.max(1, alla));
+}
+
+// Ett rent klick pa ett osakert ord spelar fran strax fore det. Ar ord markerade ar det en
+// rattning pa gang (efterMarkering), och da spelas inget.
+function klickPaOrd(e) {
+  const ord = e.target.closest && e.target.closest(".osakert-ord");
+  if (!ord || doljOsakraOrd || !visadMeta) return;
+  const sel = window.getSelection();
+  if (sel && !sel.isCollapsed) return;
+  const s = visadMeta.resultat.segment[Number(ord.closest("p[data-replik]").dataset.replik)];
+  if (s) spelaFran(Math.max(s.start, ordTid(s, Number(ord.dataset.ord)) - 2));
 }
 
 function farg(nr) {
@@ -794,17 +935,25 @@ function renderaText(m) {
   const segs = (m.resultat && m.resultat.segment) || [];
   const kanRatta = !PAGAENDE.has(m.status);
   segs.forEach((s, i) => {
-    const tidKnapp = el("button", { type: "button", class: "tid", title: "Lyssna härifrån",
-      onclick: () => { const a = $("v-ljud"); a.currentTime = s.start; a.play(); } }, tid(s.start));
+    const tidKnapp = el("button", { type: "button", class: "tid", "aria-label": `Lyssna från ${tid(s.start)}`,
+      title: "Lyssna härifrån", onclick: () => spelaFran(s.start) }, tid(s.start));
     const p = el("p", { "data-replik": String(i), class: s.osaker_talare ? "osaker" : undefined }, tidKnapp);
     if ("speaker" in s) {
-      const namn = `${namnFor(m, s.speaker)}:`;
+      const namn = namnFor(m, s.speaker);
+      const nr = String(s.speaker);
       p.append(kanRatta
-        ? el("button", { type: "button", class: `namn ${farg(s.speaker)}`, title: "Byt talare",
-          "aria-haspopup": "dialog", onclick: (e) => oppnaTalarval(e.currentTarget, i, null, null) }, namn)
-        : el("span", { class: `namn ${farg(s.speaker)}` }, namn));
+        ? el("button", { type: "button", class: `namn ${farg(s.speaker)}`, "data-talare": nr, title: "Byt talare",
+          "aria-label": `${namn}, byt talare`, "aria-haspopup": "dialog",
+          onclick: (e) => oppnaTalarval(e.currentTarget, i, null, null) }, `${namn}:`)
+        : el("span", { class: `namn ${farg(s.speaker)}`, "data-talare": nr }, `${namn}:`));
       if (s.osaker_talare) {
-        p.append(el("span", { class: "osaker-tecken", title: "Osäker talare: kontrollera mot ljudet" }, "?"));
+        // En knapp till samma talarval som namnet: tecknet ar det som drar blicken till sig.
+        p.append(kanRatta
+          ? el("button", { type: "button", class: "osaker-tecken", "aria-haspopup": "dialog",
+            "aria-label": "Osäker talare. Kontrollera och välj talare.",
+            title: "Osäker talare: kontrollera mot ljudet och välj talare",
+            onclick: (e) => oppnaTalarval(e.currentTarget, i, null, null) }, "?")
+          : el("span", { class: "osaker-tecken", title: "Osäker talare: kontrollera mot ljudet" }, "?"));
       }
       // Varje ord i ett eget span, sa att markerade ord kan fa en annan talare.
       const osakra = new Set(s.osakra_ord || []);
@@ -812,7 +961,7 @@ function renderaText(m) {
       s.text.trim().split(/\s+/).forEach((ord, k) => {
         if (k) text.append(" ");
         text.append(osakra.has(k)
-          ? el("span", { "data-ord": String(k), class: "osakert-ord", title: "Programmet var osäkert på ordet" }, ord)
+          ? el("span", { "data-ord": String(k), class: "osakert-ord", title: ordTitel() }, ord)
           : el("span", { "data-ord": String(k) }, ord));
       });
       p.append(text);
@@ -821,6 +970,11 @@ function renderaText(m) {
     }
     yta.append(p);
   });
+}
+
+// Med dolda understrykningar gar orden inte att klicka pa, och da ska titeln inte lova det.
+function ordTitel() {
+  return doljOsakraOrd ? undefined : "Programmet var osäkert på ordet. Klicka för att lyssna.";
 }
 
 // Forklaringen visar markeringarna sa som de ser ut i texten, och bara de som finns.
@@ -835,7 +989,7 @@ function renderaOsakert(m) {
     el("span", { class: "prov", "aria-hidden": "true" }, prov), el("span", {}, ...text)));
   rad(el("span", { class: "tid" }, "00:00"), "Klicka på en tid för att lyssna därifrån.");
   if (nummer.length) {
-    rad(el("span", { class: `namn ${farg(nummer[0])}` }, `${namnFor(m, nummer[0])}:`),
+    rad(el("span", { class: `namn ${farg(nummer[0])}`, "data-talare": String(nummer[0]) }, `${namnFor(m, nummer[0])}:`),
       "Klicka på namnet för att byta talare. Markera några ord för att byta talare på bara dem.");
   }
   if (talare) {
@@ -844,7 +998,7 @@ function renderaOsakert(m) {
   }
   if (ord) {
     rad(el("span", { class: "osakert-ord" }, "ord"),
-      el("strong", {}, "Osäkert ord"), ` – ${ord} ord som programmet var osäkert på. `,
+      el("strong", {}, "Osäkert ord"), ` – ${ord} ord som programmet var osäkert på. Klicka på ett ord för att lyssna. `,
       el("button", { type: "button", id: "v-understrykningar", class: "knapp liten-knapp",
         "aria-pressed": String(doljOsakraOrd), onclick: vaxlaUnderstrykningar },
       doljOsakraOrd ? "Visa understrykningar" : "Dölj understrykningar"));
@@ -860,19 +1014,31 @@ function vaxlaUnderstrykningar() {
   const knapp = $("v-understrykningar");
   knapp.setAttribute("aria-pressed", String(doljOsakraOrd));
   knapp.textContent = doljOsakraOrd ? "Visa understrykningar" : "Dölj understrykningar";
+  for (const ord of $("v-text").querySelectorAll(".osakert-ord")) {
+    if (doljOsakraOrd) ord.removeAttribute("title");
+    else ord.title = ordTitel();
+  }
 }
 
-// Knappen visar var man ar bland de osakra: "1 av 3" ar den som ar markerad i texten nu.
+// Lage star som egen text intill knappen: "3 osaker" innan man borjat, "1 av 3" nar man star
+// pa en osaker replik. Star man inte pa nagon (den man stod pa ar rattad) visas antalet igen.
 function uppdateraNastaOsakra() {
   const knapp = $("v-nasta-osakra");
+  const lage = $("v-osakra-lage");
   const osakra = [...document.querySelectorAll("#v-text p.osaker")].map((p) => Number(p.dataset.replik));
-  knapp.hidden = !osakra.length || $("v-text").hidden;
-  if (knapp.hidden) return;
-  const plats = osakra.filter((r) => r <= senastOsakra).length;
-  knapp.textContent = plats
-    ? `Nästa osäkra talare (${plats} av ${osakra.length})`
-    : `Första osäkra talare (av ${osakra.length})`;
-  knapp.title = plats ? `Du står på osäker talare ${plats} av ${osakra.length}.` : "";
+  knapp.hidden = lage.hidden = !osakra.length || $("v-text").hidden;
+  if (knapp.hidden) { sattText(lage, ""); return; }
+  const plats = osakra.indexOf(senastOsakra) + 1;
+  sattText(lage, plats ? `${plats} av ${osakra.length}`
+    : `${osakra.length} ${osakra.length === 1 ? "osäker" : "osäkra"}`);
+}
+
+// Ramen kring den osakra repliken man star pa. Texten ritas om efter en rattning, och da
+// satts den igen.
+function markeraValdOsaker() {
+  document.querySelectorAll("#v-text p.vald-osaker").forEach((p) => p.classList.remove("vald-osaker"));
+  const p = document.querySelector(`#v-text p.osaker[data-replik="${senastOsakra}"]`);
+  if (p) p.classList.add("vald-osaker");
 }
 
 function nastaOsakra() {
@@ -880,8 +1046,7 @@ function nastaOsakra() {
   if (!osakra.length) return;
   const nasta = osakra.find((p) => Number(p.dataset.replik) > senastOsakra) || osakra[0];
   senastOsakra = Number(nasta.dataset.replik);
-  document.querySelectorAll("#v-text p.vald-osaker").forEach((p) => p.classList.remove("vald-osaker"));
-  nasta.classList.add("vald-osaker");
+  markeraValdOsaker();
   uppdateraNastaOsakra();
   // Mitt i fonstret om den far plats under kontrollraden, annars overst (scroll-margin i
   // stil.css haller den fri fran kontrollraden).
@@ -903,11 +1068,37 @@ function tillNedladdning() {
 
 // --- ratta talare --------------------------------------------------------------------------
 
-function stangTalarval() {
+// tillbaka: rutan stangdes utan val (Escape, Avbryt), och fokus ska tillbaka dit den oppnades
+// fran. Bara en knapp: oppnades den genom att markera ord finns inget sadant stalle.
+function stangTalarval(tillbaka = false) {
   const ruta = $("talarval");
   if (ruta.hidden) return;
+  const ankare = talarvalAnkare;
+  talarvalAnkare = null;
   ruta.hidden = true;
   ruta.replaceChildren();
+  // Oppnades rutan av en markering tas markeringen bort. Ligger den kvar oppnar nasta klick
+  // pa ett namn i texten rutan for de gamla orden i stallet for for repliken.
+  if (ankare && ankare.tagName !== "BUTTON") window.getSelection().removeAllRanges();
+  if (tillbaka && ankare && ankare.tagName === "BUTTON" && ankare.isConnected) ankare.focus({ preventScroll: true });
+}
+
+// Under ankaret om rutan far plats dar, annars ovanfor. Aldrig utanfor fonstret och aldrig
+// under kontrollraden, som ligger overst i fonstret medan man bladdrar.
+function placeraTalarval(ruta, ankare) {
+  const r = ankare.getBoundingClientRect();
+  const overst = Math.max(8, $("v-kontrollrad").getBoundingClientRect().bottom + 6);
+  const nederst = window.innerHeight - 8;
+  ruta.style.maxHeight = `${Math.max(120, nederst - overst)}px`;
+  const h = ruta.offsetHeight;
+  let y = r.bottom + 6;
+  if (y + h > nederst) {
+    const ovanfor = r.top - 6 - h;
+    y = ovanfor >= overst ? ovanfor : Math.max(overst, nederst - h);
+  }
+  const bredd = document.documentElement.clientWidth;
+  ruta.style.top = `${y + window.scrollY}px`;
+  ruta.style.left = `${Math.max(8, Math.min(r.left, bredd - ruta.offsetWidth - 8)) + window.scrollX}px`;
 }
 
 function oppnaTalarval(ankare, i, fran, till) {
@@ -944,29 +1135,56 @@ function oppnaTalarval(ankare, i, fran, till) {
     }
     ruta.append(el("p", { class: "dampad liten" }, `Alla repliker från ${namnFor(m, s.speaker)} är egentligen:`), alla);
   }
-  ruta.append(el("button", { type: "button", class: "knapp liten-knapp", onclick: stangTalarval }, "Avbryt"));
+  ruta.append(el("button", { type: "button", class: "knapp liten-knapp", onclick: () => stangTalarval(true) }, "Avbryt"));
 
   ruta.hidden = false;
-  const r = ankare.getBoundingClientRect();
-  const bredd = document.documentElement.clientWidth;
-  ruta.style.top = `${r.bottom + window.scrollY + 6}px`;
-  ruta.style.left = `${Math.max(8, Math.min(r.left + window.scrollX, bredd - ruta.offsetWidth - 8 + window.scrollX))}px`;
+  talarvalAnkare = ankare;
+  placeraTalarval(ruta, ankare);
   ruta.querySelector("button").focus({ preventScroll: true });
+}
+
+// Var det rattade hamnar: servern delar repliken vid den uppskattade tiden (_tid_vid i
+// rattning.py) och slar ihop grannar med samma talare. En ihopslagen replik behaller den
+// tidigaste starten, sa det rattade ligger i den sista repliken som borjar senast vid tiden.
+function replikVid(segs, t, talare) {
+  let hittad = -1, medTalare = -1;
+  segs.forEach((s, k) => {
+    if (s.start > t + 0.005) return;
+    hittad = k;
+    if (s.speaker === talare) medTalare = k;
+  });
+  return medTalare >= 0 && segs[medTalare].start === segs[hittad].start ? medTalare : hittad;
 }
 
 async function ratta(i, val) {
   const m = visadMeta;
+  const s = m.resultat.segment[i];
+  const ankare = talarvalAnkare;
   stangTalarval();
   window.getSelection().removeAllRanges();
+  const t = val.alla || !val.fran ? s.start : Math.round(ordTid(s, val.fran) * 100) / 100;
+  const segs = m.resultat.segment;
+  const senastTid = senastOsakra >= 0 && segs[senastOsakra] ? segs[senastOsakra].start : null;
   try {
-    await api("POST", `/api/inspelningar/${m.id}/talare`, { replik: i, text: m.resultat.segment[i].text, ...val });
+    await (namnLage && namnLage.ko); // annars kan ett namn som sparas just nu visas med sitt gamla varde
+    const svar = await api("POST", `/api/inspelningar/${m.id}/talare`, { replik: i, text: s.text, ...val });
     const y = window.scrollY;
     await visa(m.id, true);
     window.scrollTo(0, y);
+    const nya = visadMeta.resultat.segment;
+    const mal = replikVid(nya, t, svar.talare);
+    // Platsen bland de osakra foljer med: den man stod pa ar inte osaker langre, de andra kan ha flyttat.
+    if (senastTid !== null) {
+      senastOsakra = senastOsakra === i ? mal : replikVid(nya, senastTid, segs[senastOsakra].speaker);
+      markeraValdOsaker();
+      uppdateraNastaOsakra();
+    }
+    const namn = document.querySelector(`#v-text p[data-replik="${mal}"] button.namn`);
+    if (namn) namn.focus({ preventScroll: true });
     uppdateraLista();
   } catch (e) {
-    $("v-status").textContent = e.message;
-    $("v-status").classList.add("fel");
+    kvitto(e.message, true);
+    if (ankare && ankare.tagName === "BUTTON" && ankare.isConnected) ankare.focus({ preventScroll: true });
   }
 }
 
@@ -989,7 +1207,9 @@ function markeradeOrd() {
     Number(traffade[traffade.length - 1].dataset.ord) + 1, traffade[traffade.length - 1]];
 }
 
-function efterMarkering() {
+function efterMarkering(e) {
+  // Ett klick pa en knapp i texten (tid, namn, "?") ar ingen markering.
+  if (e && e.type === "mouseup" && e.target.closest && e.target.closest("button")) return;
   setTimeout(() => {
     if (!visadMeta || PAGAENDE.has(visadMeta.status)) return;
     const m = markeradeOrd();
@@ -1021,8 +1241,11 @@ async function kopiera() {
 }
 
 function visaRubrikform(visa) {
+  // Stangs formularet medan fokus ar i det ska fokus tillbaka till knappen, inte till sidans borjan.
+  const hadeFokus = $("v-rubrikform").contains(document.activeElement);
   $("v-rubrikform").hidden = !visa;
   $("v-byt-rubrik").setAttribute("aria-expanded", String(visa));
+  if (!visa && hadeFokus) $("v-byt-rubrik").focus({ preventScroll: true });
   if (visa) {
     $("v-titel").value = $("visning").dataset.titel || "";
     $("v-titel").focus();
@@ -1086,9 +1309,26 @@ new ResizeObserver(([rad]) => {
 }).observe($("v-kontrollrad"));
 $("v-text").addEventListener("mouseup", efterMarkering);
 $("v-text").addEventListener("keyup", (e) => { if (e.shiftKey) efterMarkering(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") stangTalarval(); });
+$("v-text").addEventListener("click", klickPaOrd);
+// Ett rostprov slutar galla sa fort anvandaren sjalv pausar eller hoppar i ljudet (spelarens
+// reglage, "Backa 5 s"); annars skulle provets stopp pausa det man valt att lyssna pa.
+$("v-ljud").addEventListener("pause", () => stoppaProv(false));
+$("v-ljud").addEventListener("emptied", () => stoppaProv(false)); // visningen stangd eller annat ljud
+$("v-ljud").addEventListener("seeking", () => {
+  if (prov && Math.abs($("v-ljud").currentTime - prov.start) > 0.3) stoppaProv(false);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") stangTalarval(true); });
 document.addEventListener("mousedown", (e) => {
-  if (!$("talarval").hidden && !$("talarval").contains(e.target)) stangTalarval();
+  if ($("talarval").hidden || $("talarval").contains(e.target)) return;
+  const ankare = talarvalAnkare;
+  stangTalarval();
+  // Klickade man pa nagot som inte tar fokus hamnar fokus annars overst pa sidan.
+  setTimeout(() => {
+    const fokus = document.activeElement;
+    if ((!fokus || fokus === document.body) && ankare && ankare.tagName === "BUTTON" && ankare.isConnected) {
+      ankare.focus({ preventScroll: true });
+    }
+  }, 0);
 });
 window.addEventListener("beforeunload", (e) => {
   if (inspelning) { e.preventDefault(); e.returnValue = ""; }

@@ -141,7 +141,9 @@
         <div id="v-kontrollrad" class="kontrollrad">
           <audio id="v-ljud" controls preload="none"></audio>
           <button id="v-backa" type="button" class="knapp liten-knapp" title="Backa 5 sekunder">Backa 5 s</button>
-          <button id="v-nasta-osakra" type="button" class="knapp liten-knapp" hidden>Nästa osäkra talare</button>
+          <button id="v-nasta-osakra" type="button" class="knapp liten-knapp" aria-describedby="v-osakra-lage"
+            hidden>Nästa osäkra talare</button>
+          <span id="v-osakra-lage" class="osakra-lage" role="status" hidden></span>
         </div>
         <div id="v-text" class="transkript"></div>
       </div>
