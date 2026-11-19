@@ -71,6 +71,33 @@ function meddela(text, fel = false) {
   m.classList.toggle("fel", fel);
 }
 
+// Kvitton och fel for det man gor i listan och visningen. meddela() skriver hogst upp i
+// formularet, som inte syns nar man arbetar langre ner. Ett nytt kvitto ersatter det gamla.
+// Vanliga kvitton forsvinner efter en stund, fel ligger kvar tills man stanger dem.
+let kvittoTimer = null;
+let fokusForeKvitto = null; // dit fokus gar tillbaka nar man stanger med tangentbordet
+
+function kvitto(text, fel = false) {
+  const ruta = $("kvitto");
+  clearTimeout(kvittoTimer);
+  // Bara den ena raden har text: role="alert" for fel, role="status" for kvitton.
+  $("kvitto-status").textContent = fel ? "" : text;
+  $("kvitto-fel").textContent = fel ? text : "";
+  $("kvitto-stang").hidden = !(fel && text);
+  ruta.classList.remove("visas");
+  ruta.classList.toggle("ar-fel", fel);
+  if (!text) return;
+  void ruta.offsetWidth; // starta om inglidningen aven om en ruta redan syns
+  ruta.classList.add("visas");
+  if (!fel) kvittoTimer = setTimeout(() => kvitto(""), 6000);
+}
+
+function stangKvitto() {
+  const hadeFokus = $("kvitto").contains(document.activeElement);
+  kvitto("");
+  if (hadeFokus && fokusForeKvitto && fokusForeKvitto.isConnected) fokusForeKvitto.focus();
+}
+
 function installningar() {
   return { talare: $("talare").value, ord: $("ord").value.trim(), titel: $("titel").value.trim(),
            kalla: $("kalla").value };
@@ -491,8 +518,8 @@ async function avsluta(id) {
   // Inspelningen avbrots (fliken stangdes): anvand installningarna fran nar den startade.
   try {
     await api("POST", `/api/inspelningar/${id}/klar`, { starta: true });
-    meddela("Inspelningen transkriberas med de inställningar den startades med.");
-  } catch (e) { meddela(e.message, true); }
+    kvitto("Inspelningen transkriberas med de inställningar den startades med.");
+  } catch (e) { kvitto(e.message, true); }
   uppdateraLista();
 }
 
@@ -573,7 +600,7 @@ async function radera(m) {
   try {
     await api("POST", `/api/inspelningar/${m.id}/radera`);
     if (visadId === m.id) stangVisning();
-  } catch (e) { meddela(e.message, true); }
+  } catch (e) { kvitto(e.message, true); }
   uppdateraLista();
 }
 
@@ -587,7 +614,7 @@ function rulla(mal, block) {
 
 async function visa(id, tyst = false) {
   let m;
-  try { m = await api("GET", `/api/inspelningar/${id}`); } catch (e) { meddela(e.message, true); return; }
+  try { m = await api("GET", `/api/inspelningar/${id}`); } catch (e) { kvitto(e.message, true); return; }
   const byttId = visadId !== id;
   visadId = id;
   const v = $("visning");
@@ -976,7 +1003,7 @@ async function angraRattningar() {
     await api("POST", `/api/inspelningar/${visadId}/talare/angra`);
     visa(visadId, true);
     uppdateraLista();
-  } catch (e) { meddela(e.message, true); }
+  } catch (e) { kvitto(e.message, true); }
 }
 
 async function kopiera() {
@@ -1007,10 +1034,10 @@ async function sparaRubrik(e) {
   try {
     const { rubrik } = await api("POST", `/api/inspelningar/${visadId}/titel`, { titel: $("v-titel").value });
     visaRubrikform(false);
-    meddela(`Rubriken är ändrad till "${rubrik}".`);
+    kvitto(`Rubriken är ändrad till "${rubrik}".`);
     visa(visadId, true);
     uppdateraLista();
-  } catch (fel) { meddela(fel.message, true); }
+  } catch (fel) { kvitto(fel.message, true); }
 }
 
 function stangVisning() {
@@ -1038,6 +1065,15 @@ $("v-rubrik-avbryt").addEventListener("click", () => visaRubrikform(false));
 $("v-rubrikform").addEventListener("submit", sparaRubrik);
 $("v-angra").addEventListener("click", angraRattningar);
 $("om-form").addEventListener("submit", startaOmtranskribering);
+$("kvitto-stang").addEventListener("click", stangKvitto);
+// Escape stanger ett fel, sa att man slipper tabba ner till rutan. Fangas fore lyssnaren som
+// stanger talarvalet: ar talarvalet eller en dialog oppen ar det den som ska stangas.
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("kvitto-stang").hidden && $("talarval").hidden && !$("om-dialog").open) stangKvitto();
+}, true);
+$("kvitto").addEventListener("focusin", (e) => {
+  if (e.relatedTarget && !$("kvitto").contains(e.relatedTarget)) fokusForeKvitto = e.relatedTarget;
+});
 $("om-avbryt").addEventListener("click", () => $("om-dialog").close());
 $("om-dialog").addEventListener("close", stangOmdialog);
 $("v-forsok").addEventListener("click", () => transkriberaIgen(visadMeta));

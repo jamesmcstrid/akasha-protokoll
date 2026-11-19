@@ -1,26 +1,31 @@
 /* Akasha Meet: varm stil. Samma klasser som tidigare, bara utseendet ar nytt. */
+/* Nyanserna ar valda sa att text har minst 4,5:1 mot --yta och --kort, och kanter runt reglage
+   och fokusmarkeringen minst 3:1 (WCAG AA), i bade ljust och morkt lage. */
 :root {
   --bg: #faf6f1;
   --bg-glod: #f5e4d3;
   --kort: #fffdfa;
   --yta: #f7f0e8;
   --text: #2a2420;
-  --dampad: #7a6d62;
-  --kant: #ebe0d4;
-  --primar: #c4553a;
+  --dampad: #74675c;
+  --kant: #ebe0d4; /* mjuk: kort och avdelare */
+  --kant-reglage: #938070; /* falt och knappar: maste synas som reglage */
+  --fokus: var(--primar);
+  --primar: #c0523a;
   --primar-hover: #ab4630;
   --primar-text: #ffffff;
   --primar-skugga: rgba(196, 85, 58, 0.28);
   --stopp: #b8322a;
+  --stopp-text: #ffffff;
   --varning-bg: #fdf0da;
   --varning-text: #7a4a0b;
   --fel: #b3261e;
-  --ok: #3f7d4e;
-  --ok-bg: rgba(63, 125, 78, 0.12);
+  --ok: #2e6a3c;
+  --ok-bg: rgba(46, 106, 60, 0.12);
   --skugga: 0 1px 2px rgba(70, 45, 20, 0.05), 0 10px 30px rgba(70, 45, 20, 0.06);
-  --t1: #c4553a;
-  --t2: #2f7a68;
-  --t3: #9a6a12;
+  --t1: #b14a31;
+  --t2: #2b7563;
+  --t3: #8a5e10;
   --t4: #7a4f8c;
   --t5: #3d6896;
   --t6: #a63f5c;
@@ -38,11 +43,13 @@
     --text: #f3ebe2;
     --dampad: #b4a699;
     --kant: #3a322c;
+    --kant-reglage: #857669;
     --primar: #e8825f;
     --primar-hover: #f0956f;
     --primar-text: #1f120c;
     --primar-skugga: rgba(232, 130, 95, 0.25);
     --stopp: #ef6f5e;
+    --stopp-text: #1f120c; /* vit text pa den ljusa roda knappen blev 3:1 */
     --varning-bg: #3b2c17;
     --varning-text: #f2c98a;
     --fel: #f08a7e;
@@ -98,18 +105,24 @@ label { font-weight: 600; font-size: 0.92rem; }
 .hjalp { margin: 0; width: 0; min-width: 100%; font-size: 0.85rem; color: var(--dampad); }
 select:disabled { opacity: .6; cursor: not-allowed; }
 input[type=text], select {
-  font: inherit; padding: 10px 12px; border: 1px solid var(--kant); border-radius: 12px;
+  font: inherit; padding: 10px 12px; border: 1px solid var(--kant-reglage); border-radius: 12px;
   background: var(--yta); color: var(--text); transition: border-color .15s, box-shadow .15s;
 }
-input[type=text]::placeholder { color: var(--dampad); opacity: 0.8; }
+/* Hel opacitet: med 80 % blev platshallaren for svag att lasa. */
+input[type=text]::placeholder { color: var(--dampad); opacity: 1; }
 input[type=text]:focus, select:focus { border-color: var(--primar); }
-input[type=text]:focus, select:focus, .knapp:focus-visible, .tid:focus-visible, .post:focus-visible, button.namn:focus-visible {
-  outline: none; box-shadow: 0 0 0 4px var(--primar-skugga);
+/* En regel for allt som kan fa fokus, sa att nya knappar far markeringen utan att listas har.
+   Heldragen kontur med lucka: syns mot kortet, mot --yta och runt den primara knappen. */
+:is(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--fokus); outline-offset: 2px;
 }
+/* Element med tabindex="-1" far bara fokus fran skriptet (t.ex. rubriken man hoppar till):
+   visa var man hamnade aven om man klickade med musen. */
+[tabindex="-1"]:focus { outline: 2px solid var(--fokus); outline-offset: 4px; border-radius: 6px; }
 
 .knappar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
 .knapp {
-  font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 12px; border: 1px solid var(--kant);
+  font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 12px; border: 1px solid var(--kant-reglage);
   background: var(--yta); color: var(--text); cursor: pointer; text-decoration: none; display: inline-block;
   transition: background .15s, border-color .15s, transform .05s;
 }
@@ -122,7 +135,7 @@ input[type=text]:focus, select:focus, .knapp:focus-visible, .tid:focus-visible, 
   border-radius: 999px; padding: 13px 26px; font-size: 1.05rem;
   box-shadow: 0 8px 20px var(--primar-skugga);
 }
-.stopp { background: var(--stopp); color: #fff; border-color: var(--stopp); animation: ring 1.8s infinite; }
+.stopp { background: var(--stopp); color: var(--stopp-text); border-color: var(--stopp); animation: ring 1.8s infinite; }
 @keyframes ring {
   0% { box-shadow: 0 0 0 0 rgba(184, 50, 42, 0.45); }
   70% { box-shadow: 0 0 0 14px rgba(184, 50, 42, 0); }
@@ -149,6 +162,31 @@ meter::-moz-meter-bar { background: var(--ok); border-radius: 999px; }
 
 .meddelande { min-height: 1.5em; margin: 10px 0; }
 .meddelande.fel { color: var(--fel); }
+
+/* Kvittorutan: nederst i fonstret (kontrollraden sitter overst). Utan text syns ingen ruta,
+   men elementet finns kvar sa att skarmlasarnas levande omraden fungerar. */
+.kvitto {
+  position: fixed; z-index: 20; left: 0; right: 0; margin: 0 auto;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  width: max-content; max-width: min(560px, calc(100vw - 24px));
+  display: flex; align-items: center; gap: 14px;
+  pointer-events: none;
+}
+.kvitto.visas {
+  padding: 12px 16px; border-radius: 14px; pointer-events: auto;
+  background: var(--kort); border: 1px solid var(--kant-reglage); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+.kvitto.visas.ar-fel { border-left: 4px solid var(--fel); }
+.kvitto-text { margin: 0; flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+/* Den tomma raden doljs inte (dolda levande omraden laser skarmlasare inte upp), men tar ingen plats. */
+.kvitto-text:empty { position: absolute; }
+.kvitto .knapp { flex-shrink: 0; }
+.kvitto-text.fel { color: var(--fel); font-weight: 600; }
+@media (prefers-reduced-motion: no-preference) {
+  .kvitto.visas { animation: kvitto-in .2s ease-out; }
+  @keyframes kvitto-in { from { opacity: 0; transform: translateY(8px); } }
+}
+
 .varning { background: var(--varning-bg); color: var(--varning-text); padding: 10px 14px; border-radius: 12px; }
 .tips { margin: 2px 0 10px; padding: 10px 14px; border-radius: 12px; background: var(--yta); border-left: 3px solid var(--primar); font-size: 0.92rem; }
 .dampad { color: var(--dampad); }
@@ -238,8 +276,6 @@ audio { width: 100%; margin: 10px 0; }
   display: flex; align-items: center; gap: 10px; margin: 0 0 10px;
   font-family: var(--rund); font-size: 1.05rem; font-weight: 650; letter-spacing: -0.01em;
 }
-.steg h3:focus { outline: none; }
-.steg h3:focus-visible { box-shadow: 0 0 0 4px var(--primar-skugga); border-radius: 8px; }
 .stegnr {
   display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; flex-shrink: 0; border-radius: 50%;
   background: var(--primar); color: var(--primar-text); font-size: 0.85rem; font-weight: 700;

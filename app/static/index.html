@@ -168,6 +168,14 @@
     </section>
   </main>
 
+  <!-- Kvitton och fel for listan och visningen. Fast nederst i fonstret, sa att de syns dar man
+       arbetar. Raderna finns alltid (tomma), annars laser skarmlasare inte upp dem. -->
+  <div id="kvitto" class="kvitto">
+    <p id="kvitto-status" class="kvitto-text" role="status"></p>
+    <p id="kvitto-fel" class="kvitto-text fel" role="alert"></p>
+    <button id="kvitto-stang" type="button" class="knapp liten-knapp" hidden>Stäng</button>
+  </div>
+
   <div id="talarval" class="talarval" role="dialog" aria-labelledby="talarval-rubrik" hidden></div>
 
   <dialog id="om-dialog" class="dialog" aria-labelledby="om-rubrik">
