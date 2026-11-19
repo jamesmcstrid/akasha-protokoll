@@ -230,6 +230,19 @@ function planeraHalsa() {
   halsaTimer = setTimeout(kollaTjanst, 5000);
 }
 
+// Tar bort sidans egna "svarar inte"-texter nar tjansten ar tillbaka. Andra fel ligger kvar.
+function stadaTjanstFel() {
+  const ar = (e) => e.textContent.includes(INGEN_TJANST);
+  if (ar($("meddelande"))) meddela("");
+  if (ar($("om-fel"))) $("om-fel").textContent = "";
+  if (ar($("m-fel"))) sattText($("m-fel"), "");
+  if (ar($("kvitto-fel")) || !$("kvitto-fel").textContent) {
+    const hadeFokus = $("kvitto").contains(document.activeElement);
+    kvitto("Akasha Meet svarar igen.");
+    if (hadeFokus && fokusForeKvitto && fokusForeKvitto.isConnected) fokusForeKvitto.focus();
+  }
+}
+
 async function kollaTjanst() {
   halsaPaVag = true;
   const version = modellVersion;
@@ -245,6 +258,7 @@ async function kollaTjanst() {
     if (varNere) {
       // Tjansten ar tillbaka: hamta om allt utan omladdning.
       clearTimeout(halsaTimer);
+      stadaTjanstFel();
       kollaModeller();
       uppdateraLista();
     }
@@ -579,13 +593,16 @@ async function skickaMedForsok(insp, nr, blob, sekunder) {
       return;
     } catch (e) {
       insp.fel = e.message;
+      insp.felTjanst = e instanceof TjanstFel;
       $("sparat").textContent = e instanceof TjanstFel
         ? "Kunde inte spara (försöker igen): Akasha Meet svarar inte."
         : `Kunde inte spara (försöker igen): ${e.message}`;
       await new Promise((r) => setTimeout(r, 1000 * 2 ** forsok));
     }
   }
-  meddela(`Ljudet kunde inte sparas: ${insp.fel}. Stoppa inspelningen.`, true);
+  meddela(insp.felTjanst
+    ? "Ljudet kunde inte sparas eftersom Akasha Meet inte svarar. Det som sparades innan dess ligger kvar. Stoppa inspelningen och starta en ny när Akasha Meet är igång igen."
+    : `Ljudet kunde inte sparas: ${insp.fel.replace(/\.+$/, "")}. Stoppa inspelningen.`, true);
 }
 
 function starta_niva(stream) {
@@ -668,7 +685,9 @@ async function stoppa() {
     meddela("Inspelningen är sparad och transkriberas nu.");
     visa(insp.id);
   } catch (e) {
-    meddela(`Inspelningen är sparad, men transkriberingen startade inte: ${e.message}`, true);
+    meddela(e instanceof TjanstFel
+      ? "Inspelningen är sparad, men transkriberingen startade inte eftersom Akasha Meet inte svarade. Starta den från listan när Akasha Meet är igång igen."
+      : `Inspelningen är sparad, men transkriberingen startade inte: ${e.message}`, true);
   }
   uppdateraLista();
 }
