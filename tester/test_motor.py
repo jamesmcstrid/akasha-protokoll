@@ -42,6 +42,20 @@ class TestModell(unittest.TestCase):
             self.assertIn("MODELL", motor.problem())
 
 
+class TestRensa(unittest.TestCase):
+    def test_interna_markeringar_forsvinner(self):
+        raw = [
+            {"text": " Hej", "tokens": [{"text": " Hej", "t_dtw": 100}]},
+            {"text": " då! <|nospeech|>", "tokens": [{"text": " då", "t_dtw": 130}, {"text": "!", "t_dtw": 140},
+                                                       {"text": "<|nospeech|>", "t_dtw": 900}]},
+            {"text": "<|nospeech|>", "tokens": [{"text": "<|nospeech|>", "t_dtw": 1100}]},
+            {"text": " [BLANK_AUDIO]", "tokens": [{"text": " [BLANK_AUDIO]", "t_dtw": 1200}]},
+        ]
+        ord_ = motor.dtw_ordtider(motor.rensa(raw))
+        self.assertEqual([o[2].strip() for o in ord_], ["Hej", "då!"])
+        self.assertEqual(ord_[1][1], 1.3)  # slutar vid "då", inte vid markeringen
+
+
 class TestDtwOrdtider(unittest.TestCase):
     def seg(self, text, *tokens):
         return {"text": text, "tokens": [{"text": t, "t_dtw": d} for t, d in tokens]}

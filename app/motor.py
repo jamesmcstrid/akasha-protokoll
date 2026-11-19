@@ -29,6 +29,8 @@ from installningar import (CPU_TRADAR, CT2_MODELL, DTW, GGML_MODELL, MODELL, MOT
 SR = 16000
 BEAM = 5
 PROGRESS_RE = re.compile(r"progress\s*=\s*(\d+)%")
+# Interna markeringar som whisper.cpp ibland skriver i texten, t.ex. <|nospeech|> och [BLANK_AUDIO].
+INTERNA_RE = re.compile(r"<\|[^|>]*\|>|\[[A-Z_]+\]")
 
 _las = threading.Lock()  # en transkribering at gangen: modellen tar 1-2 GB minne
 _faster_modell = None
@@ -195,7 +197,7 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
         except (OSError, ValueError) as e:
             raise MotorFel(f"kunde inte lasa whisper-cli:s JSON: {e}")
 
-    raw = svar.get("transcription", [])
+    raw = rensa(svar.get("transcription", []))
     # Segmenttexterna har egna inledande mellanslag: satt ihop dem som de ar.
     text = " ".join("".join(s.get("text", "") for s in raw).split())
     tider = [(s["offsets"]["from"] / 1000, s["offsets"]["to"] / 1000, s.get("text", "")) for s in raw]
@@ -209,6 +211,15 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
 
 
 SKILJETECKEN = set(".,!?;:…\"'()-–")
+
+
+def rensa(raw):
+    """Tar bort whisper.cpp:s interna markeringar (<|nospeech|>, [BLANK_AUDIO]) ur text och tokens.
+    Annars hamnade t.ex. <|nospeech|> sist i texten, som en egen replik."""
+    for seg in raw:
+        seg["text"] = INTERNA_RE.sub("", seg.get("text", ""))
+        seg["tokens"] = [t for t in seg.get("tokens", []) if not INTERNA_RE.fullmatch(t.get("text", "").strip())]
+    return raw
 
 
 def dtw_ordtider(raw):
