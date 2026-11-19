@@ -478,6 +478,7 @@ async function uppdateraLista() {
     rendera(inspelningar);
     const visad = inspelningar.find((m) => m.id === visadId);
     if (visad && $("visning").dataset.status !== visad.status) visa(visadId, true);
+    else if (visad) renderaForlopp(visad); // bara stapeln: ljudet och texten far vara ifred
     if (inspelningar.some((m) => PAGAENDE.has(m.status) || m.status === "spelar_in")) {
       pollTimer = setTimeout(uppdateraLista, 2000);
     }
@@ -578,6 +579,12 @@ async function radera(m) {
 
 // --- visning -------------------------------------------------------------------------------
 
+// Med smidig rullning bara om anvandaren inte bett om mindre rorelse.
+function rulla(mal, block) {
+  const lugnt = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  mal.scrollIntoView({ behavior: lugnt ? "auto" : "smooth", block });
+}
+
 async function visa(id, tyst = false) {
   let m;
   try { m = await api("GET", `/api/inspelningar/${id}`); } catch (e) { meddela(e.message, true); return; }
@@ -591,33 +598,129 @@ async function visa(id, tyst = false) {
   if (byttId) visaRubrikform(false);
   v.dataset.titel = m.titel || "";
   const res = m.resultat;
-  $("v-info").textContent = [m.info, res && res.motor].filter(Boolean).join(" · ");
-  if (byttId) $("v-ljud").src = `/api/inspelningar/${id}/ljud`;
+  // Datum, langd och antal talare. Vilken motor som anvants ar for den nyfikne: den star i title.
+  $("v-info").textContent = m.info || "";
+  $("v-info").title = res && res.motor ? `Transkriberat med ${res.motor}` : "";
+  if (byttId) {
+    $("v-ljud").src = `/api/inspelningar/${id}/ljud`;
+    $("v-kopierat").textContent = "";
+    senastOsakra = -1;
+  }
 
-  const harText = res && res.segment && res.segment.length;
-  $("v-atgarder").hidden = !harText;
-  $("v-varning").hidden = !(res && res.varning);
+  // Under en ny transkribering ligger den gamla texten kvar pa disken: visa forloppet i stallet.
+  const harText = !!(res && res.segment && res.segment.length) && !PAGAENDE.has(m.status) && m.status !== "spelar_in";
+  const harTalare = harText && res.segment.some((s) => "speaker" in s);
+  $("v-varning").hidden = !(res && res.varning) || PAGAENDE.has(m.status); // varningen hor till den gamla texten
   $("v-varning").textContent = (res && res.varning) || "";
-  $("v-status").textContent = m.status === "klar"
-    ? (harText ? "" : "Ingen text hittades i inspelningen.")
-    : `${STATUS[m.status] || m.status}${m.fel ? `: ${m.fel}` : ""}`;
-  $("v-status").classList.toggle("fel", m.status === "fel");
+  visaLage(m, harText);
+  renderaForlopp(m);
 
-  if (byttId) senastOsakra = -1;
   visadMeta = m;
   stangTalarval();
   renderaNamn(m);
   renderaText(m);
+  $("v-text").hidden = !harText;
   renderaOsakert(m);
+
+  // Stegen 1-3 och forklaringen finns bara nar det finns text. Ljudspelaren och "Ladda ner
+  // ljudet" finns alltid: man ska kunna lyssna medan man vantar, och ljudet ar vart att spara.
+  $("v-steg-namn").hidden = !harTalare;
+  $("v-kontroll-rubrik").hidden = !harText;
+  $("v-forklaring").hidden = !harText;
+  $("v-anvand-rubrik").hidden = !harText;
+  $("v-atgarder").hidden = !harText;
+  $("v-till-nedladdning").hidden = !harText;
+  $("v-rattad").hidden = !(harText && res.segment_original);
+  v.classList.toggle("utan-text", !harText);
+  numreraSteg();
+
   $("v-md").href = `/api/inspelningar/${id}/text.md`;
   $("v-txt").href = `/api/inspelningar/${id}/text.txt`;
   $("v-ljudfil").href = `/api/inspelningar/${id}/ljud?ladda_ner=1`;
-  const harTalare = harText && res.segment.some((s) => "speaker" in s);
-  $("v-ratta-hjalp").hidden = !harTalare || PAGAENDE.has(m.status);
-  $("v-angra").hidden = !(res && res.segment_original);
-  if (byttId && !tyst) v.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (byttId && !tyst) rulla(v, "start");
   if (PAGAENDE.has(m.status)) uppdateraLista();
   markeraVisad();
+}
+
+// Vad som hant och vad man kan gora harnast, nar det inte finns nagon text att visa.
+function visaLage(m, harText) {
+  const status = $("v-status");
+  let text = "", knapp = "";
+  if (m.status === "klar") {
+    text = harText ? "" : "Ingen text hittades i inspelningen.";
+  } else if (m.status === "fel" || m.status === "avbruten") {
+    text = m.fel || STATUS[m.status];
+    knapp = "Försök igen";
+  } else if (m.status === "sparad") {
+    text = "Inspelningen är sparad men har inte transkriberats än.";
+    knapp = "Transkribera";
+  } else if (!PAGAENDE.has(m.status)) {
+    text = STATUS[m.status] || m.status;
+  }
+  status.textContent = text;
+  status.classList.toggle("fel", m.status === "fel" || m.status === "avbruten");
+  $("v-forsok").hidden = !knapp;
+  $("v-forsok").textContent = knapp;
+}
+
+function sattText(e, text) {
+  if (e.textContent !== text) e.textContent = text; // annars laser skarmlasaren upp samma sak igen
+}
+
+// Var i forloppet jobbet ar. Anropas vid varje hamtning av listan, sa att stapeln ror sig
+// aven nar status ar densamma, utan att resten av visningen byggs om.
+function renderaForlopp(m) {
+  const ruta = $("v-forlopp");
+  ruta.hidden = !PAGAENDE.has(m.status);
+  if (ruta.hidden) return;
+  const f = m.framsteg || {};
+  const fas = f.fas || m.status;
+  // Med en talare delas texten inte upp: da finns inget mellansteg.
+  const delar = String((m.installningar || {}).talare) !== "1";
+  const steg = [...(fas === "koar" ? [["koar", "I kö"]] : []), ["transkriberar", "Transkriberar"],
+    ...(delar ? [["talare", "Delar upp per talare"]] : []), ["klar", "Klar"]];
+  const nu = steg.findIndex(([k]) => k === fas);
+  const ol = $("v-forlopp-steg");
+  const nyckel = `${steg.map(([k]) => k).join()}:${fas}`;
+  if (ol.dataset.nyckel !== nyckel) {
+    ol.dataset.nyckel = nyckel;
+    ol.replaceChildren(...steg.map(([, namn], i) => el("li", {
+      class: i < nu ? "klart" : i === nu ? "pagar" : "kommer", "aria-current": i === nu ? "step" : undefined,
+    }, i < nu ? el("span", { "aria-hidden": "true" }, "✓ ") : null, namn)));
+  }
+  const koar = fas === "koar";
+  const andel = Math.max(0, Math.min(1, Number(f.andel) || 0));
+  $("v-forlopp-stapel").hidden = koar;
+  $("v-forlopp-andel").value = andel;
+  sattText($("v-forlopp-procent"), `${Math.round(andel * 100)} %`);
+  sattText($("v-forlopp-text"), koar ? "Väntar på att en annan transkribering ska bli klar."
+    : fas === "transkriberar" ? tidKvar(andel, Number(f.sekunder)) : "");
+}
+
+// Ungefar hur lang tid som ar kvar av transkriberingen, grovt avrundat. Tom om det ar for
+// tidigt att saga (eller om servern inte skickar hur lange steget har hallit pa).
+function tidKvar(andel, sekunder) {
+  if (!(andel >= 0.05) || !(sekunder >= 15)) return "";
+  const kvar = (sekunder * (1 - andel)) / andel;
+  if (kvar < 60) return "Mindre än en minut kvar.";
+  let min = Math.round(kvar / 60);
+  if (min < 60) {
+    if (min >= 10) min = Math.round(min / 5) * 5;
+    return `Ungefär ${min} ${min === 1 ? "minut" : "minuter"} kvar.`;
+  }
+  let tim = Math.floor(min / 60), rest = Math.round((min % 60) / 10) * 10;
+  if (rest === 60) { tim += 1; rest = 0; }
+  const timmar = `${tim} ${tim === 1 ? "timme" : "timmar"}`;
+  return `Ungefär ${timmar}${rest ? ` och ${rest} minuter` : ""} kvar.`;
+}
+
+// Stegen numreras efter vad som visas: utan talaruppdelning borjar det med "Kontrollera".
+function numreraSteg() {
+  let nr = 0;
+  for (const id of ["v-steg-namn", "v-steg-kontroll", "v-steg-anvand"]) {
+    const rubrik = $(id).querySelector("h3");
+    if (!$(id).hidden && !rubrik.hidden) rubrik.querySelector(".stegnr").textContent = String(++nr);
+  }
 }
 
 function talarnummer(m) {
@@ -682,7 +785,7 @@ function renderaText(m) {
       s.text.trim().split(/\s+/).forEach((ord, k) => {
         if (k) text.append(" ");
         text.append(osakra.has(k)
-          ? el("span", { "data-ord": String(k), class: "osakert-ord", title: "Whisper var osäker på ordet" }, ord)
+          ? el("span", { "data-ord": String(k), class: "osakert-ord", title: "Programmet var osäkert på ordet" }, ord)
           : el("span", { "data-ord": String(k) }, ord));
       });
       p.append(text);
@@ -693,26 +796,56 @@ function renderaText(m) {
   });
 }
 
+// Forklaringen visar markeringarna sa som de ser ut i texten, och bara de som finns.
 function renderaOsakert(m) {
-  const rad = $("v-osakert");
+  const lista = $("v-osakert");
   const segs = (m.resultat && m.resultat.segment) || [];
   const talare = segs.filter((s) => s.osaker_talare).length;
   const ord = segs.reduce((n, s) => n + (s.osakra_ord || []).length, 0);
-  rad.replaceChildren();
-  rad.hidden = PAGAENDE.has(m.status) || (!talare && !ord);
-  if (rad.hidden) return;
-  const delar = [];
-  if (talare) delar.push(`${talare} ${talare === 1 ? "replik har" : "repliker har"} osäker talare (markerade med ?)`);
-  if (ord) delar.push(`${ord} ${ord === 1 ? "ord" : "ord"} som whisper var osäker på är understrukna`);
-  rad.append(el("span", {}, `${delar.join(" och ")}. Kontrollera dem mot ljudet först.`));
+  const nummer = talarnummer(m);
+  lista.replaceChildren();
+  const rad = (prov, ...text) => lista.append(el("li", {},
+    el("span", { class: "prov", "aria-hidden": "true" }, prov), el("span", {}, ...text)));
+  rad(el("span", { class: "tid" }, "00:00"), "Klicka på en tid för att lyssna därifrån.");
+  if (nummer.length) {
+    rad(el("span", { class: `namn ${farg(nummer[0])}` }, `${namnFor(m, nummer[0])}:`),
+      "Klicka på namnet för att byta talare. Markera några ord för att byta talare på bara dem.");
+  }
   if (talare) {
-    rad.append(el("button", { type: "button", class: "knapp liten-knapp", onclick: nastaOsakra }, "Nästa osäkra talare"));
+    rad(el("span", { class: "osaker-tecken" }, "?"),
+      el("strong", {}, "Osäker talare"), ` – ${talare} ${talare === 1 ? "replik" : "repliker"}.`);
   }
   if (ord) {
-    rad.append(el("button", { type: "button", class: "knapp liten-knapp", "aria-pressed": String(doljOsakraOrd),
-      onclick: () => { doljOsakraOrd = !doljOsakraOrd; renderaText(visadMeta); renderaOsakert(visadMeta); } },
-    doljOsakraOrd ? "Visa understrykningar" : "Dölj understrykningar"));
+    rad(el("span", { class: "osakert-ord" }, "ord"),
+      el("strong", {}, "Osäkert ord"), ` – ${ord} ord som programmet var osäkert på. `,
+      el("button", { type: "button", id: "v-understrykningar", class: "knapp liten-knapp",
+        "aria-pressed": String(doljOsakraOrd), onclick: vaxlaUnderstrykningar },
+      doljOsakraOrd ? "Visa understrykningar" : "Dölj understrykningar"));
   }
+  if (talare || ord) lista.append(el("li", { class: "dampad" }, "Fel kan finnas även där inget är markerat."));
+  uppdateraNastaOsakra();
+}
+
+// Byter bara klassen: att bygga om texten skulle tappa fokus och markering.
+function vaxlaUnderstrykningar() {
+  doljOsakraOrd = !doljOsakraOrd;
+  $("v-text").classList.toggle("dolj-osakra-ord", doljOsakraOrd);
+  const knapp = $("v-understrykningar");
+  knapp.setAttribute("aria-pressed", String(doljOsakraOrd));
+  knapp.textContent = doljOsakraOrd ? "Visa understrykningar" : "Dölj understrykningar";
+}
+
+// Knappen visar var man ar bland de osakra: "1 av 3" ar den som ar markerad i texten nu.
+function uppdateraNastaOsakra() {
+  const knapp = $("v-nasta-osakra");
+  const osakra = [...document.querySelectorAll("#v-text p.osaker")].map((p) => Number(p.dataset.replik));
+  knapp.hidden = !osakra.length || $("v-text").hidden;
+  if (knapp.hidden) return;
+  const plats = osakra.filter((r) => r <= senastOsakra).length;
+  knapp.textContent = plats
+    ? `Nästa osäkra talare (${plats} av ${osakra.length})`
+    : `Första osäkra talare (av ${osakra.length})`;
+  knapp.title = plats ? `Du står på osäker talare ${plats} av ${osakra.length}.` : "";
 }
 
 function nastaOsakra() {
@@ -722,9 +855,23 @@ function nastaOsakra() {
   senastOsakra = Number(nasta.dataset.replik);
   document.querySelectorAll("#v-text p.vald-osaker").forEach((p) => p.classList.remove("vald-osaker"));
   nasta.classList.add("vald-osaker");
-  nasta.scrollIntoView({ behavior: "smooth", block: "center" });
+  uppdateraNastaOsakra();
+  // Mitt i fonstret om den far plats under kontrollraden, annars overst (scroll-margin i
+  // stil.css haller den fri fran kontrollraden).
+  const ledigt = window.innerHeight - $("v-kontrollrad").offsetHeight;
+  rulla(nasta, nasta.offsetHeight < ledigt / 2 ? "center" : "start");
   const namn = nasta.querySelector("button.namn");
   if (namn) namn.focus({ preventScroll: true });
+}
+
+function backa() {
+  const ljud = $("v-ljud");
+  ljud.currentTime = Math.max(0, ljud.currentTime - 5);
+}
+
+function tillNedladdning() {
+  rulla($("v-steg-anvand"), "start");
+  $("v-anvand-rubrik").focus({ preventScroll: true });
 }
 
 // --- ratta talare --------------------------------------------------------------------------
@@ -835,9 +982,15 @@ async function angraRattningar() {
 async function kopiera() {
   try {
     const svar = await fetch(`/api/inspelningar/${visadId}/text.txt`);
+    if (!svar.ok) throw new Error(`Fel ${svar.status}`);
     await navigator.clipboard.writeText(await svar.text());
-    meddela("Texten är kopierad.");
-  } catch (e) { meddela(`Kunde inte kopiera: ${e.message}`, true); }
+    $("v-kopierat").textContent = "Texten är kopierad. Klistra in den där du vill ha den.";
+    $("v-kopierat").classList.remove("fel");
+  } catch (e) {
+    // Meddelandet visas intill knappen: rutan langst upp syns inte harifran.
+    $("v-kopierat").textContent = `Kunde inte kopiera: ${e.message}`;
+    $("v-kopierat").classList.add("fel");
+  }
 }
 
 function visaRubrikform(visa) {
@@ -865,8 +1018,10 @@ function stangVisning() {
   visadMeta = null;
   stangTalarval();
   $("visning").hidden = true;
+  $("v-ljud").pause();
   $("v-ljud").removeAttribute("src");
   markeraVisad();
+  $("v-forlopp-steg").dataset.nyckel = "";
 }
 
 // --- start ---------------------------------------------------------------------------------
@@ -885,6 +1040,14 @@ $("v-angra").addEventListener("click", angraRattningar);
 $("om-form").addEventListener("submit", startaOmtranskribering);
 $("om-avbryt").addEventListener("click", () => $("om-dialog").close());
 $("om-dialog").addEventListener("close", stangOmdialog);
+$("v-forsok").addEventListener("click", () => transkriberaIgen(visadMeta));
+$("v-backa").addEventListener("click", backa);
+$("v-nasta-osakra").addEventListener("click", nastaOsakra);
+$("v-till-nedladdning").addEventListener("click", tillNedladdning);
+// Kontrollradens hojd (den bryts i smala fonster) styr hur langt ovanfor den en replik hamnar.
+new ResizeObserver(([rad]) => {
+  $("visning").style.setProperty("--kontrollhojd", `${Math.ceil(rad.borderBoxSize[0].blockSize)}px`);
+}).observe($("v-kontrollrad"));
 $("v-text").addEventListener("mouseup", efterMarkering);
 $("v-text").addEventListener("keyup", (e) => { if (e.shiftKey) efterMarkering(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") stangTalarval(); });

@@ -208,11 +208,50 @@ progress { width: 120px; vertical-align: middle; accent-color: var(--primar); }
   @keyframes dialog-in { from { opacity: 0; transform: translateY(6px); } }
 }
 
-.visningshuvud { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-.visningshuvud .knappar { margin: 0; flex-shrink: 0; }
+/* Knapparna i huvudet hamnar under rubriken nar fonstret ar smalt. */
+.visningshuvud { display: flex; justify-content: space-between; gap: 8px 12px; align-items: flex-start; flex-wrap: wrap; }
+.visningshuvud > div:first-child { flex: 1 1 240px; min-width: 0; }
+.visningshuvud .knappar { margin: 0; }
+.visningshuvud h2 { margin-bottom: 2px; }
+#v-info { margin: 0; }
 .rubrikform { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; }
 .rubrikform input { flex: 1; min-width: 200px; }
 audio { width: 100%; margin: 10px 0; }
+#v-status:empty { display: none; }
+.lagerad { display: flex; gap: 8px 14px; align-items: center; flex-wrap: wrap; }
+.lagerad .meddelande { margin: 10px 0; }
+
+/* Forloppet medan inspelningen transkriberas */
+.forlopp { margin: 14px 0 6px; padding: 14px 16px; border-radius: 14px; background: var(--yta); }
+.forlopp-steg { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.92rem; }
+.forlopp-steg li { color: var(--dampad); display: flex; align-items: center; gap: 10px; }
+.forlopp-steg li + li::before { content: "→"; color: var(--dampad); }
+.forlopp-steg .klart { color: var(--ok); }
+.forlopp-steg .pagar { color: var(--text); font-weight: 700; }
+.forlopp-stapel { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.forlopp-stapel progress { flex: 1 1 200px; height: 10px; }
+.forlopp p { margin: 8px 0 0; }
+
+/* De tre stegen: vem ar vem, kontrollera, anvand */
+.steg { margin-top: 20px; }
+.steg h3 {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 10px;
+  font-family: var(--rund); font-size: 1.05rem; font-weight: 650; letter-spacing: -0.01em;
+}
+.steg h3:focus { outline: none; }
+.steg h3:focus-visible { box-shadow: 0 0 0 4px var(--primar-skugga); border-radius: 8px; }
+.stegnr {
+  display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; flex-shrink: 0; border-radius: 50%;
+  background: var(--primar); color: var(--primar-text); font-size: 0.85rem; font-weight: 700;
+}
+.steg .namnrad { margin: 0; }
+/* Faltens standardbredd gjorde att tre namn inte fick plats pa en rad. */
+.steg .namnrad .falt { flex: 1 1 9rem; min-width: 0; }
+.steg .namnrad input[type=text] { width: 100%; min-width: 0; }
+#v-atgarder { display: contents; }
+#v-kopierat { margin: 0; }
+#v-kopierat:empty { display: none; }
+#v-kopierat.fel { color: var(--fel); }
 .namnrad { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin: 10px 0; padding: 14px; border-radius: 14px; background: var(--yta); }
 .namnrad .falt { margin: 0; min-width: 150px; }
 .namnrad input[type=text] { background: var(--kort); }
@@ -242,14 +281,38 @@ button.namn:hover { text-decoration: underline dotted; text-underline-offset: 3p
 }
 .osakert-ord { text-decoration: underline dotted var(--varning-text); text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
 .dolj-osakra-ord .osakert-ord { text-decoration: none; }
-.osakert-rad {
-  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 10px 0 0; padding: 10px 14px;
-  border-radius: 12px; background: var(--varning-bg); color: var(--varning-text); font-size: 0.9rem;
-}
-.osakert-rad span { flex: 1 1 260px; }
 
-.ljudrad { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
-.ljudrad audio { flex: 1 1 260px; min-width: 0; }
+/* Forklaringen: markeringarna sa som de ser ut i texten, med en kort text till var och en */
+.forklaring { font-size: 0.9rem; }
+.forklaring-lista { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; align-items: baseline; }
+.forklaring-lista li { display: contents; }
+.forklaring-lista li.dampad { display: block; grid-column: 1 / -1; }
+.forklaring-lista .prov { text-align: right; }
+.forklaring-lista .prov .namn { margin-right: 0; }
+.forklaring-lista .prov .osaker-tecken { margin-right: 0; }
+.forklaring-lista .knapp { margin-left: 4px; }
+.rattad { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 10px 0 0; color: var(--dampad); }
+
+/* Kontrollraden stannar overst i fonstret medan man bladdrar genom texten. Den ligger under
+   talarvalsrutan (z-index 10) och har kortets bakgrund sa att texten inte lyser igenom. */
+.kontrollrad {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; gap: 6px 10px; align-items: center; flex-wrap: wrap;
+  margin: 10px -26px 0; padding: 8px 26px;
+  background: var(--kort); border-bottom: 1px solid var(--kant);
+}
+.kontrollrad audio { flex: 1 1 240px; min-width: 0; height: 40px; margin: 0; }
+.kontrollrad .knapp { white-space: nowrap; }
+@media (max-width: 520px) {
+  .kontrollrad { gap: 6px 8px; }
+  .kontrollrad .knapp { padding: 6px 10px; }
+}
+/* Utan text finns inget att bladdra i: ljudet och "Ladda ner ljudet" blir en vanlig rad. */
+.utan-text .kontrollrad { position: static; margin: 14px 0 0; padding: 0; border-bottom: 0; }
+.utan-text #v-steg-kontroll { margin-top: 0; }
+.utan-text #v-steg-anvand { margin-top: 4px; }
+/* En replik man hoppar till ska inte hamna bakom kontrollraden (hojden satts fran app.js). */
+.transkript p { scroll-margin-top: calc(var(--kontrollhojd, 60px) + 16px); }
 
 .talarval {
   position: absolute; z-index: 10; width: max-content; max-width: min(380px, calc(100vw - 16px));

@@ -42,7 +42,7 @@ app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.config["MAX_CONTENT_LENGTH"] = MAX_MB * 1024 * 1024
 
 _ko = queue.Queue()
-_framsteg = {}  # id -> {"fas": ..., "andel": 0..1}, bara i minnet
+_framsteg = {}  # id -> {"fas": ..., "andel": 0..1, "start": monotonic}, bara i minnet
 _arbetare_startad = threading.Event()
 
 
@@ -120,7 +120,12 @@ def med_framsteg(meta):
     meta["rubrik"] = export.rubrik(meta)
     meta["info"] = export.info(meta)
     if meta["status"] in lagring.PAGAENDE and meta["id"] in _framsteg:
-        meta["framsteg"] = _framsteg[meta["id"]]
+        framsteg = dict(_framsteg[meta["id"]])
+        start = framsteg.pop("start", None)
+        if start is not None:
+            # Hur lange steget har hallit pa: sidan raknar ut ungefar hur lang tid som ar kvar.
+            framsteg["sekunder"] = round(time.monotonic() - start, 1)
+        meta["framsteg"] = framsteg
     return meta
 
 
@@ -155,13 +160,16 @@ def koa(id_, installningar=None):
         meta["status"] = "koar"
         meta.pop("fel", None)
         lagring.spara(meta)
-    _framsteg[id_] = {"fas": "koar", "andel": 0.0}
+    _framsteg[id_] = {"fas": "koar", "andel": 0.0, "start": time.monotonic()}
     _ko.put(id_)
     return meta
 
 
 def _satt(id_, fas, andel):
-    _framsteg[id_] = {"fas": fas, "andel": round(max(0.0, min(1.0, andel)), 3)}
+    # Starttiden nollstalls bara nar steget byts, inte vid varje ny andel.
+    forra = _framsteg.get(id_) or {}
+    start = forra.get("start") if forra.get("fas") == fas and "start" in forra else time.monotonic()
+    _framsteg[id_] = {"fas": fas, "andel": round(max(0.0, min(1.0, andel)), 3), "start": start}
 
 
 def kor(id_):

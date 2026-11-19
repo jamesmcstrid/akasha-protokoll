@@ -335,6 +335,34 @@ class TestApp(unittest.TestCase):
         self.assertEqual(r.status_code, 206)
         self.assertEqual(r.get_data(), b"234")
 
+    def test_framsteg_visar_hur_lange_steget_har_hallit_pa(self):
+        id_ = self.klient.post("/api/inspelningar", headers=H, json={"andelse": ".webm"}).get_json()["id"]
+        lagring.uppdatera(id_, status="transkriberar")
+        klocka = [1000.0]
+        try:
+            with mock.patch.object(akasha.time, "monotonic", lambda: klocka[0]):
+                akasha._satt(id_, "transkriberar", 0.0)
+                klocka[0] = 1030.0
+                akasha._satt(id_, "transkriberar", 0.25)  # samma steg: starttiden ligger kvar
+                klocka[0] = 1040.0
+                f = self.klient.get(f"/api/inspelningar/{id_}").get_json()["framsteg"]
+                self.assertEqual(f, {"fas": "transkriberar", "andel": 0.25, "sekunder": 40.0})
+                lista = self.klient.get("/api/inspelningar").get_json()["inspelningar"]
+                self.assertEqual(lista[0]["framsteg"]["sekunder"], 40.0)
+
+                lagring.uppdatera(id_, status="talare")
+                akasha._satt(id_, "talare", 0.1)  # nytt steg: tiden borjar om
+                klocka[0] = 1045.0
+                f = self.klient.get(f"/api/inspelningar/{id_}").get_json()["framsteg"]
+                self.assertEqual(f, {"fas": "talare", "andel": 0.1, "sekunder": 5.0})
+
+            # Utan starttid (som i aldre kod) skickas inget tidsfalt.
+            akasha._framsteg[id_] = {"fas": "transkriberar", "andel": 0.5}
+            f = self.klient.get(f"/api/inspelningar/{id_}").get_json()["framsteg"]
+            self.assertEqual(f, {"fas": "transkriberar", "andel": 0.5})
+        finally:
+            akasha._framsteg.pop(id_, None)
+
     def test_ovantat_fel_ger_json(self):
         with mock.patch.object(lagring, "lista", side_effect=RuntimeError("disken borta")):
             r = self.klient.get("/api/inspelningar")

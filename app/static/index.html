@@ -94,6 +94,7 @@
           <p id="v-info" class="dampad"></p>
         </div>
         <div class="knappar">
+          <button id="v-till-nedladdning" type="button" class="knapp liten-knapp" hidden>Till nedladdning ↓</button>
           <button id="v-byt-rubrik" type="button" class="knapp liten-knapp" aria-expanded="false"
             aria-controls="v-rubrikform">Byt rubrik</button>
           <button id="v-stang" type="button" class="knapp liten-knapp">Stäng</button>
@@ -105,26 +106,58 @@
         <button type="submit" class="knapp liten-knapp primar">Spara</button>
         <button id="v-rubrik-avbryt" type="button" class="knapp liten-knapp">Avbryt</button>
       </form>
-      <div class="ljudrad">
-        <audio id="v-ljud" controls preload="none"></audio>
-        <a id="v-ljudfil" class="knapp liten-knapp" href="#">Ladda ner ljudet</a>
-      </div>
-      <p id="v-status" class="meddelande"></p>
       <p id="v-varning" class="varning" hidden></p>
 
-      <div id="v-namn" class="namnrad" hidden></div>
-
-      <div id="v-atgarder" class="knappar" hidden>
-        <button id="v-kopiera" type="button" class="knapp">Kopiera texten</button>
-        <a id="v-md" class="knapp" href="#">Ladda ner .md</a>
-        <a id="v-txt" class="knapp" href="#">Ladda ner .txt</a>
-        <button id="v-angra" type="button" class="knapp" hidden>Ångra rättningarna</button>
+      <!-- Medan jobbet pagar: var i forloppet det ar. -->
+      <div id="v-forlopp" class="forlopp" hidden>
+        <ol id="v-forlopp-steg" class="forlopp-steg"></ol>
+        <div id="v-forlopp-stapel" class="forlopp-stapel">
+          <progress id="v-forlopp-andel" max="1" value="0" aria-label="Framsteg"></progress>
+          <span id="v-forlopp-procent"></span>
+        </div>
+        <p id="v-forlopp-text" class="dampad" role="status" aria-live="polite"></p>
       </div>
-      <p class="dampad liten">Klicka på en tid för att lyssna. Kontrollera alltid texten mot ljudet.</p>
-      <p id="v-ratta-hjalp" class="dampad liten" hidden>Fel talare? Klicka på namnet för att byta talare för
-        hela repliken, eller markera några ord och välj vem som sa dem.</p>
-      <div id="v-osakert" class="osakert-rad" hidden></div>
-      <div id="v-text" class="transkript"></div>
+
+      <div class="lagerad">
+        <p id="v-status" class="meddelande"></p>
+        <button id="v-forsok" type="button" class="knapp primar" hidden>Försök igen</button>
+      </div>
+
+      <div id="v-steg-namn" class="steg" hidden>
+        <h3><span class="stegnr" aria-hidden="true"></span>Vem är vem?</h3>
+        <div id="v-namn" class="namnrad" hidden></div>
+      </div>
+
+      <div id="v-steg-kontroll" class="steg">
+        <h3 id="v-kontroll-rubrik"><span class="stegnr" aria-hidden="true"></span>Kontrollera mot ljudet</h3>
+        <div id="v-forklaring" class="forklaring" hidden>
+          <ul id="v-osakert" class="forklaring-lista"></ul>
+          <div id="v-rattad" class="rattad" hidden>
+            <span>Talarna har rättats för hand.</span>
+            <button id="v-angra" type="button" class="knapp liten-knapp">Ångra alla rättningar</button>
+          </div>
+        </div>
+        <!-- Foljer med nar man bladdrar, sa att ljudet och nasta osakra alltid gar att na. -->
+        <div id="v-kontrollrad" class="kontrollrad">
+          <audio id="v-ljud" controls preload="none"></audio>
+          <button id="v-backa" type="button" class="knapp liten-knapp" title="Backa 5 sekunder">Backa 5 s</button>
+          <button id="v-nasta-osakra" type="button" class="knapp liten-knapp" hidden>Nästa osäkra talare</button>
+        </div>
+        <div id="v-text" class="transkript"></div>
+      </div>
+
+      <div id="v-steg-anvand" class="steg">
+        <h3 id="v-anvand-rubrik" tabindex="-1"><span class="stegnr" aria-hidden="true"></span>Använd texten</h3>
+        <div class="knappar">
+          <span id="v-atgarder" hidden>
+            <button id="v-kopiera" type="button" class="knapp">Kopiera texten</button>
+            <a id="v-txt" class="knapp" href="#">Ladda ner som text (.txt)</a>
+            <a id="v-md" class="knapp" href="#">Ladda ner som Markdown (.md)</a>
+          </span>
+          <a id="v-ljudfil" class="knapp" href="#">Ladda ner ljudet</a>
+        </div>
+        <p id="v-kopierat" class="dampad liten" role="status" aria-live="polite"></p>
+      </div>
     </section>
 
     <section class="kort" aria-labelledby="lista-rubrik">
