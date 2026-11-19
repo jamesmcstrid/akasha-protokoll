@@ -23,8 +23,8 @@ import wave
 
 import numpy as np
 
-from installningar import (CPU_TRADAR, CT2_MODELL, DTW, GGML_MODELL, MODELL, MOTOR, SPRAK, STORLEKAR,
-                           WHISPERCPP_BIN)
+from installningar import CPU_TRADAR, MODELL, MOTOR, SPRAK, WHISPERCPP_BIN
+from modeller import CT2_MODELL, DTW, GGML_MODELL, STORLEKAR
 
 SR = 16000
 BEAM = 5

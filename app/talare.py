@@ -20,7 +20,8 @@ import threading
 
 import numpy as np
 
-from installningar import ROSTMODELL, TALARE_TROSKEL
+from installningar import TALARE_TROSKEL
+from modeller import ROSTMODELL
 
 SR = 16000
 FONSTER_S = 1.5

@@ -1,8 +1,10 @@
+import os
 import unittest
 from unittest import mock
 
 import hjalp  # noqa: F401
 import installningar
+import modeller
 import motor
 
 
@@ -25,15 +27,14 @@ class TestValjMotor(unittest.TestCase):
 
 class TestModell(unittest.TestCase):
     def test_large_far_egen_fil_och_dtw(self):
-        katalog, ggml, dtw = installningar.STORLEKAR["large"]
-        self.assertEqual(katalog, "kb-whisper-large")
-        self.assertTrue(ggml.endswith("ggml-model-q5_0.bin"))
-        self.assertEqual(dtw, "large.v3")  # KB-Whisper large bygger pa whisper-large-v3
+        self.assertEqual(modeller.paket("faster", "large")[0].katalog, "kb-whisper-large")
+        self.assertEqual(modeller.paket("whispercpp", "large")[0].namn, "ggml-model-q5_0.bin")
+        self.assertEqual(modeller.DTW_PER_STORLEK["large"], "large.v3")  # KB-Whisper large bygger pa whisper-large-v3
 
     def test_medium_ar_standard(self):
         self.assertEqual(installningar.MODELL, "medium")
-        self.assertEqual(installningar.DTW, "medium")
-        self.assertTrue(installningar.GGML_MODELL.endswith("kb-whisper-medium-ggml/ggml-model.bin"))
+        self.assertEqual(modeller.DTW, "medium")
+        self.assertTrue(modeller.GGML_MODELL.endswith(os.path.join("kb-whisper-medium-ggml", "ggml-model.bin")))
 
     def test_namn_och_okand_storlek(self):
         with mock.patch.object(motor, "MODELL", "large"):

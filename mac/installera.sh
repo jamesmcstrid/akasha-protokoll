@@ -21,13 +21,6 @@ set -a; . "$REPO/.env"; set +a
 MOTOR="${MOTOR:-auto}"
 PORT="${PORT:-8611}"
 DATA="${DATAKATALOG:-$HOME/AkashaMeet}"; DATA="${DATA/#\~/$HOME}"
-MODELLER="${MODELLKATALOG:-$REPO/modeller}"; MODELLER="${MODELLER/#\~/$HOME}"
-MODELL="${MODELL:-medium}"
-case "$MODELL" in
-  medium) GGML_FIL="ggml-model.bin" ;;
-  large) GGML_FIL="ggml-model-q5_0.bin" ;;
-  *) echo "FEL: MODELL=$MODELL i .env, ska vara medium eller large"; exit 1 ;;
-esac
 
 echo "== venv och beroenden"
 [ -d "$REPO/venv" ] || "$PY" -m venv "$REPO/venv"
@@ -53,17 +46,9 @@ if [ "$AKTIV" = "whispercpp" ] && ! har_cli; then
   echo "FEL: MOTOR=whispercpp men $CLI saknas. Kor: brew install whisper-cpp"; exit 1
 fi
 
-echo "== modeller i $MODELLER (motor: $AKTIV, KB-Whisper $MODELL)"
-if [ "$AKTIV" = "whispercpp" ]; then
-  [ -f "$MODELLER/kb-whisper-$MODELL-ggml/$GGML_FIL" ] || bash "$REPO/mac/hamta-modeller.sh" ggml
-else
-  [ -f "$MODELLER/kb-whisper-$MODELL/model.bin" ] || bash "$REPO/mac/hamta-modeller.sh" faster
-fi
-if [ -f "$MODELLER/talare/nemo_en_titanet_small.onnx" ]; then
-  echo "finns"
-else
-  bash "$REPO/mac/hamta-modeller.sh" talare
-fi
+echo "== modeller (motor: $AKTIV, KB-Whisper ${MODELL:-medium})"
+if [ "$AKTIV" = "whispercpp" ]; then LAGE=ggml; else LAGE=faster; fi
+"$REPO/venv/bin/python" "$REPO/app/modeller.py" "$LAGE" talare
 
 mkdir -p "$DATA" "$LA"
 chmod 700 "$DATA"   # motesinspelningar: bara du kommer at dem
