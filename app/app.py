@@ -205,11 +205,11 @@ def kor(id_):
         _satt(id_, "talare", 0.0)
         if kanaler:
             segment, antal_talare, talarvarning = talare.dela_upp_kanaler(
-                *kanaler, ord_lista, antal, framsteg=lambda a: _satt(id_, "talare", a)
+                *kanaler, ord_lista, antal, framsteg=lambda a: _satt(id_, "talare", a), ord_p=motor.ord_grans()
             )
         else:
             segment, antal_talare, talarvarning = talare.dela_upp(
-                samples, ord_lista, antal, framsteg=lambda a: _satt(id_, "talare", a)
+                samples, ord_lista, antal, framsteg=lambda a: _satt(id_, "talare", a), ord_p=motor.ord_grans()
             )
         varning = varning or talarvarning
     t2 = time.monotonic()

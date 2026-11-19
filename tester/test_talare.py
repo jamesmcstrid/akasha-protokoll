@@ -227,6 +227,18 @@ class TestDelar(unittest.TestCase):
         etiketter = [1, 1, 1, 2, 2] + [1] * 5 + [2] * 5  # sista meningen: 5 ord hos en annan
         self.assertEqual(talare.jamna_ut(ord_lista, etiketter), etiketter)
 
+    def test_repliker_markerar_osakra_talare_och_ord(self):
+        ord_lista = [(0, 1, " Hej", 0.9), (1, 2, "san.", 0.2), (2, 3, " Isar", 0.3), (3, 4, " bra.", 0.95),
+                     (4, 5, " Ja.", 0.9)]
+        rep = talare.repliker(ord_lista, [1, 1, 1, 1, 2], osakra=[False, False, True, True, True])
+        self.assertEqual(rep[0]["text"], "Hejsan. Isar bra.")
+        self.assertEqual(rep[0]["osakra_ord"], [0, 1])  # "Hejsan." (ett ord) och "Isar"
+        self.assertTrue(rep[0]["osaker_talare"])      # 2 av 4 ord osakra: halften
+        self.assertTrue(rep[1]["osaker_talare"])
+        self.assertNotIn("osakra_ord", rep[1])
+        utan = talare.repliker([o[:3] for o in ord_lista], [1, 1, 1, 1, 2])
+        self.assertTrue(all("osaker_talare" not in r and "osakra_ord" not in r for r in utan))
+
     def test_repliker_och_numrering(self):
         ord_lista = [(0, 1, " Hej"), (1, 2, " Bo."), (2, 3, " Hej"), (3, 4, "san."), (4, 5, " Ja.")]
         rep = talare.repliker(ord_lista, [7, 7, 3, 3, 7])

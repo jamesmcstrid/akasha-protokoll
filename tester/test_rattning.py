@@ -43,6 +43,30 @@ class TestBytTalare(unittest.TestCase):
         self.assertEqual(SEG[0]["speaker"], 2)  # originalet ändras inte
 
 
+class TestOsakert(unittest.TestCase):
+    MARKERAD = [
+        {"start": 0.0, "end": 4.0, "speaker": 1, "text": "Det är svårt att matcha det.", "osakra_ord": [4]},
+        {"start": 4.0, "end": 6.0, "speaker": 2, "text": "Isar vad bra", "osaker_talare": True, "osakra_ord": [0]},
+        {"start": 6.0, "end": 9.0, "speaker": 1, "text": "Så tänker jag.", "osaker_talare": True},
+    ]
+
+    def test_talaren_stammer_tar_bort_markeringen(self):
+        nya = rattning.byt_talare(self.MARKERAD, 1, 2)
+        self.assertNotIn("osaker_talare", nya[1])
+        self.assertEqual(nya[1]["osakra_ord"], [0])  # osäkra ord ligger kvar
+
+    def test_osakra_ord_foljer_med_vid_delning_och_ihopslagning(self):
+        nya = rattning.byt_talare(self.MARKERAD, 1, 1)  # "Isar vad bra" var talare 1: allt slås ihop
+        self.assertEqual(len(nya), 1)
+        orden = nya[0]["text"].split()
+        self.assertEqual([orden[i] for i in nya[0]["osakra_ord"]], ["matcha", "Isar"])
+        self.assertNotIn("osaker_talare", nya[0])
+        delad = rattning.byt_talare(self.MARKERAD, 0, 3, 3, 5)  # "att matcha" sa talare 3
+        self.assertEqual(delad[1]["text"], "att matcha")
+        self.assertEqual(delad[1]["osakra_ord"], [1])
+        self.assertNotIn("osakra_ord", delad[0])
+
+
 class TestSlaIhop(unittest.TestCase):
     def test_alla_repliker_fran_en_talare(self):
         nya = rattning.sla_ihop_talare(SEG, 1, 2)

@@ -32,6 +32,11 @@ Du får texten uppdelad per talare och kan byta "Talare 1" och "Talare 2" mot ri
    fel, markera de orden och välj vem som sa dem. Där kan du också säga att alla repliker från en
    talare egentligen är någon annans. **Ångra rättningarna** tar texten tillbaka till hur den var
    efter transkriberingen. **Gör om** tar bort rättningarna, så sidan frågar först.
+7. Börja kontrollen med de osäkra ställena. Repliker där talaren är osäker har ett **?** och
+   streckad kant, och **Nästa osäkra talare** hoppar mellan dem. Stämmer talaren, klicka på namnet
+   och välj **… stämmer**, så försvinner markeringen. Ord som whisper var osäker på är understrukna,
+   ofta namn och ovanliga ord. Markeringarna är en hjälp att veta var du ska börja, inte en
+   garanti: fel kan finnas även där det inte är markerat.
 
 Inspelningen heter "Möte" och datum om du inte skriver en rubrik. Rubriken går att byta efteråt
 med **Byt rubrik**. Filnamnet på en uppladdad fil används aldrig, eftersom Röstmemon döper

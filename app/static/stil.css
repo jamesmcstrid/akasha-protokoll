@@ -190,6 +190,20 @@ audio { width: 100%; margin: 10px 0; }
 button.namn { font: inherit; font-weight: 700; background: none; border: 0; padding: 0 2px; cursor: pointer; border-radius: 6px; }
 button.namn:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
 
+.transkript p.osaker { border-left-style: dashed; box-shadow: inset 0 0 0 1px var(--varning-bg); }
+.transkript p.vald-osaker { box-shadow: inset 0 0 0 2px var(--varning-text); }
+.osaker-tecken {
+  display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 999px; font-size: 0.75rem;
+  font-weight: 700; background: var(--varning-bg); color: var(--varning-text); vertical-align: 1px;
+}
+.osakert-ord { text-decoration: underline dotted var(--varning-text); text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
+.dolj-osakra-ord .osakert-ord { text-decoration: none; }
+.osakert-rad {
+  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 10px 0 0; padding: 10px 14px;
+  border-radius: 12px; background: var(--varning-bg); color: var(--varning-text); font-size: 0.9rem;
+}
+.osakert-rad span { flex: 1 1 260px; }
+
 .ljudrad { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
 .ljudrad audio { flex: 1 1 260px; min-width: 0; }
 

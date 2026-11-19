@@ -17,7 +17,7 @@ H = {"X-Akasha-Meet": "1"}
 ORD = [(0.0, 0.5, " Hej"), (0.5, 1.0, " Bo."), (1.5, 2.0, " Hej"), (2.0, 2.5, " Anna.")]
 
 
-def falsk_dela_upp(samples, ord_lista, antal, framsteg=None):
+def falsk_dela_upp(samples, ord_lista, antal, framsteg=None, ord_p=None):
     if framsteg:
         framsteg(1.0)
     return talare.repliker(ord_lista, [0, 0, 1, 1]), 2, None
@@ -168,7 +168,7 @@ class TestApp(unittest.TestCase):
         hoger = np.ones(motor.SR * 3, dtype=np.float32) * 0.1
         anrop = []
 
-        def falsk_kanaler(v, h, ord_lista, antal, framsteg=None):
+        def falsk_kanaler(v, h, ord_lista, antal, framsteg=None, ord_p=None):
             anrop.append(antal)
             return talare.repliker(ord_lista, [1, 1, 2, 2], fasta_nummer=True), 2, None
         with mock.patch.object(motor, "avkoda_kanaler", lambda p: (vanster, hoger)), \
@@ -205,7 +205,7 @@ class TestApp(unittest.TestCase):
         self.assertEqual(lagring.las(r.get_json()["id"])["installningar"]["kalla"], "rum")
 
     def test_varning_nar_farre_roster_an_angivet(self):
-        def en_rost(samples, ord_lista, antal, framsteg=None):
+        def en_rost(samples, ord_lista, antal, framsteg=None, ord_p=None):
             return talare.repliker(ord_lista, [0] * len(ord_lista)), 1, "Du angav 2 talare, men bara 1 röst gick att skilja åt."
         with mock.patch.object(talare, "dela_upp", en_rost):
             id_ = self.ladda_upp()

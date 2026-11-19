@@ -33,6 +33,9 @@ VIKT_SIGMA_S = 0.35  # fonster nara ordets mitt vager tyngst (gaussisk vikt), 0 
 MIN_GRUPP = 3  # "vet inte": en talare maste ha minst sa manga fonster (1,5 s eget tal)
 MENING_PAUS_S = 0.4  # meningsregeln: en sa har lang paus avslutar ocksa en mening
 KORT_SJOK = 4  # meningsregeln: hogst sa manga ord i rad kan fa meningens talare
+MARGINAL = 0.03  # osaker talare: rosten liknar tva grupper nastan lika mycket (kalibrerad pa AMI)
+OSAKER_ANDEL = 0.5  # en replik ar osaker om sa stor andel av orden ar osakra
+ORD_P = 0.5  # osakert ord: whisper var mindre saker an sa (standard; motorn anger sin egen, se motor.ord_grans)
 STOR_GRUPP_S = 30.0  # sammanslagning: grupper med minst sa mycket tal jamfors grupp for grupp
 SAKER_KVOT = 4.0  # digitalt mote: ena kanalen maste vara sa har mycket starkare for ett sakert beslut
 
@@ -89,7 +92,7 @@ def fonster_med_tal(ord_lista, langd_s):
     """Starttider for fonster dar minst MIN_TAL_I_FONSTER av tiden ar tal enligt ordtiderna."""
     if langd_s <= FONSTER_S:
         return [0.0] if ord_lista else []
-    tal = sorted((max(0.0, a - 0.1), min(langd_s, b + 0.1)) for a, b, _ in ord_lista)
+    tal = sorted((max(0.0, o[0] - 0.1), min(langd_s, o[1] + 0.1)) for o in ord_lista)
     starter = []
     for start in np.arange(0.0, langd_s - FONSTER_S + 1e-9, STEG_S):
         slut = start + FONSTER_S
@@ -195,14 +198,15 @@ def _centroider(X, etiketter):
     return c / (np.linalg.norm(c, axis=1, keepdims=True) + 1e-9)
 
 
-def etikett_per_ord(ord_lista, starter, X, centroider):
+def etikett_per_ord(ord_lista, starter, X, centroider, marginal=None):
     """Varje ord far den grupp som fonstren runt ordets mitt liknar mest. Fonster vars mitt ligger
-    nara ordet vager tyngst, sa att ett talarbyte hamnar mellan ratt ord."""
+    nara ordet vager tyngst, sa att ett talarbyte hamnar mellan ratt ord. marginal (en lista)
+    fylls med skillnaden mot nast basta grupp: litet = osakert."""
     starter = np.asarray(starter)
     mitter = starter + FONSTER_S / 2
     ut = []
-    for a, b, _ in ord_lista:
-        m = (a + b) / 2
+    for o in ord_lista:
+        m = (o[0] + o[1]) / 2
         runt = np.where((starter <= m) & (m <= starter + FONSTER_S))[0]
         if len(runt) == 0:
             runt = np.array([int(np.argmin(np.abs(mitter - m)))])
@@ -212,6 +216,9 @@ def etikett_per_ord(ord_lista, starter, X, centroider):
             vikt = np.ones(len(runt))
         poang = (vikt[:, None] * (X[runt] @ centroider.T)).sum(0) / vikt.sum()
         ut.append(int(np.argmax(poang)))
+        if marginal is not None:
+            topp = np.sort(poang)
+            marginal.append(float(topp[-1] - topp[-2]) if len(topp) > 1 else float("inf"))
     return ut
 
 
@@ -271,34 +278,60 @@ def jamna_ut(ord_lista, etiketter):
     return et
 
 
-def repliker(ord_lista, etiketter, fasta_nummer=False):
+def repliker(ord_lista, etiketter, fasta_nummer=False, osakra=None, ord_p=ORD_P):
     """Sla ihop ord i foljd med samma talare till repliker. Talarna numreras fran 1 i den
     ordning de forst sager nagot, eller far etiketten som nummer (fasta_nummer).
-    -> [{"start", "end", "speaker", "text"}]"""
-    nummer, ut = {}, []
-    for (start, slut, text), e in zip(ord_lista, etiketter):
-        if not text.strip():
+    -> [{"start", "end", "speaker", "text"}], och vid behov:
+       "osaker_talare": True om minst OSAKER_ANDEL av orden har osaker talare (osakra: bool per ord)
+       "osakra_ord": index (i text.split()) for ord som whisper var osaker pa (sannolikhet < ord_p)
+    """
+    nummer, ut, stat = {}, [], []
+    for k, (o, e) in enumerate(zip(ord_lista, etiketter)):
+        text = o[2]
+        delar = text.split()
+        if not delar:
             continue
         nr = int(e) if fasta_nummer else nummer.setdefault(e, len(nummer) + 1)
         if ut and ut[-1]["speaker"] == nr:
-            ut[-1]["end"] = slut
-            ut[-1]["text"] += text
+            r, s = ut[-1], stat[-1]
+            # ett ord utan inledande mellanslag fortsatter foregaende ord ("Hej" + "san.")
+            fortsatter = not text[0].isspace() and not r["text"][-1].isspace()
+            r["end"] = o[1]
+            r["text"] += text
         else:
-            ut.append({"start": start, "end": slut, "speaker": nr, "text": text})
-    for r in ut:
+            r = {"start": o[0], "end": o[1], "speaker": nr, "text": text}
+            s = {"ord": 0, "osakra": 0, "osakra_ord": set(), "antal": 0}
+            ut.append(r)
+            stat.append(s)
+            fortsatter = False
+        forsta = s["antal"] - 1 if fortsatter else s["antal"]
+        s["antal"] += len(delar) - (1 if fortsatter else 0)
+        s["ord"] += 1
+        if osakra is not None and osakra[k]:
+            s["osakra"] += 1
+        if len(o) > 3 and o[3] is not None and o[3] < ord_p:
+            s["osakra_ord"].update(range(forsta, s["antal"]))
+    for r, s in zip(ut, stat):
         r["text"] = " ".join(r["text"].split())
         r["start"] = round(r["start"], 2)
         r["end"] = round(r["end"], 2)
+        if osakra is not None and s["osakra"] >= OSAKER_ANDEL * s["ord"]:
+            r["osaker_talare"] = True
+        if s["osakra_ord"]:
+            r["osakra_ord"] = sorted(s["osakra_ord"])
     return ut
 
 
 # --- hela kedjan ---------------------------------------------------------------------------
 
-def _klustra(samples, ord_lista, antal, framsteg=None):
-    """Fonster, avtryck och grupper. -> (etikett per ord 0..k-1, antal_hittade, varning)."""
+def _klustra(samples, ord_lista, antal, framsteg=None, marginal=None):
+    """Fonster, avtryck och grupper. -> (etikett per ord 0..k-1, antal_hittade, varning).
+    marginal (en lista) fylls med hur saker varje ords grupp ar, se etikett_per_ord."""
     langd = len(samples) / SR
     starter = utan_tysta(samples, fonster_med_tal(ord_lista, langd))
     if antal == 1 or len(starter) < 2:
+        if marginal is not None:
+            marginal.extend([float("inf")] * len(ord_lista))
         return [0] * len(ord_lista), 1, None
 
     with _las:
@@ -324,18 +357,22 @@ def _klustra(samples, ord_lista, antal, framsteg=None):
                    f"{'röst' if hittade == 1 else 'röster'} gick att skilja åt.")
     if framsteg:
         framsteg(1.0)
-    return etikett_per_ord(ord_lista, starter, X, centroider), hittade, varning
+    return etikett_per_ord(ord_lista, starter, X, centroider, marginal), hittade, varning
 
 
-def dela_upp(samples, ord_lista, antal, framsteg=None):
+def dela_upp(samples, ord_lista, antal, framsteg=None, ord_p=ORD_P):
     """-> (repliker, antal_hittade, varning eller None).
 
     samples: float32, 16 kHz mono. ord_lista: [(start, slut, text)] fran whisper.
     antal: int (kant antal) eller None (gissa, som mest AUTO_MAX).
     """
     ord_lista = [o for o in ord_lista if o[2].strip()]
-    etiketter, _, varning = _klustra(samples, ord_lista, antal, framsteg)
-    rep = repliker(ord_lista, jamna_ut(ord_lista, etiketter))
+    marginal = []
+    etiketter, _, varning = _klustra(samples, ord_lista, antal, framsteg, marginal)
+    jamnade = jamna_ut(ord_lista, etiketter)
+    # Osaker talare: rosten liknar tva grupper nastan lika, eller meningsregeln flyttade ordet.
+    osakra = [m < MARGINAL or j != e for m, e, j in zip(marginal, etiketter, jamnade)]
+    rep = repliker(ord_lista, jamnade, osakra=osakra, ord_p=ord_p)
     return rep, len({r["speaker"] for r in rep}), varning
 
 
@@ -350,7 +387,7 @@ def har_tva_kanaler(vanster, hoger):
     return skillnad / niva > 0.05
 
 
-def kanal_per_ord(vanster, hoger, ord_lista):
+def kanal_per_ord(vanster, hoger, ord_lista, saker_ut=None):
     """True for ord som sags i mikrofonen (du), False for ord fran motet.
 
     Ett ord avgors av kanalen bara om den ena ar minst fyra ganger sa stark (SAKER_KVOT). Annars
@@ -361,16 +398,18 @@ def kanal_per_ord(vanster, hoger, ord_lista):
     motet ar fortfarande sakert och raknas som de andras.
     """
     beslut, saker = [], []
-    for a, b, _ in ord_lista:
+    for a, b, *_ in ord_lista:
         i, j = max(0, int((a - 0.05) * SR)), int((b + 0.05) * SR)
         v = float(np.sqrt(np.mean(vanster[i:j] ** 2))) if j > i else 0.0
         h = float(np.sqrt(np.mean(hoger[i:j] ** 2))) if j > i else 0.0
         beslut.append(v >= h)
         saker.append(max(v, h) >= SAKER_KVOT * (min(v, h) + 1e-6))
+    if saker_ut is not None:
+        saker_ut.extend(saker)
     sakra = [k for k, ok in enumerate(saker) if ok]
     if not sakra:
         return beslut
-    mitter = [(a + b) / 2 for a, b, _ in ord_lista]
+    mitter = [(o[0] + o[1]) / 2 for o in ord_lista]
     ut = []
     for k in range(len(ord_lista)):
         if saker[k]:
@@ -381,29 +420,37 @@ def kanal_per_ord(vanster, hoger, ord_lista):
     return ut
 
 
-def dela_upp_kanaler(vanster, hoger, ord_lista, antal, framsteg=None):
+def dela_upp_kanaler(vanster, hoger, ord_lista, antal, framsteg=None, ord_p=ORD_P):
     """Digitalt mote. -> (repliker, antal_hittade, varning).
 
     Talare 1 ar alltid du (mikrofonen). De andra (motesfliken) delas upp som vanligt, men bara
     i hoger kanal. antal raknar med dig: 3 = du och tva till. None = gissa hur manga de andra ar.
     """
     ord_lista = [o for o in ord_lista if o[2].strip()]
-    min_rost = kanal_per_ord(vanster, hoger, ord_lista)
+    saker = []
+    min_rost = kanal_per_ord(vanster, hoger, ord_lista, saker)
     andras_ord = [o for o, du in zip(ord_lista, min_rost) if not du]
     andra = None if antal is None else max(1, antal - 1)
-    etiketter_andra, _, varning = _klustra(hoger, andras_ord, andra, framsteg)
+    marginal_andra = []
+    etiketter_andra, _, varning = _klustra(hoger, andras_ord, andra, framsteg, marginal_andra)
     if varning and antal:
         hittade = len(set(etiketter_andra))
         varning = (f"Du angav {antal} talare (du och {antal - 1} till), men bland de andra gick bara "
                    f"{hittade} {'röst' if hittade == 1 else 'röster'} att skilja åt.")
     # Numrera de andra fran 2 i den ordning de forst sager nagot.
-    nummer, kvar = {}, iter(etiketter_andra)
-    etiketter = []
+    nummer, kvar, kvar_marginal = {}, iter(etiketter_andra), iter(marginal_andra)
+    etiketter, marginal = [], []
     for du in min_rost:
         if du:
             etiketter.append(1)
+            marginal.append(float("inf"))
         else:
             e = next(kvar)
             etiketter.append(nummer.setdefault(e, len(nummer) + 2))
-    rep = repliker(ord_lista, jamna_ut(ord_lista, etiketter), fasta_nummer=True)
+            marginal.append(next(kvar_marginal))
+    jamnade = jamna_ut(ord_lista, etiketter)
+    # Osaker talare: kanalen avgjorde inte, rosten bland de andra var oklar, eller
+    # meningsregeln flyttade ordet.
+    osakra = [not s or m < MARGINAL or j != e for s, m, e, j in zip(saker, marginal, etiketter, jamnade)]
+    rep = repliker(ord_lista, jamnade, fasta_nummer=True, osakra=osakra, ord_p=ord_p)
     return rep, len({r["speaker"] for r in rep}), varning

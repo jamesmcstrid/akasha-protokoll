@@ -77,6 +77,25 @@ Ordtiderna sparas inte, så när en replik delas uppskattas tiden utifrån andel
 delningen. Maskinens version sparas som `segment_original` i inspelningens `.json` vid första
 rättningen, så att allt kan ångras. Gör om ersätter båda.
 
+**Osäkra ställen** markeras på webbsidan, som en hjälp att veta var man ska börja kontrollera:
+
+- **Osäker talare** (`osaker_talare` på en replik): minst hälften av replikens ord är osäkra. Ett
+  ord är osäkert om rösten liknar två grupper nästan lika mycket (`MARGINAL`, skillnad under
+  0,03), om meningsregeln flyttade ordet, eller i digitala möten om kanalen inte avgjorde. I
+  AMI-mötena hade ord med marginal under 0,05 fel talare i 44 % av fallen, mot 16 % i snitt och
+  2,6 % när marginalen var stor. På replikernivå är signalen svagare: 12 % av replikerna
+  markerades, och 31 % av dem var fel, mot 24 % av alla repliker. I det konstgjorda digitala mötet
+  med täta "mm" markerades ungefär hälften av de felaktiga replikerna. Fel kan alltså finnas även
+  där det inte är markerat.
+- **Osäkra ord** (`osakra_ord`, index i texten): whispers sannolikhet för ordet är låg. whisper.cpp
+  ger den per token, och ordet får den lägsta. På 40 FLEURS-meningar med facit var whisper.cpp:s
+  ord under 0,5 fel i 20 % av fallen, mot 4–5 % för övriga. Det är ungefär 7 % av orden, ofta namn
+  och ovanliga ord. faster-whispers sannolikheter skilde sämre, så där gäller 0,4: knappt 1 % av
+  orden, och en tredjedel av dem var fel.
+
+När en talare bestäms för hand försvinner markeringen för osäker talare. Knappen "… stämmer" gör
+detsamma utan att byta talare.
+
 **Digitala möten:** mikrofonen och mötesfliken ligger i varsin kanal. Ett ord hör till den kanal
 som är starkast under ordet, om den är minst fyra gånger så stark; annars får ordet samma som
 närmaste säkra ord. Det du säger blir alltid Talare 1 ("Du"). Bara de andra (höger kanal) delas upp
@@ -189,7 +208,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
 **I en Linux-miljö utan grafikprocessor** (samma Python- och biblioteksversioner):
 
-- **Enhetstester:** 74 st, gröna. De täcker talaruppdelning (även digitala möten), lagring av
+- **Enhetstester:** 78 st, gröna. De täcker talaruppdelning (även digitala möten), lagring av
   inspelningar i delar, export, skydd mot andra webbsidor och alla API-flöden.
 - **`installera.sh` från början:** med en ersättare för launchd, även en ominstallation när
   tjänsten redan finns. Modellnedladdningen med sha256-kontroll gick igenom.

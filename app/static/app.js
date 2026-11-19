@@ -19,6 +19,8 @@ const $ = (id) => document.getElementById(id);
 let inspelning = null; // pagaende inspelning i den har fliken
 let visadId = null;
 let visadMeta = null; // inspelningen som visas, med text: behovs nar talare ska rattas
+let doljOsakraOrd = false;
+let senastOsakra = -1; // senaste replik som "Nasta osakra" visade
 let pollTimer = null;
 
 // --- hjalpfunktioner -----------------------------------------------------------------------
@@ -459,10 +461,12 @@ async function visa(id, tyst = false) {
     : `${STATUS[m.status] || m.status}${m.fel ? `: ${m.fel}` : ""}`;
   $("v-status").classList.toggle("fel", m.status === "fel");
 
+  if (byttId) senastOsakra = -1;
   visadMeta = m;
   stangTalarval();
   renderaNamn(m);
   renderaText(m);
+  renderaOsakert(m);
   $("v-md").href = `/api/inspelningar/${id}/text.md`;
   $("v-txt").href = `/api/inspelningar/${id}/text.txt`;
   $("v-ljudfil").href = `/api/inspelningar/${id}/ljud?ladda_ner=1`;
@@ -513,23 +517,30 @@ function farg(nr) {
 function renderaText(m) {
   const yta = $("v-text");
   yta.replaceChildren();
+  yta.classList.toggle("dolj-osakra-ord", doljOsakraOrd);
   const segs = (m.resultat && m.resultat.segment) || [];
   const kanRatta = !PAGAENDE.has(m.status);
   segs.forEach((s, i) => {
     const tidKnapp = el("button", { type: "button", class: "tid", title: "Lyssna härifrån",
       onclick: () => { const a = $("v-ljud"); a.currentTime = s.start; a.play(); } }, tid(s.start));
-    const p = el("p", { "data-replik": String(i) }, tidKnapp);
+    const p = el("p", { "data-replik": String(i), class: s.osaker_talare ? "osaker" : undefined }, tidKnapp);
     if ("speaker" in s) {
       const namn = `${namnFor(m, s.speaker)}:`;
       p.append(kanRatta
         ? el("button", { type: "button", class: `namn ${farg(s.speaker)}`, title: "Byt talare",
           "aria-haspopup": "dialog", onclick: (e) => oppnaTalarval(e.currentTarget, i, null, null) }, namn)
         : el("span", { class: `namn ${farg(s.speaker)}` }, namn));
+      if (s.osaker_talare) {
+        p.append(el("span", { class: "osaker-tecken", title: "Osäker talare: kontrollera mot ljudet" }, "?"));
+      }
       // Varje ord i ett eget span, sa att markerade ord kan fa en annan talare.
+      const osakra = new Set(s.osakra_ord || []);
       const text = el("span", { class: "repliktext" });
       s.text.trim().split(/\s+/).forEach((ord, k) => {
         if (k) text.append(" ");
-        text.append(el("span", { "data-ord": String(k) }, ord));
+        text.append(osakra.has(k)
+          ? el("span", { "data-ord": String(k), class: "osakert-ord", title: "Whisper var osäker på ordet" }, ord)
+          : el("span", { "data-ord": String(k) }, ord));
       });
       p.append(text);
     } else {
@@ -537,6 +548,40 @@ function renderaText(m) {
     }
     yta.append(p);
   });
+}
+
+function renderaOsakert(m) {
+  const rad = $("v-osakert");
+  const segs = (m.resultat && m.resultat.segment) || [];
+  const talare = segs.filter((s) => s.osaker_talare).length;
+  const ord = segs.reduce((n, s) => n + (s.osakra_ord || []).length, 0);
+  rad.replaceChildren();
+  rad.hidden = PAGAENDE.has(m.status) || (!talare && !ord);
+  if (rad.hidden) return;
+  const delar = [];
+  if (talare) delar.push(`${talare} ${talare === 1 ? "replik har" : "repliker har"} osäker talare (markerade med ?)`);
+  if (ord) delar.push(`${ord} ${ord === 1 ? "ord" : "ord"} som whisper var osäker på är understrukna`);
+  rad.append(el("span", {}, `${delar.join(" och ")}. Kontrollera dem mot ljudet först.`));
+  if (talare) {
+    rad.append(el("button", { type: "button", class: "knapp liten-knapp", onclick: nastaOsakra }, "Nästa osäkra talare"));
+  }
+  if (ord) {
+    rad.append(el("button", { type: "button", class: "knapp liten-knapp", "aria-pressed": String(doljOsakraOrd),
+      onclick: () => { doljOsakraOrd = !doljOsakraOrd; renderaText(visadMeta); renderaOsakert(visadMeta); } },
+    doljOsakraOrd ? "Visa understrykningar" : "Dölj understrykningar"));
+  }
+}
+
+function nastaOsakra() {
+  const osakra = [...document.querySelectorAll("#v-text p.osaker")];
+  if (!osakra.length) return;
+  const nasta = osakra.find((p) => Number(p.dataset.replik) > senastOsakra) || osakra[0];
+  senastOsakra = Number(nasta.dataset.replik);
+  document.querySelectorAll("#v-text p.vald-osaker").forEach((p) => p.classList.remove("vald-osaker"));
+  nasta.classList.add("vald-osaker");
+  nasta.scrollIntoView({ behavior: "smooth", block: "center" });
+  const namn = nasta.querySelector("button.namn");
+  if (namn) namn.focus({ preventScroll: true });
 }
 
 // --- ratta talare --------------------------------------------------------------------------
@@ -561,6 +606,10 @@ function oppnaTalarval(ankare, i, fran, till) {
     ruta.append(el("p", { class: "citat" }, `”${markerat.length > 80 ? markerat.slice(0, 77) + "…" : markerat}”`));
   }
   const val = el("div", { class: "knappar" });
+  if (helReplik && s.osaker_talare) {
+    val.append(el("button", { type: "button", class: `knapp liten-knapp ${farg(s.speaker)}`,
+      onclick: () => ratta(i, { talare: s.speaker }) }, `${namnFor(m, s.speaker)} stämmer`));
+  }
   for (const nr of talarnummer(m)) {
     if (helReplik && nr === s.speaker) continue;
     val.append(el("button", { type: "button", class: `knapp liten-knapp ${farg(nr)}`,

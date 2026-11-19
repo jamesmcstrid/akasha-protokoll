@@ -66,11 +66,16 @@ class TestDtwOrdtider(unittest.TestCase):
             self.seg(" nej", (" ne", 2370), ("j", 2382)),
             self.seg(" inte", (" inte", 2462)),
         ]
-        self.assertEqual(motor.dtw_ordtider(raw), [
+        self.assertEqual([o[:3] for o in motor.dtw_ordtider(raw)], [
             (22.06, 22.5, " kylan?"),  # "?" pa 23,64 raknas inte
             (23.5, 23.82, " nej"),
             (24.42, 24.62, " inte"),  # borjar 0,2 s fore, men inte fore nej:s slut
         ])
+
+    def test_sannolikhet_ar_lagsta_bokstavstoken(self):
+        raw = [{"text": " Isar,", "tokens": [{"text": " Is", "t_dtw": 100, "p": 0.31}, {"text": "ar", "t_dtw": 120, "p": 0.82},
+                                              {"text": ",", "t_dtw": 125, "p": 0.05}]}]
+        self.assertEqual(motor.dtw_ordtider(raw)[0][3], 0.31)  # kommatecknet raknas inte
 
     def test_utan_dtw_blir_det_none(self):
         self.assertIsNone(motor.dtw_ordtider([self.seg(" du", (" du", -1))]))

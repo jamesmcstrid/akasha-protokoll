@@ -74,6 +74,10 @@ def main():
     print(f"  Talare hittade: {r.get('talare')}" + (f"   VARNING: {r['varning']}" if r.get("varning") else ""))
     if not seg:
         return
+    osakra_talare = sum(1 for s in seg if s.get("osaker_talare"))
+    osakra_ord = sum(len(s.get("osakra_ord", [])) for s in seg)
+    print(f"  Osäkra ställen: {osakra_talare} repliker med osäker talare, {osakra_ord} osäkra ord"
+          + ("   (talarna har rättats för hand)" if "segment_original" in r else ""))
 
     per = collections.defaultdict(lambda: [0, 0, 0.0])  # repliker, ord, sekunder
     for s in seg:

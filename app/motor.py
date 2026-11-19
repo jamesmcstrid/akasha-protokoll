@@ -78,6 +78,13 @@ def problem():
     return f"okand MOTOR={MOTOR!r}, anvand auto, faster eller whispercpp"
 
 
+def ord_grans():
+    """Under den har sannolikheten markeras ett ord som osakert. Kalibrerat pa 40 meningar ur
+    FLEURS med facit: whisper.cpp:s ord under 0,5 var fel fyra ganger sa ofta som andra (20 % mot
+    4-5 %). faster-whispers sannolikheter skiljer samre; under 0,4 var en tredjedel fel."""
+    return 0.5 if AKTIV == "whispercpp" else 0.4
+
+
 def modellnamn():
     return f"KB-Whisper {MODELL}" + (" (whisper.cpp, Metal)" if AKTIV == "whispercpp" else "")
 
@@ -135,7 +142,7 @@ def _faster(samples, per_ord, prompt, framsteg):
     for s in segments:  # generator: arbetet sker medan vi itererar
         if s.text.strip():
             segs.append({"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text.strip()})
-        ord_lista.extend((w.start, w.end, w.word) for w in (s.words or []))
+        ord_lista.extend((w.start, w.end, w.word, w.probability) for w in (s.words or []))
         if framsteg and langd:
             framsteg(min(1.0, s.end / langd))
     text = " ".join(s["text"] for s in segs)
@@ -224,22 +231,26 @@ def rensa(raw):
 
 def dtw_ordtider(raw):
     """Ordtider fran DTW (t_dtw per token, hundradels sekunder). None om DTW saknas.
+    -> [(start, slut, text, sannolikhet)]
 
     t_dtw markerar ungefar var token slutar. Ordet slutar dar dess sista bokstavstoken slutar
     (skiljetecken far ibland en sen tid och raknas inte), och borjar 0,2 s fore sin forsta token,
-    men aldrig fore foregaende ords slut.
+    men aldrig fore foregaende ords slut. Sannolikheten ar den lagsta bland ordets bokstavstokens:
+    hur saker whisper var pa ordet.
     """
     ut, forra_slut = [], 0.0
     for seg in raw:
-        tid = [t.get("t_dtw", -1) / 100 for t in seg.get("tokens", [])
-               if not t.get("text", "").startswith("[") and t.get("text", "").strip(" ").strip("".join(SKILJETECKEN))]
+        tokens = [t for t in seg.get("tokens", [])
+                  if not t.get("text", "").startswith("[") and t.get("text", "").strip(" ").strip("".join(SKILJETECKEN))]
+        tid = [t.get("t_dtw", -1) / 100 for t in tokens]
         if not seg.get("text", "").strip():
             continue
         if not tid or min(tid) < 0:
             return None  # DTW kordes inte (t.ex. aldre whisper.cpp)
         slut = max(tid)
         start = max(forra_slut, min(tid) - 0.2)
-        ut.append((round(start, 2), round(max(slut, start + 0.05), 2), seg["text"]))
+        p = min((t["p"] for t in tokens if "p" in t), default=None)
+        ut.append((round(start, 2), round(max(slut, start + 0.05), 2), seg["text"], p))
         forra_slut = slut
     return ut
 
@@ -247,7 +258,7 @@ def dtw_ordtider(raw):
 def _ord_till_segment(ord_lista, max_tecken=200):
     """Ord (fran -ml 1) -> segment av lagom langd, delade efter meningsslut."""
     segs, aktuell = [], None
-    for a, b, t in ord_lista:
+    for a, b, t, *_ in ord_lista:
         if aktuell is None:
             aktuell = {"start": a, "end": b, "text": ""}
         aktuell["end"] = b
