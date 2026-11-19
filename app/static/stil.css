@@ -98,7 +98,6 @@ h2 { margin: 0 0 14px; font-size: 1.2rem; font-weight: 650; }
 .falt { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .falt-rad { display: flex; gap: 14px; flex-wrap: wrap; }
 .falt-rad .falt { min-width: 170px; }
-.falt-rad .bred { flex: 1; min-width: 240px; }
 label { font-weight: 600; font-size: 0.92rem; }
 .valfritt { font-weight: 400; color: var(--dampad); }
 /* Hjalprad under ett falt. Bredd 0 + min-bredd 100 %: raden bryts efter faltet i stallet for att gora det bredare. */
