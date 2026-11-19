@@ -3,6 +3,13 @@
 // Alla anrop som andrar nagot maste ha den har headern (skydd mot andra webbsidor).
 const HEADER = { "X-Akasha-Meet": "1" };
 const DEL_MS = 5000; // webblasaren skickar ljudet till disken var femte sekund
+// Varning om inget ljud kommer in: ljudnivan (RMS) under -80 dBFS i 10 sekunder. En avstangd
+// eller fel vald mikrofon ger nollor eller nastan nollor (16-bitarsljudets minsta steg ar ca
+// -90 dBFS). Bakgrundsbruset i ett tyst rum med fungerande mikrofon ligger kring -60 till -50 dBFS,
+// och hogre med automatisk niva, sa marginalen mot falsklarm ar minst 20 dB.
+const TYST_NIVA = 0.0001;
+const TYST_MS = 10000;
+const SIDTITEL = document.title;
 const PAGAENDE = new Set(["koar", "transkriberar", "talare"]);
 const STATUS = {
   spelar_in: "Spelar in",
@@ -76,6 +83,15 @@ function sparaVal() {
 }
 
 function hamtaVal() {
+  // I Safari och Firefox gar flikljud inte att dela: stang av valet i stallet for att lata
+  // inspelningen misslyckas forst nar man trycker Spela in.
+  if (!kanDelaFlik()) {
+    const digitalt = $("kalla").querySelector('option[value="digitalt"]');
+    digitalt.disabled = true;
+    digitalt.textContent = "Digitalt (kräver Chrome)";
+    $("kalla-hjalp").textContent =
+      "Gäller när du spelar in. Uppladdade filer påverkas inte. Digitala möten kan bara spelas in i Chrome.";
+  }
   try {
     const v = JSON.parse(localStorage.getItem("akasha-meet-val") || "{}");
     if (v.kalla === "digitalt" && kanDelaFlik()) $("kalla").value = "digitalt";
@@ -167,18 +183,21 @@ async function spelaIn() {
   const stream = ljud.stream;
   const rec = new MediaRecorder(stream, {
     mimeType: format.mime, audioBitsPerSecond: inst.kalla === "digitalt" ? 96000 : 64000 });
-  inspelning = { id, rec, ljud, nr: 0, sparade: 0, ko: Promise.resolve(), start: Date.now(), fel: null };
+  const insp = { id, rec, ljud, nr: 0, sparade: 0, ko: Promise.resolve(), start: Date.now(), fel: null };
+  inspelning = insp;
   rec.addEventListener("dataavailable", (e) => { if (e.data && e.data.size) skickaDel(e.data); });
   rec.start(DEL_MS);
 
   starta_niva(stream);
-  inspelning.klocka = setInterval(() => {
-    $("klocka").textContent = tid((Date.now() - inspelning.start) / 1000);
-  }, 500);
-  try { inspelning.wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* valfritt */ }
+  // Klockan, tystnadskollen och flikens titel gar pa en timer och inte pa requestAnimationFrame,
+  // som star still nar fliken ar i bakgrunden (vid digitala moten ar man i motesfliken).
+  insp.klocka = setInterval(() => uppdateraKlocka(insp), 500);
+  uppdateraKlocka(insp);
+  try { insp.wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* valfritt */ }
 
   $("spela-in").hidden = true;
   $("valj-fil").disabled = true;
+  $("kalla").disabled = true; // kallan gar inte att byta mitt i en inspelning
   $("stoppa").hidden = false;
   $("inspelningspanel").hidden = false;
   $("sparat").textContent = "";
@@ -263,23 +282,52 @@ async function skickaMedForsok(insp, nr, blob, sekunder) {
 }
 
 function starta_niva(stream) {
+  const insp = inspelning;
   try {
     const ctx = new AudioContext();
+    ctx.resume().catch(() => { /* valfritt */ });
     const analys = ctx.createAnalyser();
     analys.fftSize = 1024;
     ctx.createMediaStreamSource(stream).connect(analys);
     const buf = new Float32Array(analys.fftSize);
-    const steg = () => {
-      if (!inspelning) return;
+    insp.ljudctx = ctx;
+    insp.senastLjud = Date.now();
+    insp.lasNiva = () => {
+      // Ett pausat ljudsammanhang ger bara nollor och sager inget om mikrofonen: inget larm da.
+      if (ctx.state !== "running") { insp.senastLjud = Date.now(); return null; }
       analys.getFloatTimeDomainData(buf);
       let summa = 0;
       for (const v of buf) summa += v * v;
-      $("niva").value = Math.min(1, Math.sqrt(summa / buf.length) * 4);
+      const rms = Math.sqrt(summa / buf.length);
+      if (rms >= TYST_NIVA) insp.senastLjud = Date.now();
+      return rms;
+    };
+    const steg = () => {
+      if (inspelning !== insp) return;
+      const rms = insp.lasNiva();
+      if (rms !== null) $("niva").value = Math.min(1, rms * 4);
       requestAnimationFrame(steg);
     };
-    inspelning.ljudctx = ctx;
     steg();
   } catch { /* nivamatare ar valfri */ }
+}
+
+function uppdateraKlocka(insp) {
+  const t = tid((Date.now() - insp.start) / 1000);
+  $("klocka").textContent = t;
+  insp.lasNiva?.();
+  const tyst = !!insp.lasNiva && Date.now() - insp.senastLjud >= TYST_MS;
+  visaTystnad(tyst);
+  document.title = `${tyst ? "⚠ Inget ljud" : "●"} ${t} – ${SIDTITEL}`;
+}
+
+function visaTystnad(tyst) {
+  const v = $("tyst-varning");
+  if (v.hidden !== tyst) return;
+  v.hidden = !tyst;
+  // Texten satts nar varningen visas, sa att skarmlasare laser upp den (role="alert").
+  v.textContent = tyst
+    ? "Inget ljud hörs. Kontrollera att rätt mikrofon är vald och att den inte är avstängd." : "";
 }
 
 async function stoppa() {
@@ -299,11 +347,17 @@ async function stoppa() {
   $("stoppa").disabled = false;
   $("spela-in").hidden = false;
   $("valj-fil").disabled = false;
+  $("kalla").disabled = false;
   $("inspelningspanel").hidden = true;
   $("niva").value = 0;
+  visaTystnad(false);
+  document.title = SIDTITEL;
   try {
-    const { talare, ord } = installningar();
-    await api("POST", `/api/inspelningar/${insp.id}/klar`, { starta: true, talare, ord });
+    // Antal talare, ord och rubrik lases nu, sa att de kan andras under motet. En tom rubrik
+    // skickas inte, och da behalls den fran starten.
+    const { talare, ord, titel } = installningar();
+    await api("POST", `/api/inspelningar/${insp.id}/klar`, { starta: true, talare, ord, titel });
+    $("titel").value = ""; // annars far nasta inspelning samma rubrik
     meddela("Inspelningen är sparad och transkriberas nu.");
     visa(insp.id);
   } catch (e) {
@@ -332,6 +386,7 @@ function laddaUpp(fil) {
     let data = {};
     try { data = JSON.parse(xhr.responseText); } catch { /* inte JSON */ }
     if (xhr.status === 201) {
+      $("titel").value = ""; // annars far nasta inspelning samma rubrik
       meddela("Filen är uppladdad och transkriberas nu.");
       visa(data.id);
     } else {

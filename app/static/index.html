@@ -28,10 +28,11 @@
       <div class="falt-rad">
         <div class="falt">
           <label for="kalla">Hur spelas mötet in?</label>
-          <select id="kalla">
+          <select id="kalla" aria-describedby="kalla-hjalp">
             <option value="rum" selected>Med mikrofonen (samma rum eller högtalare)</option>
             <option value="digitalt">Digitalt i Chrome (t.ex. Google Meet eller Slack)</option>
           </select>
+          <p id="kalla-hjalp" class="hjalp">Gäller när du spelar in. Uppladdade filer påverkas inte.</p>
         </div>
         <div class="falt">
           <label for="talare">Hur många pratar?</label>
@@ -45,10 +46,13 @@
             <option value="auto">Vet inte – gissa</option>
           </select>
         </div>
-        <div class="falt bred">
-          <label for="ord">Namn och facktermer <span class="valfritt">(valfritt)</span></label>
-          <input id="ord" type="text" maxlength="500" autocomplete="off">
-        </div>
+      </div>
+
+      <div class="falt">
+        <label for="ord">Svårstavade ord <span class="valfritt">(valfritt)</span></label>
+        <input id="ord" type="text" maxlength="500" placeholder="t.ex. Hagström, ISO 9001" autocomplete="off"
+          aria-describedby="ord-hjalp">
+        <p id="ord-hjalp" class="hjalp">Namn och facktermer som sägs i mötet. Hjälper programmet att stava dem rätt.</p>
       </div>
 
       <p id="digital-hjalp" class="tips" hidden>
@@ -63,18 +67,24 @@
         <button id="valj-fil" type="button" class="knapp">Ladda upp ljudfil…</button>
         <input id="fil" type="file" accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg,.flac,.mp4,.mov" hidden>
       </div>
+      <p class="lov">Be alltid om lov innan du spelar in någon.</p>
 
       <div id="inspelningspanel" class="inspelningspanel" hidden>
-        <span class="pricka" aria-hidden="true"></span>
-        <span id="klocka" class="klocka">00:00</span>
-        <meter id="niva" min="0" max="1" value="0" aria-label="Ljudnivå"></meter>
-        <span id="sparat" class="dampad"></span>
+        <div class="panelrad">
+          <span class="pricka" aria-hidden="true"></span>
+          <span id="klocka" class="klocka">00:00</span>
+          <span class="niva">
+            <label for="niva">Ljudnivå</label>
+            <meter id="niva" min="0" max="1" value="0"></meter>
+          </span>
+          <span id="sparat" class="dampad"></span>
+        </div>
+        <p id="tyst-varning" class="varning tyst-varning" role="alert" hidden></p>
+        <p class="dampad liten">Låt fliken vara öppen och datorn vaken under mötet. Ljudet sparas var femte
+          sekund, så om fliken stängs av misstag förlorar du som mest de senaste sekunderna.</p>
       </div>
 
       <p id="meddelande" class="meddelande" role="status" aria-live="polite"></p>
-      <p class="dampad liten">Be alltid om lov innan du spelar in någon. Låt fliken vara öppen och datorn vaken
-        under mötet. Ljudet sparas var femte sekund, så om fliken stängs av misstag förlorar du som mest
-        de senaste sekunderna.</p>
     </section>
 
     <section id="visning" class="kort" aria-labelledby="v-rubrik" hidden>

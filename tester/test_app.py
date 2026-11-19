@@ -148,6 +148,27 @@ class TestApp(unittest.TestCase):
         with open(lagring.ljudfil(m), "rb") as f:
             self.assertEqual(f.read(), b"del0del1del2")
 
+    def test_rubrik_vid_stopp_ersatter_rubriken_fran_start(self):
+        r = self.klient.post("/api/inspelningar", headers=H, json={"andelse": ".webm", "titel": "Från start"})
+        id_ = r.get_json()["id"]
+        self.klient.post(f"/api/inspelningar/{id_}/del?nr=0", headers=H, data=b"ljud")
+        self.klient.post(f"/api/inspelningar/{id_}/klar", headers=H,
+                         json={"starta": True, "talare": "2", "titel": "  " + "x" * 250})
+        akasha._ko.join()
+        m = self.klient.get(f"/api/inspelningar/{id_}").get_json()
+        self.assertEqual((m["status"], m["titel"]), ("klar", "x" * 200))
+        with open(lagring.textfil(id_), encoding="utf-8") as f:
+            self.assertTrue(f.read().startswith("# " + "x" * 200 + "\n"))
+
+    def test_tom_rubrik_vid_stopp_behaller_rubriken_fran_start(self):
+        for titel in ({"titel": "   "}, {"titel": None}, {}):
+            r = self.klient.post("/api/inspelningar", headers=H, json={"andelse": ".webm", "titel": "Från start"})
+            id_ = r.get_json()["id"]
+            self.klient.post(f"/api/inspelningar/{id_}/del?nr=0", headers=H, data=b"ljud")
+            self.klient.post(f"/api/inspelningar/{id_}/klar", headers=H, json={"starta": True, **titel})
+            akasha._ko.join()
+            self.assertEqual(lagring.las(id_)["titel"], "Från start", titel)
+
     def test_utan_talarmodeller_blir_det_en_varning(self):
         with mock.patch.object(talare, "problem", lambda: "talarmodellerna saknas"):
             id_ = self.ladda_upp()

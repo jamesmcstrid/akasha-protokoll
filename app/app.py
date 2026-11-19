@@ -341,6 +341,10 @@ def del_av_inspelning(id_):
 def inspelning_klar(id_):
     data = request.get_json(silent=True) or {}
     meta = lagring.avsluta_inspelning(id_)
+    # Rubriken kan ha skrivits in under motet: den som star i faltet vid stopp galler.
+    titel = str(data.get("titel") or "").strip()[:200]
+    if titel:
+        meta = lagring.uppdatera(id_, titel=titel)
     if data.get("starta", True):
         inst = tolka_installningar(data) if "talare" in data else None
         meta = koa(id_, inst)
