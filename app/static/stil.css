@@ -89,6 +89,7 @@ h2 { margin: 0 0 14px; font-size: 1.2rem; font-weight: 650; }
 }
 .tjanst.ok { color: var(--ok); }
 .tjanst.fel { color: var(--fel); }
+.tjanst.vantar { color: var(--text); }
 
 .kort {
   background: var(--kort); border: 1px solid var(--kant); border-radius: 20px;
@@ -161,6 +162,8 @@ meter::-moz-meter-bar { background: var(--ok); border-radius: 999px; }
 
 .meddelande { min-height: 1.5em; margin: 10px 0; }
 .meddelande.fel { color: var(--fel); }
+/* Tom felrad i modellkortet: tar ingen plats, men finns kvar sa att role="alert" laser upp nasta fel. */
+#modeller .meddelande:empty { min-height: 0; margin: 0; }
 
 /* Kvittorutan: nederst i fonstret (kontrollraden sitter overst). Utan text syns ingen ruta,
    men elementet finns kvar sa att skarmlasarnas levande omraden fungerar. */

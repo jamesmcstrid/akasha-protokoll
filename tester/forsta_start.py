@@ -37,7 +37,9 @@ sys.path.insert(0, HAR)
 import falsk_hf  # noqa: E402
 import modeller  # noqa: E402
 
-paket, innehall = falsk_hf.falska_paket(storlek_for={"model.bin": 8_000_000})
+# Storlekarna ar bara for att sidan ska se rimlig ut (150 MB och 40 MB): innehallet ar pahittat.
+paket, innehall = falsk_hf.falska_paket(
+    storlek_for={"model.bin": 150_000_000, "nemo_en_titanet_small.onnx": 40_257_283})
 modeller.PAKET = paket
 modeller.PAUSER = (0.5, 0.5)
 

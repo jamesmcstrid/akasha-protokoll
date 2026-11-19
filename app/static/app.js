@@ -150,25 +150,51 @@ function visaKallaHjalp() {
 
 // --- tjanstens status ----------------------------------------------------------------------
 
-async function kollaTjanst() {
+// Senaste svaren, sa att etiketten kan sattas ur bada oavsett vilket som kommer forst.
+let senastHalsa = null; // /health, eller false nar tjansten inte svarade
+let senastModeller = null; // /api/modeller
+
+// Etiketten uppe till hoger. Ar det enda som hindrar modeller som sidan erbjuder att hamta ar den
+// neutral, inte rod. Ger tillbaka "fel" nar den visar Inte redo (da ska orsaken ocksa meddelas).
+function visaTjanst() {
   const t = $("tjanst");
+  const h = senastHalsa;
+  if (h === null) return null; // inget svar an: etiketten star kvar som "Kontrollerar…"
+  if (h === false) {
+    t.textContent = "Tjänsten svarar inte";
+    t.title = "";
+    t.className = "tjanst fel";
+    return "fel";
+  }
+  if (h.status === "ok") {
+    t.textContent = h.talare === "ok" ? `Redo · ${h.modell}` : `Redo · utan talaruppdelning`;
+    t.title = h.talare === "ok" ? "" : h.talare;
+    t.className = "tjanst ok";
+    return "ok";
+  }
+  const d = senastModeller;
+  if (d && !d.hinder && (d.saknas || []).some((p) => p.id === "taligenkanning")) {
+    t.textContent = HAMTAR.has(d.hamtning.tillstand) ? "Hämtar modellerna…" : "Modellerna behöver hämtas";
+    t.title = "";
+    t.className = "tjanst vantar";
+    return "vantar";
+  }
+  t.textContent = "Inte redo";
+  t.title = h.problem || "";
+  t.className = "tjanst fel";
+  return "fel";
+}
+
+async function kollaTjanst() {
   try {
     const svar = await fetch("/health");
     const h = await svar.json();
     $("datakatalog").textContent = h.datakatalog;
-    if (h.status === "ok") {
-      t.textContent = h.talare === "ok" ? `Redo · ${h.modell}` : `Redo · utan talaruppdelning`;
-      t.title = h.talare === "ok" ? "" : h.talare;
-      t.className = "tjanst ok";
-    } else {
-      t.textContent = "Inte redo";
-      t.title = h.problem || "";
-      t.className = "tjanst fel";
-      meddela(`Tjänsten är inte redo: ${h.problem}`, true);
-    }
+    senastHalsa = h;
+    if (visaTjanst() === "fel" && h.status !== "ok") meddela(`Tjänsten är inte redo: ${h.problem}`, true);
   } catch {
-    t.textContent = "Tjänsten svarar inte";
-    t.className = "tjanst fel";
+    senastHalsa = false;
+    visaTjanst();
   }
 }
 
@@ -202,6 +228,8 @@ async function kollaModeller() {
 // Kortet #modeller enligt tabellen i planen: fullt lage (taligenkanningen saknas), talarlage
 // (bara rostmodellen) eller dolt. Allt byggs med el() och textContent, aldrig innerHTML.
 function renderaModeller(d) {
+  senastModeller = d;
+  visaTjanst();
   const h = d.hamtning;
   const saknas = d.saknas || [];
   const pagar = HAMTAR.has(h.tillstand);
@@ -251,8 +279,9 @@ function renderaModeller(d) {
   // totalt ar hela filernas storlek; det som ligger kvar som .delvis hamtas inte igen.
   const aterstar = Math.max(0, d.totalt - d.redan_hamtat);
   const disk = $("m-disk");
+  disk.hidden = pagar; // raden andras inte varje sekund, och forloppet visar redan hur mycket som ar hamtat
   const diskNyckel = [d.katalog, aterstar, d.ledigt, d.redan_hamtat].join("|");
-  if (disk.dataset.nyckel !== diskNyckel) {
+  if (!pagar && disk.dataset.nyckel !== diskNyckel) { // ledigt andras hela tiden under hamtningen
     disk.dataset.nyckel = diskNyckel;
     disk.replaceChildren("Modellerna sparas i ", el("code", {}, d.katalog),
       `. Det behövs ${storlekText(aterstar)} ledigt utrymme, och det finns ${storlekText(d.ledigt)}.`
@@ -281,7 +310,7 @@ function renderaModeller(d) {
   }
   if (pagar && !stoppAnrop) {
     const stoppar = !!h.stoppas;
-    stoppa.textContent = stoppar ? "Stoppar…" : "Stoppa hämtningen";
+    sattText(stoppa, stoppar ? "Stoppar…" : "Stoppa hämtningen");
     if (stoppar) stoppa.setAttribute("aria-disabled", "true"); else stoppa.removeAttribute("aria-disabled");
   }
 
