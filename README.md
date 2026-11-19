@@ -12,7 +12,7 @@ Du får texten uppdelad per talare och kan byta "Talare 1" och "Talare 2" mot ri
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/bilder/akasha-meet-mork.png">
-  <img src="docs/bilder/akasha-meet-ljus.png" alt="Akasha Meet i webbläsaren: formuläret för en ny transkribering och ett transkriberat möte där replikerna är uppdelade mellan Anna och Jonas." width="760">
+  <img src="docs/bilder/akasha-meet-ljus.png" alt="Akasha Meet i webbläsaren. Överst formuläret för en ny transkribering. Under det ett transkriberat möte i tre steg: 1 Vem är vem? med namnen Anna och Jonas, 2 Kontrollera mot ljudet med en förklaring av markeringarna, ljudspelaren och replikerna, där en replik är markerad som osäker talare och två ord är understrukna som osäkra, och 3 Använd texten med knappar för att kopiera och ladda ner." width="760">
 </picture>
 
 <sub>Exemplet är påhittat.</sub>
@@ -20,27 +20,37 @@ Du får texten uppdelad per talare och kan byta "Talare 1" och "Talare 2" mot ri
 ## Använda
 
 1. Öppna **http://127.0.0.1:8611** i Chrome (eller Safari). Spara gärna sidan som bokmärke.
-2. Välj **hur mötet spelas in** och **hur många som pratar**. Skriv gärna in namn och facktermer
-   som förekommer, så stavas de rätt.
+2. Välj **Hur spelas mötet in?** och **Hur många pratar?**. Skriv gärna namn och facktermer som
+   sägs i mötet under **Svårstavade ord**, så stavas de rätt.
 3. Tryck **Spela in**. När mötet är slut trycker du **Stoppa och transkribera**. Du kan också
    trycka **Ladda upp ljudfil…** och välja en fil, till exempel från Röstmemon.
-4. Vänta medan texten tas fram. Förloppet syns i listan.
-5. Skriv in vad talarna heter och tryck **Spara namn**. Kopiera texten eller ladda ner den som
-   `.md` eller `.txt`. Klicka på en tid för att lyssna på just det stället. **Ladda ner ljudet**
-   finns bredvid ljudspelaren.
-6. Har en replik fått fel talare? Klicka på namnet i repliken och välj rätt person. Är bara en del
+4. Vänta medan texten tas fram. Sidan visar hur långt det har kommit och ungefär hur lång tid
+   som är kvar.
+5. **Vem är vem?** Skriv in vad talarna heter. Namnen sparas av sig själva. Tryck **Lyssna** för
+   att höra ett prov på rösten, om du inte vet vem som är vem.
+6. **Kontrollera mot ljudet.** Klicka på en tid för att lyssna på just det stället. Ljudspelaren,
+   **Backa 5 s** och **Nästa osäkra talare** följer med när du bläddrar i texten.
+7. Har en replik fått fel talare? Klicka på namnet i repliken och välj rätt person. Är bara en del
    fel, markera de orden och välj vem som sa dem. Där kan du också säga att alla repliker från en
-   talare egentligen är någon annans. **Ångra rättningarna** tar texten tillbaka till hur den var
-   efter transkriberingen. **Gör om** tar bort rättningarna, så sidan frågar först.
-7. Börja kontrollen med de osäkra ställena. Repliker där talaren är osäker har ett **?** och
-   streckad kant, och **Nästa osäkra talare** hoppar mellan dem. Stämmer talaren, klicka på namnet
-   och välj **… stämmer**, så försvinner markeringen. Ord som whisper var osäker på är understrukna,
-   ofta namn och ovanliga ord. Markeringarna är en hjälp att veta var du ska börja, inte en
-   garanti: fel kan finnas även där det inte är markerat.
+   talare egentligen är någon annans. **Ångra alla rättningar** tar texten tillbaka till hur den
+   var efter transkriberingen.
+8. Börja kontrollen med de osäkra ställena. Ovanför texten står vad markeringarna betyder.
+   Repliker där talaren är osäker har ett **?** och streckad kant, och **Nästa osäkra talare**
+   hoppar mellan dem. Stämmer talaren, klicka på **?** eller namnet och välj **… stämmer**, så
+   försvinner markeringen. Ord som programmet var osäkert på är understrukna, ofta namn och
+   ovanliga ord. Klicka på ett sådant ord för att lyssna. Markeringarna är en hjälp att veta var
+   du ska börja, inte en garanti: fel kan finnas även där det inte är markerat.
+9. **Använd texten.** Tryck **Kopiera texten**, eller **Ladda ner som text (.txt)** eller
+   **Ladda ner som Markdown (.md)**. **Ladda ner ljudet** sparar ljudet som en fil.
 
-Inspelningen heter "Möte" och datum om du inte skriver en rubrik. Rubriken går att byta efteråt
-med **Byt rubrik**. Filnamnet på en uppladdad fil används aldrig, eftersom Röstmemon döper
-inspelningar efter platsen (en gatuadress).
+Inspelningen heter "Möte" och datum om du inte skriver en rubrik. Du kan skriva rubriken medan
+mötet pågår: det som står i fältet när du trycker **Stoppa och transkribera** gäller. Rubriken går
+att byta efteråt med **Byt rubrik**. Filnamnet på en uppladdad fil används aldrig, eftersom
+Röstmemon döper inspelningar efter platsen (en gatuadress).
+
+Vill du transkribera en inspelning en gång till, till exempel med ett annat antal talare? Tryck
+**Transkribera igen** i listan, ändra det som behövs och tryck **Transkribera**. Har du rättat
+talarna för hand försvinner de rättningarna, och sidan säger till först.
 
 ### Med mikrofonen
 
@@ -61,7 +71,7 @@ Google Meet, en Slack-huddle i Slack i Chrome (`app.slack.com`), Teams eller Zoo
   de andra behöver delas upp efter röst.
 - Räkna med dig själv i "Hur många pratar?". Tre betyder du och två till.
 - Det fungerar bara i Chrome och andra Chromium-webbläsare. Safari och Firefox kan inte dela
-  ljudet från en flik.
+  ljudet från en flik, så där går valet inte att välja.
 - Möten i **apparna** (Slack-appen, Teams, Zoom) har ingen flik att dela. Öppna mötet i Chrome,
   eller använd högtalare och **Med mikrofonen**. En Mac-hjälpare som hämtar ljudet direkt från
   apparna finns som förslag i [#1](https://github.com/jamesmcstrid/Akasha-Meet/issues/1).
@@ -71,6 +81,9 @@ Google Meet, en Slack-huddle i Slack i Chrome (`app.slack.com`), Teams eller Zoo
 - **Be alltid om lov innan du spelar in någon.** I ett digitalt möte ser de andra inte att du
   spelar in, som de gör när Meet själv spelar in. Säg till.
 - Låt fliken vara öppen och datorn vaken. Om locket stängs slutar inspelningen.
+- Under inspelningen visar **Ljudnivå** att ljud kommer in, och flikens namn visar att du spelar
+  in. Hörs inget ljud på ungefär tio sekunder varnar sidan. Kontrollera då att rätt mikrofon är
+  vald och att den inte är avstängd.
 - Medan texten tas fram somnar datorn inte av sig själv. Stänger du locket pausas
   transkriberingen och fortsätter när du öppnar det igen.
 - Om fliken stängs eller datorn startas om ligger inspelningen kvar i listan som "Spelar in".
@@ -81,8 +94,8 @@ Google Meet, en Slack-huddle i Slack i Chrome (`app.slack.com`), Teams eller Zoo
 ### Hur lång tid tar det?
 
 På en MacBook Air med Apple Silicon tog ett möte på 1 timme och 24 minuter 12 minuter att
-transkribera och dela upp per talare, alltså drygt 8 minuter per timme möte. Förloppet syns i
-listan.
+transkribera och dela upp per talare, alltså drygt 8 minuter per timme möte. Medan texten tas
+fram visar sidan ungefär hur lång tid som är kvar.
 
 ## Installera
 
@@ -157,9 +170,11 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 | "Inte redo" uppe till höger | Håll muspekaren över texten för att se orsaken. Oftast saknas modellerna: `bash mac/installera.sh` |
 | `Bootstrap failed: 5` vid installation | Uppdatera (`git pull`) och kör `bash mac/installera.sh` igen. Hjälper inte det: Systeminställningar → Allmänt → Inloggningsobjekt, tillåt `bash` i bakgrunden |
 | "Fick inte tillgång till mikrofonen" | Tillåt mikrofonen för sidan i webbläsarens inställningar, och för webbläsaren i Systeminställningar → Integritet och säkerhet → Mikrofon |
-| Texten är inte uppdelad per talare | Kontrollera att "Hur många pratar?" inte står på 1, och tryck **Gör om** i listan |
-| Fel antal talare, eller "bara 1 röst gick att skilja åt" | Tryck **Gör om** med rätt antal. Ange inte fler än som pratar; är du osäker, välj **Vet inte – gissa**. Rösterna skiljs lättare åt om ni sitter på ungefär samma avstånd från datorn. Är ni många i rummet hjälper en konferensmikrofon mitt på bordet |
+| Texten är inte uppdelad per talare | Tryck **Transkribera igen** i listan och välj fler än 1 under "Hur många pratar?" |
+| Fel antal talare, eller "bara 1 röst gick att skilja åt" | Tryck **Transkribera igen** i listan och välj rätt antal. Ange inte fler än som pratar; är du osäker, välj **Vet inte – gissa**. Rösterna skiljs lättare åt om ni sitter på ungefär samma avstånd från datorn. Är ni många i rummet hjälper en konferensmikrofon mitt på bordet |
 | Du vill visa någon hur det gick, utan att dela texten | `bash halsokoll/sammanfatta.sh` skriver ut tider, talare och tecken på fel, men inga ord ur mötet. `bash halsokoll/talardiagnos.sh` visar varför det blev så många talare, och `bash halsokoll/jamfor.sh <id A> <id B>` jämför två transkriberingar av samma möte. Se [docs/TEKNIK.md](docs/TEKNIK.md) |
+| "Inget ljud hörs" under inspelningen | Kontrollera att rätt mikrofon är vald och inte avstängd: i webbläsarens inställningar och i Systeminställningar → Ljud → Ingång |
+| Transkriberingen misslyckades | Öppna inspelningen och tryck **Försök igen** |
 | Mötesljudet saknas i ett digitalt möte | Kryssade du i **Dela även flikljud**? Det går bara i Chrome. Gör en ny inspelning |
 | Inspelningen fastnade på "Spelar in" | Tryck **Avsluta och transkribera** i listan |
 

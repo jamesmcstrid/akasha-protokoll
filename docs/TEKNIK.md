@@ -38,6 +38,43 @@ Köra enhetstesterna:
 venv/bin/python -m unittest discover -s tester
 ```
 
+## Webbsidan och API:t
+
+Webbsidan är en enda sida utan ramverk: `app/static/index.html`, `app.js` och `stil.css`. Den
+pratar med tjänsten via JSON. Allt som ändrar något är `POST` och kräver headern `X-Akasha-Meet: 1`.
+
+| Anrop | Vad |
+|---|---|
+| `POST /api/inspelningar` | Ny inspelning: filändelse, rubrik, antal talare, ord och källa. Svarar med id |
+| `POST /api/inspelningar/<id>/del?nr=N` | En del av ljudet, var femte sekund under inspelningen |
+| `POST /api/inspelningar/<id>/klar` | Inspelningen är slut. Tar emot `talare`, `ord` och `titel`, som läses vid stopp så att de kan ändras under mötet. En tom `titel` behåller rubriken från starten. Utan `talare` gäller inställningarna från starten ("Avsluta och transkribera") |
+| `POST /api/inspelningar/fil` | Uppladdad fil (multipart) |
+| `POST /api/inspelningar/<id>/transkribera` | "Transkribera igen" (och "Försök igen"): `talare` och `ord` från dialogen. Källan behålls alltid, eftersom kanalerna i filen inte ändras |
+| `GET /api/inspelningar`, `GET /api/inspelningar/<id>` | Listan, och en inspelning med text |
+| `POST …/titel`, `…/namn`, `…/talare`, `…/talare/angra`, `…/radera` | Byt rubrik, spara talarnamn, rätta talare, ångra alla rättningar, radera |
+| `GET …/text.md`, `…/text.txt`, `…/ljud` | Nedladdningar. `?ladda_ner=1` på ljudet ger en fil att spara |
+
+Medan ett jobb pågår har inspelningen fältet `framsteg`: `fas` (`koar`, `transkriberar` eller
+`talare`), `andel` (0–1) och `sekunder`, hur länge den här fasen har pågått. Sidan räknar ut
+ungefär hur lång tid som är kvar av transkriberingen ur `andel` och `sekunder`, och visar
+ingenting förrän minst 5 % är klart och 15 s har gått. Framsteget finns bara i minnet.
+
+Sidan i korthet:
+
+- **Ny transkribering:** antal talare, svårstavade ord och rubrik läses när man trycker Stoppa.
+  Källan (mikrofon eller digitalt) gäller bara inspelning, och "Digitalt" är avstängt i
+  webbläsare som inte kan dela flikljud (allt utom Chrome och andra Chromium-webbläsare). Under inspelningen visar en
+  nivåmätare ljudet, och en varning visas om nivån har legat under −80 dBFS i tio sekunder.
+  Flikens titel visar ● och tiden.
+- **Listan:** byggs om varannan sekund medan något pågår. "Transkribera igen" öppnar en dialog
+  som fylls i från inspelningens egna inställningar, inte från formuläret högst upp.
+- **Visningen** i tre steg: 1 Vem är vem? (namnen sparas när fältet lämnas eller med Enter;
+  "Lyssna" spelar upp till 10 s av talarens längsta säkra replik), 2 Kontrollera mot ljudet
+  (förklaring av markeringarna, en rad med ljudspelaren som följer med vid bläddring, och texten)
+  och 3 Använd texten. Ett klick på ett osäkert ord spelar från 2 s före ordets uppskattade tid.
+- **Kvitton och fel** från listan och visningen visas i en ruta nederst i fönstret. Kvitton
+  försvinner efter 6 s, fel ligger kvar tills man stänger dem.
+
 ## Talaruppdelningen
 
 Första versionen använde pyannote för att hitta talarbyten. I det första riktiga samtalet, två
@@ -75,7 +112,7 @@ hos Talare 1. Nu används en annan metod som klarar samma inspelning:
 eller alla repliker från en talare få en annan talare. Repliker i följd med samma talare slås ihop.
 Ordtiderna sparas inte, så när en replik delas uppskattas tiden utifrån andelen text före
 delningen. Maskinens version sparas som `segment_original` i inspelningens `.json` vid första
-rättningen, så att allt kan ångras. Gör om ersätter båda.
+rättningen, så att allt kan ångras. "Transkribera igen" ersätter båda, så dialogen varnar först.
 
 **Osäkra ställen** markeras på webbsidan, som en hjälp att veta var man ska börja kontrollera:
 
@@ -208,7 +245,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
 **I en Linux-miljö utan grafikprocessor** (samma Python- och biblioteksversioner):
 
-- **Enhetstester:** 78 st, gröna. De täcker talaruppdelning (även digitala möten), lagring av
+- **Enhetstester:** 81 st, gröna. De täcker talaruppdelning (även digitala möten), lagring av
   inspelningar i delar, export, skydd mot andra webbsidor och alla API-flöden.
 - **`installera.sh` från början:** med en ersättare för launchd, även en ominstallation när
   tjänsten redan finns. Modellnedladdningen med sha256-kontroll gick igenom.
@@ -216,6 +253,12 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 - **Webbsidan i Chromium**, med en ljudfil som låtsasmikrofon: inspelning, stopp, talaruppdelning,
   namn, rubrik, kopiera, nedladdning, uppladdning, radering och en inspelning där fliken stängdes
   mitt i, som sedan avslutades från listan.
+- **Den omgjorda webbsidan i Chromium**, med påhittade inspelningar i alla lägen och en riktig
+  transkribering: rubrik som skrivs under inspelningen, varningen om inget ljud (med en tyst
+  ljudström), dialogen "Transkribera igen", förloppet med tid kvar, namn som sparas av sig själva,
+  "Lyssna", klick på osäkra ord, rättning av talare med mus och tangentbord, kvittorutan och
+  kontrasten i ljust och mörkt läge (uppmätt i webbläsaren). Inte provat: Safari, skärmläsare
+  och tröskeln för varningen om inget ljud med en riktig mikrofon.
 - **Digitalt möte i Chromium:** mikrofonen i vänster kanal och en delad ljudström i höger. Mannen i
   mikrofonen blev **Du** och kvinnan i "mötet" Talare 2. Chromes testläge kan inte dela en riktig
   flik med ljud, så själva flikdelningen ersattes av en ljudström via samma `getDisplayMedia`.
