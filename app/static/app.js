@@ -401,15 +401,16 @@ function laddaUpp(fil) {
 
 // --- listan --------------------------------------------------------------------------------
 
+// Etiketten ar kort. Ett felmeddelande star pa en egen rad under (se rendera), annars bryts
+// etiketten fult. I ko finns inget framsteg att visa, sa dar blir det bara "I ko".
 function statusElement(m) {
   const text = STATUS[m.status] || m.status;
   const span = el("span", { class: `status ${m.status}` });
-  if (PAGAENDE.has(m.status) && m.framsteg) {
+  const fas = m.framsteg && m.framsteg.fas;
+  if (PAGAENDE.has(m.status) && m.status !== "koar" && fas && fas !== "koar") {
     const andel = m.framsteg.andel || 0;
-    span.append(`${STATUS[m.framsteg.fas] || text} ${Math.round(andel * 100)} % `,
-      el("progress", { max: "1", value: String(andel) }));
-  } else if (m.status === "fel" || m.status === "avbruten") {
-    span.append(`${text}: ${m.fel || ""}`);
+    span.append(`${STATUS[fas] || text} ${Math.round(andel * 100)} % `,
+      el("progress", { max: "1", value: String(andel), "aria-hidden": "true" }));
   } else {
     span.append(text);
   }
@@ -418,29 +419,55 @@ function statusElement(m) {
 
 function rendera(lista) {
   const ul = $("lista");
+  // Listan byggs om varannan sekund medan nagot transkriberas: behall fokus pa samma knapp,
+  // annars tappar den som anvander tangentbordet sin plats.
+  const fokus = ul.contains(document.activeElement)
+    ? { id: document.activeElement.closest("li")?.dataset.id, roll: document.activeElement.dataset.roll }
+    : null;
   ul.replaceChildren();
   $("tom").hidden = lista.length > 0;
   for (const m of lista) {
     const atgarder = el("span", { class: "knappar" });
     const egenInspelning = inspelning && inspelning.id === m.id;
     if (m.status === "spelar_in" && !egenInspelning) {
-      atgarder.append(el("button", { type: "button", class: "knapp liten-knapp", onclick: () => avsluta(m.id) },
-        "Avsluta och transkribera"));
+      atgarder.append(el("button", { type: "button", class: "knapp liten-knapp", "data-roll": "avsluta",
+        onclick: () => avsluta(m.id) }, "Avsluta och transkribera"));
     }
     if (["sparad", "fel", "avbruten", "klar"].includes(m.status)) {
-      atgarder.append(el("button", { type: "button", class: "knapp liten-knapp", onclick: () => transkriberaIgen(m) },
-        m.status === "klar" ? "Gör om" : "Transkribera"));
+      atgarder.append(el("button", { type: "button", class: "knapp liten-knapp", "data-roll": "transkribera",
+        "aria-haspopup": "dialog", onclick: () => transkriberaIgen(m) },
+      m.status === "klar" ? "Transkribera igen" : "Transkribera"));
     }
     if (!PAGAENDE.has(m.status) && !egenInspelning) {
-      atgarder.append(el("button", { type: "button", class: "knapp liten-knapp fara", onclick: () => radera(m) },
-        "Radera"));
+      atgarder.append(el("button", { type: "button", class: "knapp liten-knapp fara", "data-roll": "radera",
+        onclick: () => radera(m) }, "Radera"));
     }
-    ul.append(el("li", {},
-      el("button", { type: "button", class: "post", onclick: () => visa(m.id) },
-        el("span", { class: "post-rubrik" }, m.rubrik),
-        el("span", { class: "post-info" }, m.info || ""), " ",
-        statusElement(m)),
+    const harFel = (m.status === "fel" || m.status === "avbruten") && m.fel;
+    ul.append(el("li", { "data-id": m.id },
+      el("button", { type: "button", class: "post", "data-roll": "visa", onclick: () => visa(m.id) },
+        el("span", { class: "post-text" },
+          el("span", { class: "post-rubrik" }, m.rubrik),
+          el("span", { class: "post-rad" }, el("span", { class: "post-info" }, m.info || ""), " ", statusElement(m)),
+          harFel ? el("span", { class: "post-fel" }, m.fel) : null),
+        el("span", { class: "post-pil", "aria-hidden": "true" }, "›")),
       atgarder));
+  }
+  markeraVisad();
+  if (fokus && fokus.id) {
+    const li = [...ul.children].find((x) => x.dataset.id === fokus.id);
+    const knapp = li && (li.querySelector(`[data-roll="${fokus.roll}"]`) || li.querySelector(".post"));
+    if (knapp) knapp.focus({ preventScroll: true });
+  }
+}
+
+// Raden for inspelningen som visas ar markerad, sa att man ser var i listan man ar.
+function markeraVisad() {
+  for (const li of $("lista").children) {
+    const vald = visadId !== null && li.dataset.id === visadId;
+    li.classList.toggle("visad", vald);
+    const post = li.querySelector(".post");
+    if (vald) post.setAttribute("aria-current", "true");
+    else post.removeAttribute("aria-current");
   }
 }
 
@@ -468,16 +495,76 @@ async function avsluta(id) {
   uppdateraLista();
 }
 
-async function transkriberaIgen(m) {
-  const id = m.id;
-  if (m.rattad && !confirm(`Göra om "${m.rubrik}"? Dina rättningar av talarna försvinner.`)) return;
-  const { talare, ord } = installningar();
+// --- transkribera igen ---------------------------------------------------------------------
+
+let omInspelning = null; // inspelningen som dialogen galler
+
+// Oppnar dialogen. Antal talare och ord fylls i fran inspelningen sjalv, inte fran formularet
+// hogst upp: efter en omladdning star det 2 talare dar, vilket gjorde om stora moten fel.
+// m ar en post fran listan (m.rattad) eller hela inspelningen (m.resultat.segment_original).
+function transkriberaIgen(m) {
+  const inst = m.installningar || {};
+  const talare = String(inst.talare ?? "2");
+  omInspelning = m;
+  $("om-rubrik").textContent = `${m.status === "klar" ? "Transkribera igen" : "Transkribera"}: ${m.rubrik}`;
+  fyllTalarval($("om-talare"), talare);
+  $("om-ord").value = inst.ord || "";
+  $("om-digital").hidden = inst.kalla !== "digitalt";
+  $("om-rattad").hidden = !(m.rattad || (m.resultat && m.resultat.segment_original));
+  $("om-fel").textContent = "";
+  $("om-starta").disabled = false;
+  $("om-dialog").showModal();
+}
+
+// Samma alternativ som i formularet hogst upp. Servern tillater 1-10 och auto, sa ett varde
+// som inte finns bland alternativen laggs till i stallet for att tyst bli nagot annat.
+function fyllTalarval(select, varde) {
+  const forlaga = $("talare");
+  select.replaceChildren(...(forlaga
+    ? [...forlaga.options].map((o) => el("option", { value: o.value }, o.textContent))
+    : ["1", "2", "3", "4", "5", "6", "auto"].map((v) => el("option", { value: v }, v))));
+  if (![...select.options].some((o) => o.value === varde)) {
+    const ny = el("option", { value: varde }, varde);
+    const efter = [...select.options].find((o) => o.value === "auto" || Number(o.value) > Number(varde));
+    select.insertBefore(ny, efter || null);
+  }
+  select.value = varde;
+}
+
+async function startaOmtranskribering(e) {
+  e.preventDefault();
+  const m = omInspelning;
+  if (!m) return;
+  const talare = $("om-talare").value, ord = $("om-ord").value.trim();
+  $("om-starta").disabled = true;
+  $("om-fel").textContent = "";
   try {
-    await api("POST", `/api/inspelningar/${id}/transkribera`, { talare, ord });
-    meddela(`Transkriberar igen med ${talare === "auto" ? "gissat antal" : talare} talare.`);
-    visa(id);
-  } catch (e) { meddela(e.message, true); }
+    await api("POST", `/api/inspelningar/${m.id}/transkribera`, { talare, ord });
+  } catch (fel) {
+    // Dialogen stannar oppen, sa att man ser vad som gick fel och kan forsoka igen.
+    $("om-fel").textContent = `Kunde inte starta: ${fel.message}`;
+    $("om-starta").disabled = false;
+    $("om-starta").focus(); // knappen tappade fokus nar den var avstangd
+    return;
+  }
+  omInspelning = null; // fokus ska inte tillbaka till listan: visningen oppnas
+  $("om-dialog").close();
+  visa(m.id);
   uppdateraLista();
+}
+
+function stangOmdialog() {
+  // close-handelsen kommer i efterhand: har dialogen hunnit oppnas igen galler den en annan inspelning.
+  if ($("om-dialog").open) return;
+  const id = omInspelning && omInspelning.id;
+  omInspelning = null;
+  // Listan kan ha byggts om medan dialogen var oppen. Da finns knappen som oppnade den inte
+  // langre, och fokus ska tillbaka till samma knapp i den nya listan.
+  if (id && document.activeElement === document.body) {
+    const li = [...$("lista").children].find((x) => x.dataset.id === id);
+    const knapp = li && (li.querySelector('[data-roll="transkribera"]') || li.querySelector(".post"));
+    if (knapp) knapp.focus();
+  }
 }
 
 async function radera(m) {
@@ -530,6 +617,7 @@ async function visa(id, tyst = false) {
   $("v-angra").hidden = !(res && res.segment_original);
   if (byttId && !tyst) v.scrollIntoView({ behavior: "smooth", block: "start" });
   if (PAGAENDE.has(m.status)) uppdateraLista();
+  markeraVisad();
 }
 
 function talarnummer(m) {
@@ -778,6 +866,7 @@ function stangVisning() {
   stangTalarval();
   $("visning").hidden = true;
   $("v-ljud").removeAttribute("src");
+  markeraVisad();
 }
 
 // --- start ---------------------------------------------------------------------------------
@@ -793,6 +882,9 @@ $("v-byt-rubrik").addEventListener("click", () => visaRubrikform($("v-rubrikform
 $("v-rubrik-avbryt").addEventListener("click", () => visaRubrikform(false));
 $("v-rubrikform").addEventListener("submit", sparaRubrik);
 $("v-angra").addEventListener("click", angraRattningar);
+$("om-form").addEventListener("submit", startaOmtranskribering);
+$("om-avbryt").addEventListener("click", () => $("om-dialog").close());
+$("om-dialog").addEventListener("close", stangOmdialog);
 $("v-text").addEventListener("mouseup", efterMarkering);
 $("v-text").addEventListener("keyup", (e) => { if (e.shiftKey) efterMarkering(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") stangTalarval(); });

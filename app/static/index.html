@@ -137,6 +137,30 @@
 
   <div id="talarval" class="talarval" role="dialog" aria-labelledby="talarval-rubrik" hidden></div>
 
+  <dialog id="om-dialog" class="dialog" aria-labelledby="om-rubrik">
+    <form id="om-form">
+      <h2 id="om-rubrik"></h2>
+      <div class="falt">
+        <label for="om-talare">Hur många pratar?</label>
+        <select id="om-talare" aria-describedby="om-digital"></select>
+        <p id="om-digital" class="hjalp" hidden>Räkna med dig själv i antalet.</p>
+      </div>
+      <div class="falt">
+        <label for="om-ord">Svårstavade ord <span class="valfritt">(valfritt)</span></label>
+        <input id="om-ord" type="text" maxlength="500" autocomplete="off" placeholder="t.ex. Hagström, ISO 9001"
+          aria-describedby="om-ord-hjalp">
+        <p id="om-ord-hjalp" class="hjalp">Namn och facktermer som sägs i mötet. Hjälper programmet att stava dem rätt.</p>
+      </div>
+      <p id="om-rattad" class="varning" hidden>Du har rättat talarna för hand. De rättningarna försvinner
+        när inspelningen transkriberas igen.</p>
+      <p id="om-fel" class="meddelande fel" role="alert"></p>
+      <div class="knappar">
+        <button id="om-starta" type="submit" class="knapp primar">Transkribera</button>
+        <button id="om-avbryt" type="button" class="knapp">Avbryt</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="/static/app.js"></script>
 </body>
 </html>
