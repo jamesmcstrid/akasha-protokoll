@@ -32,6 +32,12 @@ let pollTimer = null;
 let namnLage = null; // talarnamnen som sparats eller halls pa att sparas: { id, sparade, ko, vantar }
 let prov = null; // pagaende rostprov fran en Lyssna-knapp: { knapp, start, slut, timer }
 let talarvalAnkare = null; // det som oppnade talarvalsrutan, dit fokus gar tillbaka
+let modellerVisades = false; // modellkortet syntes vid senaste renderingen
+let modellerInteNu = false; // "Inte nu" tryckt i den har sidvisningen (bara nar rostmodellen saknas)
+let modellTimer = null;
+let senastTillstand = null; // hamtningens tillstand vid senaste renderingen
+let modellAnrop = false; // ett POST fran "Hamta nu" ar pa vag: en rendering far inte skriva over knappen
+let stoppAnrop = false; // detsamma for "Stoppa hamtningen"
 
 // --- hjalpfunktioner -----------------------------------------------------------------------
 
@@ -164,6 +170,172 @@ async function kollaTjanst() {
     t.textContent = "Tjänsten svarar inte";
     t.className = "tjanst fel";
   }
+}
+
+// --- modellerna: forsta start ---------------------------------------------------------------
+
+const HAMTAR = new Set(["hamtar", "kontrollerar"]);
+
+// Decimala enheter, avrundat forst sa att 999,6 MB blir "1,0 GB" och aldrig "1000 MB". Samma regel
+// som modeller.storlek_text i Python.
+function storlekText(byte) {
+  const mb = Math.round(byte / 1e6);
+  if (mb < 1000) return `${mb} MB`;
+  return `${(byte / 1e9).toFixed(1).replace(".", ",")} GB`;
+}
+
+async function kollaModeller() {
+  clearTimeout(modellTimer);
+  let d;
+  try {
+    d = await api("GET", "/api/modeller");
+  } catch {
+    // Syns kortet gar hamtningen kanske vidare: forsok igen.
+    if (modellerVisades) modellTimer = setTimeout(kollaModeller, 3000);
+    return;
+  }
+  renderaModeller(d);
+  clearTimeout(modellTimer); // bara en timer, aven om tva anrop var pa vag samtidigt
+  if (HAMTAR.has(d.hamtning.tillstand)) modellTimer = setTimeout(kollaModeller, 1000);
+}
+
+// Kortet #modeller enligt tabellen i planen: fullt lage (taligenkanningen saknas), talarlage
+// (bara rostmodellen) eller dolt. Allt byggs med el() och textContent, aldrig innerHTML.
+function renderaModeller(d) {
+  const h = d.hamtning;
+  const saknas = d.saknas || [];
+  const pagar = HAMTAR.has(h.tillstand);
+  const fullt = !d.hinder && saknas.some((p) => p.id === "taligenkanning");
+  const lage = d.hinder || !saknas.length ? null : fullt ? "fullt" : modellerInteNu ? null : "talare";
+  // Fokus lases innan nagot doljs: ett dolt element ger body.
+  const fokus = document.activeElement;
+  const fokusIKortet = !fokus || fokus === document.body || $("modeller").contains(fokus);
+  const stoppad = HAMTAR.has(senastTillstand) && h.tillstand === "avbruten";
+
+  if (!lage) {
+    const hadeKort = modellerVisades;
+    $("modeller").hidden = true;
+    $("ny").hidden = false;
+    modellerVisades = false;
+    if (hadeKort && !d.hinder && !saknas.length) {
+      meddela("");
+      kvitto("Klart. Modellerna är hämtade och kontrollerade.");
+      kollaTjanst();
+      if (fokusIKortet) $("ny-rubrik").focus();
+    }
+    senastTillstand = h.tillstand;
+    return;
+  }
+
+  modellerVisades = true;
+  $("modeller").hidden = false;
+  $("ny").hidden = lage === "fullt";
+  if (lage === "fullt") meddela(""); // "Tjansten ar inte redo" hor inte hemma i det dolda kortet
+
+  sattText($("m-rubrik"), lage === "fullt" ? "Hämta modellerna" : "Hämta röstmodellen");
+  sattText($("m-intro"),
+    lage === "talare"
+      ? "Röstmodellen som delar upp texten per talare är inte hämtad. Utan den blir texten inte uppdelad per talare. Det görs bara en gång."
+      : saknas.length > 1
+        ? "Innan du kan transkribera behöver Akasha Meet hämta modellerna som gör tal till text och delar upp texten per talare. Det görs bara en gång."
+        : "Innan du kan transkribera behöver Akasha Meet hämta modellen som gör tal till text. Det görs bara en gång.");
+
+  const lista = $("m-lista");
+  const nyckel = JSON.stringify(saknas);
+  if (lista.dataset.nyckel !== nyckel) {
+    lista.dataset.nyckel = nyckel;
+    lista.replaceChildren(...saknas.map((p) => el("li", {}, el("strong", {}, p.namn),
+      `: ${p.beskrivning}. ${storlekText(p.storlek)} från ${p.kalla}, licens ${p.licens}.`)));
+  }
+
+  // totalt ar hela filernas storlek; det som ligger kvar som .delvis hamtas inte igen.
+  const aterstar = Math.max(0, d.totalt - d.redan_hamtat);
+  const disk = $("m-disk");
+  const diskNyckel = [d.katalog, aterstar, d.ledigt, d.redan_hamtat].join("|");
+  if (disk.dataset.nyckel !== diskNyckel) {
+    disk.dataset.nyckel = diskNyckel;
+    disk.replaceChildren("Modellerna sparas i ", el("code", {}, d.katalog),
+      `. Det behövs ${storlekText(aterstar)} ledigt utrymme, och det finns ${storlekText(d.ledigt)}.`
+      + (d.redan_hamtat > 0 ? ` ${storlekText(d.redan_hamtat)} är redan hämtat och hämtas inte igen.` : ""));
+  }
+
+  $("m-forlopp").hidden = !pagar;
+  $("m-pagar").hidden = !pagar;
+  if (pagar) {
+    const andel = h.totalt > 0 ? Math.max(0, Math.min(1, h.hamtat / h.totalt)) : 0;
+    $("m-andel").value = andel;
+    sattText($("m-procent"), `${storlekText(h.hamtat)} av ${storlekText(h.totalt)} · ${Math.round(andel * 100)} %`);
+    sattText($("m-forlopp-text"), `${h.tillstand === "kontrollerar" ? "Kontrollerar" : "Hämtar"}${h.fil ? ` ${h.fil}` : ""}.`
+      + (h.kvar_s !== null && h.kvar_s !== undefined ? ` ${kvarText(h.kvar_s)}` : ""));
+  }
+  sattText($("m-fel"), h.tillstand === "fel" ? h.fel || "" : "");
+
+  // Under hamtningen ar "Hamta nu" dold och "Stoppa hamtningen" synlig, annars tvartom.
+  const hamta = $("m-hamta"), stoppa = $("m-stoppa");
+  hamta.hidden = pagar;
+  stoppa.hidden = !pagar;
+  $("m-inte-nu").hidden = lage !== "talare" || pagar;
+  if (!pagar && !modellAnrop) {
+    hamta.textContent = h.tillstand === "fel" ? "Försök igen" : `Hämta nu (${storlekText(aterstar)})`;
+    hamta.removeAttribute("aria-disabled");
+  }
+  if (pagar && !stoppAnrop) {
+    const stoppar = !!h.stoppas;
+    stoppa.textContent = stoppar ? "Stoppar…" : "Stoppa hämtningen";
+    if (stoppar) stoppa.setAttribute("aria-disabled", "true"); else stoppa.removeAttribute("aria-disabled");
+  }
+
+  // aria-disabled i stallet for disabled, sa att fokus stannar pa knappen medan den arbetar.
+  if (pagar && fokus === hamta) stoppa.focus();
+  if (stoppad) {
+    kvitto("Hämtningen är stoppad. Det som redan hämtats ligger kvar, och Hämta nu fortsätter där det slutade.");
+    if (fokusIKortet) hamta.focus();
+  }
+  senastTillstand = h.tillstand;
+}
+
+async function hamtaModeller() {
+  const knapp = $("m-hamta");
+  if (knapp.getAttribute("aria-disabled") === "true") return;
+  modellAnrop = true;
+  knapp.textContent = "Hämtar…";
+  knapp.setAttribute("aria-disabled", "true");
+  try {
+    const svar = await api("POST", "/api/modeller/hamta");
+    modellAnrop = false;
+    renderaModeller(svar);
+    kollaModeller();
+  } catch (e) {
+    modellAnrop = false;
+    sattText($("m-fel"), e.message);
+    knapp.textContent = "Försök igen";
+    knapp.removeAttribute("aria-disabled");
+  }
+}
+
+async function stoppaHamtning() {
+  const knapp = $("m-stoppa");
+  if (knapp.getAttribute("aria-disabled") === "true") return;
+  stoppAnrop = true;
+  knapp.textContent = "Stoppar…";
+  knapp.setAttribute("aria-disabled", "true");
+  try {
+    const svar = await api("POST", "/api/modeller/avbryt");
+    stoppAnrop = false;
+    renderaModeller(svar); // pollningen fortsatter tills tillstandet inte langre ar hamtar/kontrollerar
+  } catch (e) {
+    stoppAnrop = false;
+    kvitto(e.message, true);
+    knapp.textContent = "Stoppa hämtningen";
+    knapp.removeAttribute("aria-disabled");
+  }
+}
+
+function inteNu() {
+  modellerInteNu = true;
+  modellerVisades = false;
+  $("modeller").hidden = true;
+  $("ny-rubrik").focus();
 }
 
 // --- inspelning ----------------------------------------------------------------------------
@@ -731,7 +903,11 @@ function renderaForlopp(m) {
 // tidigt att saga (eller om servern inte skickar hur lange steget har hallit pa).
 function tidKvar(andel, sekunder) {
   if (!(andel >= 0.05) || !(sekunder >= 15)) return "";
-  const kvar = (sekunder * (1 - andel)) / andel;
+  return kvarText((sekunder * (1 - andel)) / andel);
+}
+
+// Tid kvar som text, grovt avrundad. Samma formulering for transkriberingen och modellhamtningen.
+function kvarText(kvar) {
   if (kvar < 60) return "Mindre än en minut kvar.";
   let min = Math.round(kvar / 60);
   if (min < 60) {
@@ -1289,6 +1465,9 @@ $("v-rubrikform").addEventListener("submit", sparaRubrik);
 $("v-angra").addEventListener("click", angraRattningar);
 $("om-form").addEventListener("submit", startaOmtranskribering);
 $("kvitto-stang").addEventListener("click", stangKvitto);
+$("m-hamta").addEventListener("click", hamtaModeller);
+$("m-inte-nu").addEventListener("click", inteNu);
+$("m-stoppa").addEventListener("click", stoppaHamtning);
 // Escape stanger ett fel, sa att man slipper tabba ner till rutan. Fangas fore lyssnaren som
 // stanger talarvalet: ar talarvalet eller en dialog oppen ar det den som ska stangas.
 document.addEventListener("keydown", (e) => {
@@ -1336,4 +1515,5 @@ window.addEventListener("beforeunload", (e) => {
 
 hamtaVal();
 kollaTjanst();
+kollaModeller();
 uppdateraLista();

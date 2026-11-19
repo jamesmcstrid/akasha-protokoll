@@ -17,8 +17,31 @@
   </header>
 
   <main>
-    <section class="kort" aria-labelledby="ny-rubrik">
-      <h2 id="ny-rubrik">Ny transkribering</h2>
+    <section id="modeller" class="kort" aria-labelledby="m-rubrik" hidden>
+      <h2 id="m-rubrik" tabindex="-1"></h2>
+      <p id="m-intro"></p>
+      <ul id="m-lista" class="modell-lista"></ul>
+      <p id="m-kalla" class="dampad liten">Filerna hämtas från Hugging Face (huggingface.co), där KBLab och andra delar sina modeller. Varje fil kontrolleras mot en kontrollsumma innan den används, så att den är exakt den som ska användas.</p>
+      <p id="m-natet" class="tips">Det här är den enda gången Akasha Meet använder internet. Inga inspelningar eller texter skickas någonstans, varken nu eller senare.</p>
+      <p id="m-disk" class="dampad liten"></p>
+      <div id="m-forlopp" class="forlopp" hidden>
+        <div class="forlopp-stapel">
+          <progress id="m-andel" max="1" value="0" aria-label="Hämtat"></progress>
+          <span id="m-procent"></span>
+        </div>
+        <p id="m-forlopp-text" class="dampad" role="status" aria-live="polite"></p>
+      </div>
+      <p id="m-fel" class="meddelande fel" role="alert"></p>
+      <div class="knappar">
+        <button id="m-hamta" type="button" class="knapp primar"></button>
+        <button id="m-inte-nu" type="button" class="knapp" hidden>Inte nu</button>
+        <button id="m-stoppa" type="button" class="knapp" hidden>Stoppa hämtningen</button>
+      </div>
+      <p id="m-pagar" class="dampad liten" hidden>Du kan stänga sidan under tiden. Hämtningen fortsätter så länge Akasha Meet är igång. Avbryts den fortsätter nästa försök där det slutade.</p>
+    </section>
+
+    <section id="ny" class="kort" aria-labelledby="ny-rubrik">
+      <h2 id="ny-rubrik" tabindex="-1">Ny transkribering</h2>
 
       <div class="falt">
         <label for="titel">Rubrik <span class="valfritt">(valfritt)</span></label>
@@ -168,6 +191,8 @@
       <ul id="lista" class="lista"></ul>
       <p id="tom" class="dampad">Inga inspelningar än.</p>
     </section>
+
+    <p id="natet" class="dampad liten natet">Akasha Meet använder internet bara för att hämta modellerna, en gång. Inspelningar och texter lämnar aldrig datorn.</p>
   </main>
 
   <!-- Kvitton och fel for listan och visningen. Fast nederst i fonstret, sa att de syns dar man

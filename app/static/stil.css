@@ -268,6 +268,10 @@ audio { width: 100%; margin: 10px 0; }
 .forlopp-stapel { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
 .forlopp-stapel progress { flex: 1 1 200px; height: 10px; }
 .forlopp p { margin: 8px 0 0; }
+.modell-lista { margin: 0 0 12px; padding-left: 1.2em; }
+.modell-lista li + li { margin-top: 6px; }
+.knapp[aria-disabled="true"] { opacity: .45; cursor: progress; }
+.natet { margin: 20px 4px 0; text-align: center; }
 
 /* De tre stegen: vem ar vem, kontrollera, anvand */
 .steg { margin-top: 20px; }
