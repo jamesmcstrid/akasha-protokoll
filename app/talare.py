@@ -15,6 +15,7 @@ segmentering inga talarbyten alls, medan fonstermetoden hittade dem (se docs/TEK
 Ingen modell ror texten: whisper transkriberar, och har far varje ord en talare.
 """
 import os
+import re
 import threading
 
 import numpy as np
@@ -30,6 +31,8 @@ MIN_TAL_I_FONSTER = 0.3  # andel av fonstret som maste vara tal
 MIN_NIVA = 0.2  # fonster tystare an sa har (andel av mediannivan) hoppas over: brus, inte rost
 VIKT_SIGMA_S = 0.35  # fonster nara ordets mitt vager tyngst (gaussisk vikt), 0 = lika vikt
 MIN_GRUPP = 3  # "vet inte": en talare maste ha minst sa manga fonster (1,5 s eget tal)
+MENING_PAUS_S = 0.4  # meningsregeln: en sa har lang paus avslutar ocksa en mening
+KORT_SJOK = 3  # meningsregeln: hogst sa manga ord i rad kan fa meningens talare
 STOR_GRUPP_S = 30.0  # sammanslagning: grupper med minst sa mycket tal jamfors grupp for grupp
 SAKER_KVOT = 4.0  # digitalt mote: ena kanalen maste vara sa har mycket starkare for ett sakert beslut
 
@@ -223,6 +226,51 @@ def utan_tysta(samples, starter):
     return kvar if len(kvar) >= 2 else starter
 
 
+_MENINGSSLUT = re.compile(r"[.?!…][\"'”»)]*$")
+
+
+def meningar(ord_lista):
+    """[(a, b)]: ordindex for meningar. En mening slutar vid . ? ! eller en paus (MENING_PAUS_S)."""
+    ut, a = [], 0
+    for k in range(1, len(ord_lista) + 1):
+        if (k == len(ord_lista) or _MENINGSSLUT.search(ord_lista[k - 1][2].strip())
+                or ord_lista[k][0] - ord_lista[k - 1][1] >= MENING_PAUS_S):
+            ut.append((a, k))
+            a = k
+    return ut
+
+
+def jamna_ut(ord_lista, etiketter):
+    """Talaren byter sallan mitt i en mening. Inom en mening far korta avvikande sjok (hogst
+    KORT_SJOK ord i rad) samma talare som meningen i ovrigt, om en talare har mer an halften av
+    meningens ord. Egna meningar ("Ja, ja.") och langre avvikelser rors inte.
+
+    Varfor: ordtiderna ar ungefarliga (whisper.cpp:s kan hamna en sekund fel), och ett skratt eller
+    "mm" fran nagon annan kan ta over ett ord. Da hamnade enstaka ord mitt i en mening hos fel
+    person, och en tredjedel av replikerna i ett riktigt mote blev 1-3 ord. Svagheten: saknar
+    whisper skiljetecken vid ett talarbyte kan ett kort svar ("Nej, precis.") hamna hos den andra.
+    """
+    et = list(etiketter)
+    for a, b in meningar(ord_lista):
+        if b - a < 2:
+            continue
+        antal = {}
+        for e in et[a:b]:
+            antal[e] = antal.get(e, 0) + 1
+        storst = max(antal, key=antal.get)
+        if antal[storst] * 2 <= b - a:
+            continue  # ingen talare har mer an halften: rors inte
+        k = a
+        while k < b:
+            j = k
+            while j < b and et[j] == et[k]:
+                j += 1
+            if et[k] != storst and j - k <= KORT_SJOK:
+                et[k:j] = [storst] * (j - k)
+            k = j
+    return et
+
+
 def repliker(ord_lista, etiketter, fasta_nummer=False):
     """Sla ihop ord i foljd med samma talare till repliker. Talarna numreras fran 1 i den
     ordning de forst sager nagot, eller far etiketten som nummer (fasta_nummer).
@@ -287,7 +335,7 @@ def dela_upp(samples, ord_lista, antal, framsteg=None):
     """
     ord_lista = [o for o in ord_lista if o[2].strip()]
     etiketter, _, varning = _klustra(samples, ord_lista, antal, framsteg)
-    rep = repliker(ord_lista, etiketter)
+    rep = repliker(ord_lista, jamna_ut(ord_lista, etiketter))
     return rep, len({r["speaker"] for r in rep}), varning
 
 
@@ -357,5 +405,5 @@ def dela_upp_kanaler(vanster, hoger, ord_lista, antal, framsteg=None):
         else:
             e = next(kvar)
             etiketter.append(nummer.setdefault(e, len(nummer) + 2))
-    rep = repliker(ord_lista, etiketter, fasta_nummer=True)
+    rep = repliker(ord_lista, jamna_ut(ord_lista, etiketter), fasta_nummer=True)
     return rep, len({r["speaker"] for r in rep}), varning

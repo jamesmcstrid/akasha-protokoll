@@ -18,8 +18,9 @@ app/app.py (Flask, bara 127.0.0.1) ── sparar i ~/AkashaMeet ── köar ett
        3. vem pratar när:                                        app/talare.py
           röstavtryck (NeMo TitaNet small via sherpa-onnx) i fönster om 1,5 s
           längs talet, uppdelade i lika många grupper som antalet talare
-       4. varje ord får gruppen som fönstren runt ordet liknar mest → repliker
-       5. sparar .json och .md                                   app/lagring.py, app/export.py
+       4. varje ord får gruppen som fönstren runt ordet liknar mest
+       5. talaren byter inte mitt i en mening (korta avvikelser rättas) → repliker
+       6. sparar .json och .md                                   app/lagring.py, app/export.py
 ```
 
 | Mapp | Innehåll |
@@ -62,6 +63,13 @@ hos Talare 1. Nu används en annan metod som klarar samma inspelning:
    av mötesledarens röst mindre än gränsen. För en kort grupp är det tvärtom bra: dess egen röst
    är osäker, och det är oftast en kort avvikelse hos någon som redan finns.
 4. Varje ord får den grupp som fönstren närmast ordet liknar mest.
+5. Talaren byter sällan mitt i en mening. Inom en mening (som slutar vid punkt, frågetecken,
+   utropstecken eller en paus på 0,4 s) får korta avvikande sjok, högst 3 ord i rad, samma talare
+   som resten av meningen, om en talare har mer än hälften av meningens ord. Egna meningar som
+   "Ja, ja." och längre avvikelser rörs inte. Det behövs eftersom ordtiderna är ungefärliga:
+   whisper.cpp:s ordtider låg i ett riktigt möte i snitt 0,17 s före faster-whispers och ibland en
+   sekund fel. Svagheten: om whisper inte sätter något skiljetecken vid ett talarbyte kan ett kort
+   svar som "Nej, precis." hamna hos den andra.
 
 **Digitala möten:** mikrofonen och mötesfliken ligger i varsin kanal. Ett ord hör till den kanal
 som är starkast under ordet, om den är minst fyra gånger så stark; annars får ordet samma som
@@ -75,6 +83,12 @@ pratade hamnade enstaka ord mitt i dina meningar hos de andra. Med fyra gånger 
 ungefär 35 tydligt rätt utifrån innehållet. Med konstgjorda "mm" och skratt i testljudet, där
 facit finns, gick andelen ord med rätt talare från 80–91 % till 89–98 % (medel över åtta
 slumpvisa varianter), och rent ljud gav fortfarande 100 %.
+
+Meningsregeln (punkt 5 ovan) gjorde mest skillnad med whisper.cpp, som din Mac använder. I samma
+möte med whisper.cpp:s ordtider: 141 repliker med 50 korta blev 70 med 6, med tre talare. I ett
+urval av de ändrade orden var ungefär 22 av 24 rätt. Med konstgjorda "mm" och skratt blev 97–99,6 %
+av orden rätt talare. I rummet gav regeln samma resultat för testdialogerna (100 %) och något
+bättre för AMI-mötena (75,3 → 75,7 %, 83,6 → 85,1 % och 89,0 → 90,6 %).
 
 Utvärderat på ordnivå, med båda motorerna:
 

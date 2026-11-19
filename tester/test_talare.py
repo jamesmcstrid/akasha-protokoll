@@ -208,6 +208,25 @@ class TestDelar(unittest.TestCase):
         self.assertEqual(len(c), 1)
         self.assertEqual(set(nya.tolist()), {0})
 
+    def test_meningar_slutar_vid_skiljetecken_och_paus(self):
+        ord_lista = [(0, 1, " Hej"), (1, 2, " du."), (2, 3, " Ja"), (3.6, 4, " visst"), (4, 5, " du?")]
+        self.assertEqual(talare.meningar(ord_lista), [(0, 2), (2, 3), (3, 5)])
+
+    def test_kort_avvikelse_mitt_i_en_mening_far_meningens_talare(self):
+        ord_ = " Jag har tyvarr ingen som jag kan sno stil och pride av.".split(" ")[1:]
+        ord_lista = [(k * 0.3, k * 0.3 + 0.3, " " + o) for k, o in enumerate(ord_)]
+        etiketter = [1] * 8 + [2, 2, 2] + [1]
+        self.assertEqual(talare.jamna_ut(ord_lista, etiketter), [1] * 12)
+
+    def test_egen_mening_och_lang_avvikelse_rors_inte(self):
+        ord_lista = [(0, 0.3, " Det"), (0.3, 0.6, " gar"), (0.6, 0.9, " bra."),
+                     (0.9, 1.2, " Ja,"), (1.2, 1.5, " ja."),
+                     (1.5, 1.8, " vi"), (1.8, 2.1, " ses"), (2.1, 2.4, " nasta"), (2.4, 2.7, " vecka"),
+                     (2.7, 3.0, " och"), (3.0, 3.3, " da"), (3.3, 3.6, " tar"), (3.6, 3.9, " jag"),
+                     (3.9, 4.2, " med"), (4.2, 4.5, " kaffe.")]
+        etiketter = [1, 1, 1, 2, 2] + [1] * 6 + [2] * 4
+        self.assertEqual(talare.jamna_ut(ord_lista, etiketter), etiketter)
+
     def test_repliker_och_numrering(self):
         ord_lista = [(0, 1, " Hej"), (1, 2, " Bo."), (2, 3, " Hej"), (3, 4, "san."), (4, 5, " Ja.")]
         rep = talare.repliker(ord_lista, [7, 7, 3, 3, 7])
