@@ -2,6 +2,7 @@
 import io
 import json
 import os
+import threading
 import unittest
 from unittest import mock
 
@@ -10,8 +11,11 @@ import numpy as np
 import hjalp
 import app as akasha
 import lagring
+import modeller
 import motor
+import plattform
 import talare
+from falsk_hf import FalskHF, falska_paket, session_med
 
 H = {"X-Akasha-Meet": "1"}
 ORD = [(0.0, 0.5, " Hej"), (0.5, 1.0, " Bo."), (1.5, 2.0, " Hej"), (2.0, 2.5, " Anna.")]
@@ -380,21 +384,228 @@ class TestApp(unittest.TestCase):
 
 
 
+class TestModellerApi(unittest.TestCase):
+    """API:t for hamtningen mot den falska Hugging Face. motor.problem och talare.problem patchas inte."""
+
+    def setUp(self):
+        hjalp.tom_datakatalog()
+        self.klient = akasha.app.test_client()
+        self.paket, self.innehall = falska_paket(storlek_per_fil=20_000, storlek_for={"model.bin": 200_000})
+        self.adapter = FalskHF(self.innehall)
+        self.hamtningar = 0
+        riktig = modeller.hamta
+
+        def rakna(*a, **kw):
+            self.hamtningar += 1
+            return riktig(*a, **kw)
+
+        gammal = modeller.HAMTNING
+        modeller.HAMTNING = modeller.Hamtning()
+        self.addCleanup(setattr, modeller, "HAMTNING", gammal)
+        for patch in (mock.patch.object(modeller, "PAKET", self.paket),
+                      mock.patch.object(modeller, "PAUSER", (0, 0)),
+                      mock.patch.object(modeller, "hamta", rakna),
+                      mock.patch.object(modeller, "ny_session", lambda: session_med(self.adapter))):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def tearDown(self):
+        modeller.HAMTNING.vanta(5)
+        motor.AKTIV = "faster"
+
+    def get(self):
+        svar = self.klient.get("/api/modeller")
+        self.assertEqual(svar.status_code, 200)
+        return svar.get_json()
+
+    def post(self, vag="hamta", headers=H, **kw):
+        return self.klient.post("/api/modeller/" + vag, headers=headers, **kw)
+
+    def sokvag(self, fil):
+        return "/" + fil.repo + "/resolve/" + fil.revision + "/" + fil.namn
+
+    def modell_bin(self):
+        return self.paket["faster", "medium"][0]
+
+    def skriv(self, filer):
+        for fil in filer:
+            os.makedirs(os.path.dirname(fil.sokvag()), exist_ok=True)
+            with open(fil.sokvag(), "wb") as f:
+                f.write(self.innehall[self.sokvag(fil)])
+
+    def vanta_pa(self, villkor):
+        for _ in range(500):
+            svar = self.get()
+            if villkor(svar):
+                return svar
+            threading.Event().wait(0.01)
+        self.fail("villkoret uppfylldes aldrig")
+
+    def anrop_till(self, fil):
+        return [rang for url, rang in self.adapter.anrop if url.endswith("/" + fil.namn) and "cdn" in url]
+
+    def test_1_tom_modellkatalog(self):
+        svar = self.get()
+        self.assertFalse(svar["redo"])
+        self.assertIsNone(svar["hinder"])
+        self.assertEqual([p["id"] for p in svar["saknas"]], ["taligenkanning", "talare"])
+        self.assertEqual(svar["totalt"], sum(p["storlek"] for p in svar["saknas"]))
+        self.assertEqual(svar["saknas"][0]["namn"], "KB-Whisper medium")
+        self.assertEqual(svar["saknas"][0]["kalla"], "huggingface.co/KBLab/kb-whisper-medium")
+        self.assertEqual(svar["saknas"][1]["licens"], "CC-BY-4.0")
+        self.assertEqual(svar["hamtning"]["tillstand"], "vilar")
+        self.assertEqual(self.klient.get("/health").status_code, 503)
+
+    def test_2_post_kraver_rubrik_och_ratt_origin(self):
+        self.assertEqual(self.klient.post("/api/modeller/hamta").status_code, 403)
+        self.assertEqual(self.post(headers={**H, "Origin": "https://annan.example"}).status_code, 403)
+        self.assertEqual(self.adapter.anrop, [])
+
+    def test_3_hamtning_ger_redo_utan_omstart(self):
+        svar = self.post()
+        self.assertEqual(svar.status_code, 202)
+        self.assertEqual(svar.get_json()["hamtning"]["tillstand"], "hamtar")
+        modeller.HAMTNING.vanta(5)
+        svar = self.get()
+        self.assertEqual(svar["saknas"], [])
+        self.assertTrue(svar["redo"])
+        self.assertEqual(svar["hamtning"]["tillstand"], "klar")
+        halsa = self.klient.get("/health")
+        self.assertEqual(halsa.status_code, 200)
+        self.assertEqual(halsa.get_json()["status"], "ok")
+
+    def test_4_fel_kontrollsumma_och_nytt_forsok(self):
+        self.adapter.trasig_sokvag = self.sokvag(self.modell_bin())
+        self.adapter.trasig_ganger = 1
+        self.assertEqual(self.post().status_code, 202)
+        modeller.HAMTNING.vanta(5)
+        h = self.get()["hamtning"]
+        self.assertEqual((h["tillstand"], h["felkod"]), ("fel", "kontrollsumma"))
+        self.assertIn("KB-Whisper medium", h["fel"])
+        self.assertNotIn("model.bin", h["fel"])
+        self.assertEqual(self.post().status_code, 202)
+        modeller.HAMTNING.vanta(5)
+        self.assertEqual(self.get()["hamtning"]["tillstand"], "klar")
+
+    def test_5_avbrott_efter_egna_omforsok_och_fortsattning(self):
+        self.adapter.bryt_efter = 50_000
+        self.adapter.bryt_ganger = 10
+        self.post()
+        modeller.HAMTNING.vanta(5)
+        h = self.get()["hamtning"]
+        self.assertEqual((h["tillstand"], h["felkod"]), ("fel", "avbrott"))
+        self.assertTrue(os.path.exists(self.modell_bin().sokvag() + ".delvis"))
+        self.adapter.bryt_efter = None
+        self.post()
+        modeller.HAMTNING.vanta(5)
+        self.assertIsNotNone(self.anrop_till(self.modell_bin())[-1])  # Range-rubriken
+        self.assertEqual(self.get()["hamtning"]["tillstand"], "klar")
+
+    def test_6_post_under_pagaende_hamtning_startar_ingen_ny(self):
+        self.adapter.fordrojning = 0.2
+        self.assertEqual(self.post().status_code, 202)
+        svar = self.post()
+        self.assertEqual(svar.status_code, 200)
+        self.assertEqual(svar.get_json()["hamtning"]["tillstand"], "hamtar")
+        modeller.HAMTNING.vanta(10)
+        self.assertEqual(self.hamtningar, 1)
+        self.assertEqual(self.get()["hamtning"]["tillstand"], "klar")
+
+    def test_7_bara_rostmodellen_saknas(self):
+        self.skriv(self.paket["faster", "medium"])
+        svar = self.get()
+        self.assertEqual([p["id"] for p in svar["saknas"]], ["talare"])
+        self.assertTrue(svar["redo"])
+        self.assertEqual(self.post().status_code, 202)
+        modeller.HAMTNING.vanta(5)
+        self.assertEqual(self.get()["saknas"], [])
+        self.assertEqual({u.split("/")[-1] for u, _ in self.adapter.anrop}, {"nemo_en_titanet_small.onnx"})
+
+    def test_8_hinder(self):
+        with mock.patch.object(motor, "MOTOR", "whispercpp"), mock.patch.object(plattform, "whisper_cli", lambda: None):
+            svar = self.get()
+            self.assertEqual(svar["hinder"], "whisper-cli saknas. Kor: brew install whisper-cpp")
+            self.assertEqual(svar["saknas"], [])
+            self.assertFalse(svar["redo"])
+            post = self.post()
+            self.assertEqual(post.status_code, 409)
+            self.assertEqual(post.get_json()["error"], svar["hinder"])
+        self.assertEqual(self.adapter.anrop, [])
+
+    def test_9_kroppen_ignoreras(self):
+        svar = self.post(json={"url": "https://annan.example/x", "sokvag": "/etc"})
+        self.assertEqual(svar.status_code, 202)
+        modeller.HAMTNING.vanta(5)
+        self.assertEqual({u.split("/")[2] for u, _ in self.adapter.anrop}, {"huggingface.co", "cdn.test.hf.co"})
+        skrivna = [os.path.join(rot, namn) for rot, _, namn_ in os.walk(hjalp.DATA) for namn in namn_]
+        self.assertTrue(skrivna)
+        for sokvag in skrivna:
+            self.assertTrue(sokvag.startswith(modeller.MODELLKATALOG + os.sep), sokvag)
+
+    def test_10_avbryt_skyddas(self):
+        self.assertEqual(self.klient.post("/api/modeller/avbryt").status_code, 403)
+        svar = self.post("avbryt", headers={**H, "Origin": "https://annan.example"})
+        self.assertEqual(svar.status_code, 403)
+
+    def test_11_avbryt_nar_inget_pagar(self):
+        svar = self.post("avbryt")
+        self.assertEqual(svar.status_code, 200)
+        self.assertEqual(svar.get_json()["hamtning"]["tillstand"], "vilar")
+        self.assertFalse(svar.get_json()["hamtning"]["stoppas"])
+
+    def avbryt_under_hamtning(self):
+        """Startar med model.bin som enda saknade fil i taligenkanningen och stoppar den mitt i."""
+        kvar = self.paket["faster", "medium"][0]
+        self.skriv(self.paket["faster", "medium"][1:])
+        self.adapter.fordrojning = 0.3
+        self.assertEqual(self.post().status_code, 202)
+        self.vanta_pa(lambda s: s["hamtning"]["hamtat"] > 0)
+        svar = self.post("avbryt")
+        self.assertEqual(svar.status_code, 202)
+        self.assertTrue(svar.get_json()["hamtning"]["stoppas"])
+        modeller.HAMTNING.vanta(5)
+        return kvar
+
+    def test_12_avbryt_under_hamtning_och_fortsatt(self):
+        kvar = self.avbryt_under_hamtning()
+        svar = self.get()
+        h = svar["hamtning"]
+        self.assertEqual((h["tillstand"], h["stoppas"], h["fel"], h["felkod"]), ("avbruten", False, None, None))
+        self.assertTrue(os.path.exists(kvar.sokvag() + ".delvis"))
+        self.assertFalse(os.path.exists(kvar.sokvag()))
+        for fil in self.paket["faster", "medium"][1:]:
+            self.assertTrue(modeller.komplett(fil))  # kompletta filer ligger kvar
+        self.assertGreater(svar["redan_hamtat"], 0)
+        self.adapter.fordrojning = 0
+        self.assertEqual(self.post().status_code, 202)
+        modeller.HAMTNING.vanta(5)
+        self.assertIsNotNone(self.anrop_till(kvar)[-1])  # Range: fortsatte dar den slutade
+        self.assertEqual(self.get()["hamtning"]["tillstand"], "klar")
+
+    def test_13_nytt_avbrott_stoppar_inte_nasta_hamtning(self):
+        self.avbryt_under_hamtning()
+        self.adapter.fordrojning = 0
+        self.post()
+        modeller.HAMTNING.vanta(5)
+        svar = self.get()
+        self.assertEqual((svar["hamtning"]["tillstand"], svar["saknas"]), ("klar", []))
+
+
 class TestHallVaken(unittest.TestCase):
     def test_caffeinate_startas_och_stoppas_pa_mac(self):
         process = mock.Mock()
-        with mock.patch.object(akasha.platform, "system", return_value="Darwin"), \
-             mock.patch.object(akasha.shutil, "which", return_value="/usr/bin/caffeinate"), \
-             mock.patch.object(akasha.subprocess, "Popen", return_value=process) as popen:
-            with akasha.hall_vaken():
+        with mock.patch.object(plattform.platform, "system", return_value="Darwin"), \
+             mock.patch.object(plattform.shutil, "which", return_value="/usr/bin/caffeinate"), \
+             mock.patch.object(plattform.subprocess, "Popen", return_value=process) as popen:
+            with plattform.hall_vaken():
                 popen.assert_called_once_with(["caffeinate", "-i"])
                 process.terminate.assert_not_called()
         process.terminate.assert_called_once()
 
     def test_inget_pa_andra_system(self):
-        with mock.patch.object(akasha.platform, "system", return_value="Linux"), \
-             mock.patch.object(akasha.subprocess, "Popen") as popen:
-            with akasha.hall_vaken():
+        with mock.patch.object(plattform.platform, "system", return_value="Linux"), \
+             mock.patch.object(plattform.subprocess, "Popen") as popen:
+            with plattform.hall_vaken():
                 pass
         popen.assert_not_called()
 

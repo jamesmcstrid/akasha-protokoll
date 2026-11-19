@@ -10,9 +10,11 @@ den gar att kora i en venv med enbart requests.
 """
 import errno
 import hashlib
+import logging
 import os
 import shutil
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
@@ -20,6 +22,8 @@ from urllib.parse import urljoin, urlparse
 import requests
 
 from installningar import MODELL, MODELLKATALOG
+
+log = logging.getLogger("akasha-meet")
 
 
 @dataclass(frozen=True)
@@ -353,6 +357,117 @@ def hamta(filer, framsteg=None, avbryt=None, session=None):
                     time.sleep(paus)
         klart += fil.storlek
     return None
+
+
+class Hamtning:
+    """Hamtningen i en bakgrundstrad, en at gangen, for webbtjansten. Sidan fragar efter status().
+
+    Tillstand: vilar, hamtar, kontrollerar, klar, fel, avbruten. avbryt() sater en handelse som
+    hamta_fil ser efter nasta bit. Under kontrollen (sha256) ser hamta_fil inte handelsen, sa kontrollen
+    blir klar och en godkand fil far sitt riktiga namn. Var det den sista filen lyckas hamtningen, och
+    tillstandet blir klar och inte avbruten. Annars stannar den vid forsta biten av nasta fil.
+    All andring av tillstandet sker under _lock.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._trad = None
+        self._avbryt = threading.Event()
+        self._nollstall()
+
+    def _nollstall(self):
+        self._tillstand = "vilar"
+        self._fil = None
+        self._hamtat = 0
+        self._totalt = 0
+        self._hamtat0 = 0      # byte som redan lag kvar nar jobbet startade
+        self._start = None
+        self._slut = None
+        self._fel = None
+        self._felkod = None
+        self._stoppas = False
+        self._pagar = False
+
+    def starta(self, filer, efter=None):
+        """filer: (namn, Fil)-par. True om en ny trad startades, False om en redan pagar."""
+        with self._lock:
+            if self._pagar:
+                return False
+            kvar = [fil for _, fil in filer if not komplett(fil)]
+            self._nollstall()
+            self._pagar = True
+            self._tillstand = "hamtar"
+            self._totalt = sum(fil.storlek for fil in kvar)
+            self._hamtat = self._hamtat0 = sum(delvis(fil) for fil in kvar)
+            self._start = time.monotonic()
+            # En ny handelse varje gang, sa att ett gammalt avbrott inte stoppar nasta hamtning.
+            self._avbryt = avbryt = threading.Event()
+            self._trad = threading.Thread(target=self._kor, args=(filer, efter, avbryt),
+                                          name="modellhamtning", daemon=True)
+            self._trad.start()
+            return True
+
+    def avbryt(self):
+        """True om en hamtning pagick och har fatt beskedet att stanna. Vantar inte."""
+        with self._lock:
+            if not self._pagar:
+                return False
+            self._avbryt.set()
+            self._stoppas = True
+            return True
+
+    def _framsteg(self, namn, fas, hamtat, totalt):
+        with self._lock:
+            self._tillstand = "hamtar" if fas == "hamtar" else "kontrollerar"
+            self._fil = namn
+            self._hamtat = hamtat
+            self._totalt = totalt
+
+    def _kor(self, filer, efter, avbryt):
+        tillstand, fel, felkod = "klar", None, None
+        try:
+            hamta(filer, framsteg=self._framsteg, avbryt=avbryt)
+            if efter:
+                efter()
+        except HamtFel as e:
+            if e.kod == "avbruten":
+                tillstand = "avbruten"
+                log.info("modellhamtningen stoppades")
+            else:
+                tillstand, fel, felkod = "fel", str(e), e.kod
+                log.warning("modellhamtningen misslyckades: %s", e)
+        except Exception as e:  # noqa: BLE001 - traden far aldrig do tyst
+            tillstand, fel, felkod = "fel", _FEL["ovantat"].format(e=e), "ovantat"
+            log.exception("ovantat fel vid modellhamtningen")
+        finally:
+            with self._lock:
+                self._tillstand, self._fel, self._felkod = tillstand, fel, felkod
+                self._fil = None
+                self._slut = time.monotonic()
+                self._stoppas = False
+                self._pagar = False
+
+    def status(self):
+        """Kopia av tillstandet (allt under ett las, sa att faltens ar konsekventa)."""
+        with self._lock:
+            sekunder = kvar_s = None
+            if self._start is not None:
+                sekunder = int((self._slut or time.monotonic()) - self._start)
+                lagt = self._hamtat - self._hamtat0  # byte hamtade i det har forsoket
+                if self._pagar and sekunder >= 10 and lagt > 0:
+                    kvar_s = max(0, int((self._totalt - self._hamtat) / (lagt / sekunder)))
+            return {"tillstand": self._tillstand, "fil": self._fil, "hamtat": self._hamtat,
+                    "totalt": self._totalt, "sekunder": sekunder, "kvar_s": kvar_s,
+                    "fel": self._fel, "felkod": self._felkod, "stoppas": self._stoppas}
+
+    def vanta(self, timeout=None):
+        """Vantar pa traden (for testerna)."""
+        trad = self._trad
+        if trad is not None:
+            trad.join(timeout)
+
+
+HAMTNING = Hamtning()
 
 
 _LAGEN = {"faster": "faster", "ggml": "whispercpp", "talare": "talare"}

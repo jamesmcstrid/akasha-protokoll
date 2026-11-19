@@ -12,8 +12,8 @@ Ingen sprakmodell rattar eller sammanfattar texten. Det som whisper hor ar det s
 import collections
 import io
 import json
+import logging
 import os
-import platform
 import re
 import shutil
 import subprocess
@@ -23,9 +23,15 @@ import wave
 
 import numpy as np
 
+import modeller
+import plattform
 from installningar import CPU_TRADAR, MODELL, MOTOR, SPRAK, WHISPERCPP_BIN
 from modeller import CT2_MODELL, DTW, GGML_MODELL, STORLEKAR
 
+# faster-whisper ska aldrig hamta nagot sjalv: modellerna hamtas bara av modeller.py
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+log = logging.getLogger("akasha-meet")
 SR = 16000
 BEAM = 5
 PROGRESS_RE = re.compile(r"progress\s*=\s*(\d+)%")
@@ -46,36 +52,73 @@ def valj_motor(onskad=MOTOR, system=None, har_cli=None, har_ggml=None):
     """
     if onskad != "auto":
         return onskad
-    system = system or platform.system()
-    har_cli = shutil.which(WHISPERCPP_BIN) is not None if har_cli is None else har_cli
-    har_ggml = os.path.isfile(GGML_MODELL) if har_ggml is None else har_ggml
+    system = system or plattform.system()
+    har_cli = plattform.whisper_cli() is not None if har_cli is None else har_cli
+    if har_ggml is None:
+        try:
+            har_ggml = not modeller.saknade("whispercpp", MODELL)
+        except KeyError:  # okand MODELL: hinder() sager ifran
+            har_ggml = False
     if system == "Darwin" and har_cli and har_ggml:
         return "whispercpp"
     return "faster"
 
 
-AKTIV = valj_motor()  # bestams nar tjansten startar
+def mal_motor(onskad=MOTOR, system=None, har_cli=None):
+    """Vilken motor modellerna ska hamtas for. Pa en Mac med whisper-cli blir det whisper.cpp aven
+    nar GGML-filen saknas (valj_motor() ger da faster tills den har hamtats)."""
+    if onskad != "auto":
+        return onskad
+    system = system or plattform.system()
+    har_cli = plattform.whisper_cli() is not None if har_cli is None else har_cli
+    return "whispercpp" if system == "Darwin" and har_cli else "faster"
+
+
+AKTIV = valj_motor()  # bestams nar tjansten startar, och raknas om av uppdatera()
 
 
 class MotorFel(Exception):
     """Motorn saknas, kraschar eller svarar fel."""
 
 
-def problem():
-    """None om motorn ar redo, annars vad som saknas."""
+def hinder():
+    """Det en hamtning inte kan ratta: None, eller vad som ar fel med installningarna."""
     if MODELL not in STORLEKAR:
         return f"okand MODELL={MODELL!r}, anvand medium eller large"
-    if AKTIV == "faster":
-        if not os.path.isfile(os.path.join(CT2_MODELL, "model.bin")):
-            return "KB-Whisper saknas. Kor: bash mac/installera.sh"
-        return None
-    if AKTIV == "whispercpp":
-        if not shutil.which(WHISPERCPP_BIN):
-            return f"{WHISPERCPP_BIN} saknas. Kor: brew install whisper-cpp"
-        if not os.path.isfile(GGML_MODELL):
-            return "KB-Whisper (GGML) saknas. Kor: bash mac/hamta-modeller.sh ggml"
-        return None
-    return f"okand MOTOR={MOTOR!r}, anvand auto, faster eller whispercpp"
+    if MOTOR not in ("auto", "faster", "whispercpp"):
+        return f"okand MOTOR={MOTOR!r}, anvand auto, faster eller whispercpp"
+    if mal_motor(MOTOR) == "whispercpp" and plattform.whisper_cli() is None:  # MOTOR lases nu, inte vid def
+        return f"{WHISPERCPP_BIN} saknas. Kor: brew install whisper-cpp"
+    return None
+
+
+def problem():
+    """None om motorn ar redo, annars vad som saknas."""
+    fel = hinder()
+    if fel:
+        return fel
+    if AKTIV == "whispercpp" and plattform.whisper_cli() is None:
+        return f"{WHISPERCPP_BIN} saknas. Kor: brew install whisper-cpp"
+    if modeller.saknade(AKTIV, MODELL):
+        return "KB-Whisper (GGML) saknas. Hämta den på sidan." if AKTIV == "whispercpp" \
+            else "KB-Whisper saknas. Hämta den på sidan."
+    return None
+
+
+def uppdatera():
+    """Raknar om AKTIV, sa att tjansten blir redo utan omstart nar modellerna har hamtats (aven med
+    skriptet i en terminal). Tar transkriberingslaset utan att vanta: ar det upptaget, med en
+    transkribering som anvander motorn, gors ingenting och nasta anrop forsoker igen."""
+    global AKTIV, _faster_modell
+    ny = valj_motor()
+    if ny != AKTIV and _las.acquire(blocking=False):
+        try:
+            AKTIV = ny
+            _faster_modell = None
+            log.info("motor: %s", ny)
+        finally:
+            _las.release()
+    return AKTIV
 
 
 def ord_grans():

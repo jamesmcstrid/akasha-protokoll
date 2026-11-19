@@ -204,6 +204,139 @@ class TestHamta(Bas):
         self.assertEqual(steg[-1][3], sum(f.storlek for _, f in filer))
 
 
+class TestAvbrytUnderKontrollen(Bas):
+    def hamta_med_avbryt(self, filer):
+        avbryt = threading.Event()
+        forsta = filer[0][0]
+
+        def framsteg(namn, fas, hamtat, totalt):
+            if fas == "kontrollerar" and namn == forsta:
+                avbryt.set()
+
+        modeller.hamta(filer, framsteg=framsteg, avbryt=avbryt, session=self.adapter())
+
+    def test_kontrollen_blir_klar_och_nasta_fil_stoppas(self):
+        forsta, andra = self.paket["faster", "medium"][1:3]
+        with self.assertRaises(modeller.HamtFel) as cm:
+            self.hamta_med_avbryt([("a", forsta), ("b", andra)])
+        self.assertEqual(cm.exception.kod, "avbruten")
+        self.assertEqual(self.sha(forsta), forsta.sha256)  # godkand fil har fatt sitt riktiga namn
+        self.assertFalse(modeller.komplett(andra))
+
+    def test_sista_filen_blir_klar_utan_fel(self):
+        forsta = self.paket["faster", "medium"][1]
+        self.hamta_med_avbryt([("a", forsta)])
+        self.assertEqual(self.sha(forsta), forsta.sha256)
+
+
+class TestHamtning(Bas):
+    def starta(self, filer, **kw):
+        self.h = modeller.Hamtning()
+        self.addCleanup(self.h.vanta, 5)
+        with mock.patch.object(modeller, "ny_session", lambda: self.adapter(**kw)):
+            self.assertTrue(self.h.starta(filer))
+            self.h.vanta(5)  # inne i with: traden anropar ny_session sjalv
+        return self.h.status()
+
+    def test_klar_och_efter_anropas_foere_klar(self):
+        steg = []
+        self.h = modeller.Hamtning()
+        with mock.patch.object(modeller, "ny_session", lambda: self.adapter()):
+            self.h.starta([("Rostmodell", self.fil)], efter=lambda: steg.append(self.h.status()["tillstand"]))
+            self.h.vanta(5)  # inne i with: traden anropar ny_session sjalv
+        self.assertEqual(steg, ["kontrollerar"])  # efter() kors innan tillstandet blir klar
+        st = self.h.status()
+        self.assertEqual((st["tillstand"], st["fel"], st["felkod"], st["stoppas"], st["fil"]),
+                         ("klar", None, None, False, None))
+        self.assertEqual(st["hamtat"], st["totalt"])
+
+    def test_hamtfel_ger_fel_och_ovantat_fel_ger_ovantat(self):
+        st = self.starta([("Rostmodell", self.fil)], status=500)
+        self.assertEqual((st["tillstand"], st["felkod"]), ("fel", "server"))
+        self.assertIn("500", st["fel"])
+        with mock.patch.object(modeller, "hamta", side_effect=ValueError("bom")):
+            h = modeller.Hamtning()
+            h.starta([("Rostmodell", self.fil)])
+            h.vanta(5)
+        st = h.status()
+        self.assertEqual((st["tillstand"], st["felkod"]), ("fel", "ovantat"))
+        self.assertEqual(st["fel"], "Oväntat fel vid hämtningen: bom")
+
+    def test_starta_tva_ganger_startar_en_trad(self):
+        grind = threading.Event()
+        anrop = []
+
+        def vanta_pa_grind(filer, framsteg=None, avbryt=None, session=None):
+            anrop.append(filer)
+            grind.wait(5)
+
+        h = modeller.Hamtning()
+        with mock.patch.object(modeller, "hamta", vanta_pa_grind):
+            self.assertTrue(h.starta([("a", self.fil)]))
+            self.assertFalse(h.starta([("a", self.fil)]))
+            grind.set()
+            h.vanta(5)
+        self.assertEqual(len(anrop), 1)
+
+    def test_avbryt_nar_inget_pagar_andrar_ingenting(self):
+        h = modeller.Hamtning()
+        self.assertFalse(h.avbryt())
+        self.assertEqual(h.status()["tillstand"], "vilar")
+        self.assertFalse(h.status()["stoppas"])
+
+    def test_sista_filen_klar_trots_avbryt_under_kontrollen(self):
+        self.h = modeller.Hamtning()
+        riktig = modeller.hamta
+
+        def hamta_som_avbryter(filer, framsteg=None, avbryt=None, session=None):
+            def steg(namn, fas, hamtat, totalt):
+                if fas == "kontrollerar":
+                    self.assertTrue(self.h.avbryt())
+                framsteg(namn, fas, hamtat, totalt)
+            return riktig(filer, framsteg=steg, avbryt=avbryt, session=session)
+
+        with mock.patch.object(modeller, "ny_session", lambda: self.adapter()), \
+             mock.patch.object(modeller, "hamta", hamta_som_avbryter):
+            self.h.starta([("Rostmodell", self.fil)])
+            self.h.vanta(5)
+        st = self.h.status()
+        self.assertEqual((st["tillstand"], st["stoppas"]), ("klar", False))
+        self.assertTrue(modeller.komplett(self.fil))
+
+    def test_ny_start_ar_inte_stoppad_av_gammalt_avbryt(self):
+        self.h = modeller.Hamtning()
+        self.h._avbryt.set()  # ett gammalt avbrott
+        with mock.patch.object(modeller, "ny_session", lambda: self.adapter()):
+            self.h.starta([("Rostmodell", self.fil)])
+            self.h.vanta(5)
+        self.assertEqual(self.h.status()["tillstand"], "klar")
+
+    def test_kvar_s_forst_efter_tio_sekunder_och_nagot_hamtat(self):
+        grind = threading.Event()
+        h = modeller.Hamtning()
+        klocka = [100.0]
+
+        def hamta_en_bit(filer, framsteg=None, avbryt=None, session=None):
+            framsteg("a", "hamtar", 250, 1000)
+            grind.wait(5)
+
+        with mock.patch.object(modeller.time, "monotonic", lambda: klocka[0]), \
+             mock.patch.object(modeller, "hamta", hamta_en_bit):
+            h.starta([("a", self.fil)])
+            for _ in range(500):
+                if h.status()["hamtat"] == 250:
+                    break
+                threading.Event().wait(0.01)
+            klocka[0] = 105.0
+            self.assertIsNone(h.status()["kvar_s"])  # for tidigt
+            klocka[0] = 110.0
+            st = h.status()
+            self.assertEqual((st["sekunder"], st["kvar_s"], st["fil"]), (10, 30, "a"))  # 750 byte kvar med 25 B/s
+            grind.set()
+            h.vanta(5)
+        self.assertIsNone(h.status()["kvar_s"])
+
+
 class TestManifest(unittest.TestCase):
     def test_manifestet(self):
         self.assertEqual(set(RIKTIGT), {("faster", "medium"), ("whispercpp", "medium"),

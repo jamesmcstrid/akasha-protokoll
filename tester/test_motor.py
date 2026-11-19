@@ -6,6 +6,8 @@ import hjalp  # noqa: F401
 import installningar
 import modeller
 import motor
+import plattform
+import talare
 
 
 class TestValjMotor(unittest.TestCase):
@@ -23,6 +25,84 @@ class TestValjMotor(unittest.TestCase):
     def test_tvingat_val_galler(self):
         self.assertEqual(self.val("faster"), "faster")
         self.assertEqual(self.val("whispercpp", system="Linux"), "whispercpp")
+
+
+class TestMalMotor(unittest.TestCase):
+    def test_mac_med_cli_ger_whispercpp_aven_utan_ggml(self):
+        self.assertEqual(motor.mal_motor("auto", "Darwin", True), "whispercpp")
+
+    def test_mac_utan_cli_och_andra_system_ger_faster(self):
+        self.assertEqual(motor.mal_motor("auto", "Darwin", False), "faster")
+        self.assertEqual(motor.mal_motor("auto", "Linux", True), "faster")
+        self.assertEqual(motor.mal_motor("auto", "Windows", False), "faster")
+
+    def test_tvingat_val_galler(self):
+        self.assertEqual(motor.mal_motor("faster", "Darwin", True), "faster")
+        self.assertEqual(motor.mal_motor("whispercpp", "Linux", False), "whispercpp")
+
+
+class TestHinder(unittest.TestCase):
+    def test_inget_hinder_som_standard(self):
+        self.assertIsNone(motor.hinder())
+
+    def test_okand_modell(self):
+        with mock.patch.object(motor, "MODELL", "jatte"):
+            self.assertIn("MODELL", motor.hinder())
+
+    def test_okand_motor(self):
+        with mock.patch.object(motor, "MOTOR", "raket"):
+            self.assertIn("MOTOR", motor.hinder())
+
+    def test_whispercpp_utan_cli(self):
+        with mock.patch.object(motor, "MOTOR", "whispercpp"), \
+             mock.patch.object(plattform, "whisper_cli", lambda: None):
+            self.assertEqual(motor.hinder(), "whisper-cli saknas. Kor: brew install whisper-cpp")
+            self.assertEqual(motor.problem(), motor.hinder())
+        with mock.patch.object(motor, "MOTOR", "whispercpp"), \
+             mock.patch.object(plattform, "whisper_cli", lambda: "/usr/bin/whisper-cli"):
+            self.assertIsNone(motor.hinder())
+
+
+class TestProblem(unittest.TestCase):
+    def setUp(self):
+        hjalp.tom_datakatalog()  # tidigare tester kan ha lagt filer i modellkatalogen
+
+    def test_saknade_modeller_pekar_pa_sidan(self):
+        self.assertEqual(motor.problem(), "KB-Whisper saknas. Hämta den på sidan.")
+        with mock.patch.object(motor, "AKTIV", "whispercpp"), \
+             mock.patch.object(plattform, "whisper_cli", lambda: "/usr/bin/whisper-cli"):
+            self.assertEqual(motor.problem(), "KB-Whisper (GGML) saknas. Hämta den på sidan.")
+
+    def test_rostmodell_med_fel_storlek_ger_texten_om_rostmodellen(self):
+        sokvag = modeller.ROSTMODELL
+        os.makedirs(os.path.dirname(sokvag), exist_ok=True)
+        with open(sokvag, "wb") as f:
+            f.write(b"fel storlek")
+        self.addCleanup(os.remove, sokvag)
+        self.assertEqual(talare.problem(), "röstmodellen saknas. Hämta den på sidan.")
+
+
+class TestUppdatera(unittest.TestCase):
+    def setUp(self):
+        self.gammal = motor.AKTIV
+        self.addCleanup(setattr, motor, "AKTIV", self.gammal)
+        self.addCleanup(setattr, motor, "_faster_modell", None)
+
+    def test_byter_motor_och_glommer_den_laddade_modellen(self):
+        motor._faster_modell = object()
+        with mock.patch.object(motor, "valj_motor", lambda: "whispercpp"):
+            self.assertEqual(motor.uppdatera(), "whispercpp")
+        self.assertEqual(motor.AKTIV, "whispercpp")
+        self.assertIsNone(motor._faster_modell)
+        self.assertFalse(motor._las.locked())  # laset ar slappt igen
+
+    def test_upptaget_las_andrar_ingenting(self):
+        motor.AKTIV = "faster"
+        with mock.patch.object(motor, "valj_motor", lambda: "whispercpp"):
+            with motor._las:
+                self.assertEqual(motor.uppdatera(), "faster")
+                self.assertEqual(motor.AKTIV, "faster")
+            self.assertEqual(motor.uppdatera(), "whispercpp")  # nasta anrop forsoker igen
 
 
 class TestModell(unittest.TestCase):

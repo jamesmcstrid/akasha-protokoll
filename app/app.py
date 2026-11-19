@@ -8,15 +8,11 @@ webbsidor i samma webblasare anropar den:
 
 Transkriberingar kors en i taget i en bakgrundstrad. Webbsidan fragar efter framsteg.
 """
-import contextlib
 import io
 import logging
 import os
-import platform
 import queue
 import re
-import shutil
-import subprocess
 import tempfile
 import threading
 import time
@@ -28,10 +24,12 @@ from flask import Flask, jsonify, request, send_file
 
 import export
 import lagring
+import modeller
 import motor
+import plattform
 import rattning
 import talare
-from installningar import DATAKATALOG, MAX_MB, ORDLISTA, PORT
+from installningar import DATAKATALOG, MAX_MB, MODELL, ORDLISTA, PORT
 
 HEADER = "X-Akasha-Meet"
 VARDAR = {"127.0.0.1", "localhost", "::1"}
@@ -242,32 +240,11 @@ def kor(id_):
     skriv_text(meta)
 
 
-@contextlib.contextmanager
-def hall_vaken():
-    """Pa Mac: lat inte datorn somna av sig sjalv medan ett jobb pagar (caffeinate -i).
-    Ett stangt lock sover anda, och da pausas jobbet tills locket oppnas."""
-    process = None
-    if platform.system() == "Darwin" and shutil.which("caffeinate"):
-        try:
-            process = subprocess.Popen(["caffeinate", "-i"])
-        except OSError as e:
-            log.warning("kunde inte starta caffeinate: %s", e)
-    try:
-        yield
-    finally:
-        if process:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-
-
 def _arbetare():
     while True:
         id_ = _ko.get()
         try:
-            with hall_vaken():
+            with plattform.hall_vaken():
                 kor(id_)
         except lagring.Fel as e:
             lagring.uppdatera(id_, status="fel", fel=str(e))
@@ -300,6 +277,7 @@ def startsida():
 
 @app.get("/health")
 def health():
+    motor.uppdatera()
     fel = motor.problem()
     return jsonify(
         status="ok" if fel is None else "error",
@@ -309,6 +287,74 @@ def health():
         talare=talare.problem() or "ok",
         datakatalog=DATAKATALOG,
     ), (200 if fel is None else 503)
+
+
+# --- modellhamtningen ----------------------------------------------------------------------
+
+def att_hamta():
+    """-> (paket, hinder). paket: [(id, [Fil])] i ordningen taligenkanning, talare, bara det som saknas."""
+    hinder = motor.hinder()
+    if hinder:
+        return [], hinder
+    paket = []
+    if motor.problem() is not None:
+        saknas = modeller.saknade(motor.mal_motor(), MODELL)
+        if saknas:
+            paket.append(("taligenkanning", saknas))
+    saknas = modeller.saknade("talare")
+    if saknas:
+        paket.append(("talare", saknas))
+    return paket, None
+
+
+def paketnamn(id_):
+    return modeller.INFO[id_][0].format(storlek=MODELL)
+
+
+def modellstatus():
+    paket, hinder = att_hamta()
+    saknas = []
+    for id_, filer in paket:
+        _namn, beskrivning, licens = modeller.INFO[id_]
+        saknas.append({"id": id_, "namn": paketnamn(id_), "beskrivning": beskrivning,
+                       "storlek": sum(f.storlek for f in filer),
+                       "kalla": f"huggingface.co/{filer[0].repo}", "licens": licens})
+    return {
+        "redo": motor.problem() is None,
+        "hinder": hinder,
+        "saknas": saknas,
+        "totalt": sum(p["storlek"] for p in saknas),
+        "redan_hamtat": sum(modeller.delvis(f) for _, filer in paket for f in filer),
+        "ledigt": modeller.ledigt(),
+        "katalog": modeller.MODELLKATALOG,
+        "hamtning": modeller.HAMTNING.status(),  # slar upp vid anropet, sa att testerna kan byta ut den
+    }
+
+
+@app.get("/api/modeller")
+def modeller_status():
+    motor.uppdatera()
+    return jsonify(modellstatus())
+
+
+@app.post("/api/modeller/hamta")
+def modeller_hamta():
+    # Kroppen lases inte: vad som hamtas bestams bara av manifestet i modeller.py.
+    motor.uppdatera()
+    paket, hinder = att_hamta()
+    if hinder:
+        return jsonify(error=hinder), 409
+    if not paket:
+        return jsonify(modellstatus()), 200
+    filer = [(paketnamn(id_), fil) for id_, fl in paket for fil in fl]
+    startad = modeller.HAMTNING.starta(filer, efter=motor.uppdatera)
+    return jsonify(modellstatus()), (202 if startad else 200)
+
+
+@app.post("/api/modeller/avbryt")
+def modeller_avbryt():
+    pagick = modeller.HAMTNING.avbryt()
+    return jsonify(modellstatus()), (202 if pagick else 200)
 
 
 @app.get("/api/inspelningar")

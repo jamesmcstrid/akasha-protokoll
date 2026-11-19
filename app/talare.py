@@ -20,6 +20,7 @@ import threading
 
 import numpy as np
 
+import modeller
 from installningar import TALARE_TROSKEL
 from modeller import ROSTMODELL
 
@@ -57,8 +58,8 @@ def tolka_antal(varde):
 
 def problem():
     """None om allt finns, annars vad som saknas."""
-    if not os.path.isfile(ROSTMODELL):
-        return "röstmodellen saknas. Kor: bash mac/hamta-modeller.sh talare"
+    if modeller.saknade("talare"):
+        return "röstmodellen saknas. Hämta den på sidan."
     try:
         import sherpa_onnx  # noqa: F401
     except ImportError:
