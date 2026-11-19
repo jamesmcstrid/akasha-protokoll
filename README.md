@@ -203,7 +203,7 @@ sidan som vid första start, med en låtsaskälla i stället för Hugging Face.
 
 | Del | Licens |
 |---|---|
-| Akasha Meet (det här programmet) | Apache-2.0, se [LICENSE](LICENSE) |
+| Akasha Meet (det här programmet), © 2026 Dennis Fredin | Apache-2.0, se [LICENSE](LICENSE) och [NOTICE](NOTICE) |
 | [KB-Whisper medium](https://huggingface.co/KBLab/kb-whisper-medium) (KBLab, Kungliga biblioteket) | Apache-2.0 |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | MIT |
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2.0 |
