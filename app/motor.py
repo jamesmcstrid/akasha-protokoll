@@ -88,7 +88,7 @@ def hinder():
     if MOTOR not in ("auto", "faster", "whispercpp"):
         return f"okand MOTOR={MOTOR!r}, anvand auto, faster eller whispercpp"
     if mal_motor(MOTOR) == "whispercpp" and plattform.whisper_cli() is None:  # MOTOR lases nu, inte vid def
-        return f"{WHISPERCPP_BIN} saknas. Kor: brew install whisper-cpp"
+        return f"{WHISPERCPP_BIN} saknas. Kör: brew install whisper-cpp"
     return None
 
 
@@ -98,7 +98,7 @@ def problem():
     if fel:
         return fel
     if AKTIV == "whispercpp" and plattform.whisper_cli() is None:
-        return f"{WHISPERCPP_BIN} saknas. Kor: brew install whisper-cpp"
+        return f"{WHISPERCPP_BIN} saknas. Kör: brew install whisper-cpp"
     if modeller.saknade(AKTIV, MODELL):
         return "KB-Whisper (GGML) saknas. Hämta den på sidan." if AKTIV == "whispercpp" \
             else "KB-Whisper saknas. Hämta den på sidan."

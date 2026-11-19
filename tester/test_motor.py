@@ -56,7 +56,7 @@ class TestHinder(unittest.TestCase):
     def test_whispercpp_utan_cli(self):
         with mock.patch.object(motor, "MOTOR", "whispercpp"), \
              mock.patch.object(plattform, "whisper_cli", lambda: None):
-            self.assertEqual(motor.hinder(), "whisper-cli saknas. Kor: brew install whisper-cpp")
+            self.assertEqual(motor.hinder(), "whisper-cli saknas. Kör: brew install whisper-cpp")
             self.assertEqual(motor.problem(), motor.hinder())
         with mock.patch.object(motor, "MOTOR", "whispercpp"), \
              mock.patch.object(plattform, "whisper_cli", lambda: "/usr/bin/whisper-cli"):

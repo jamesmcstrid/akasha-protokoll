@@ -63,7 +63,7 @@ def problem():
     try:
         import sherpa_onnx  # noqa: F401
     except ImportError:
-        return "sherpa-onnx saknas. Kor: bash mac/installera.sh"
+        return "sherpa-onnx saknas. Kör: bash mac/installera.sh"
     return None
 
 

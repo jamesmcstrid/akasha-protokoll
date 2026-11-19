@@ -175,6 +175,7 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 | Problem | Gör så här |
 |---|---|
 | Sidan öppnas inte | `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`. Läs loggen `~/AkashaMeet/akasha-meet.log` |
+| "Akasha Meet svarar inte" | Tjänsten har stannat. Den startar av sig själv när du loggar in, så logga ut och in igen, eller kör launchctl kickstart -k gui/$(id -u)/local.akasha-meet i Terminal. Det du redan spelat in ligger kvar. Sidan märker själv när tjänsten är igång igen. |
 | "Inte redo" uppe till höger | Håll muspekaren över texten för att se orsaken. Det är något som en hämtning inte kan rätta, till exempel en inställning i `.env`. |
 | "Modellerna behöver hämtas" uppe till höger | Tryck **Hämta nu** i rutan överst på sidan. Det görs bara en gång. |
 | Hämtningen säger "Kunde inte nå Hugging Face" | Kontrollera att datorn är ansluten till internet och tryck **Försök igen**. Det som redan hämtats ligger kvar. |

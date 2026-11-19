@@ -2,6 +2,7 @@
 
 // Alla anrop som andrar nagot maste ha den har headern (skydd mot andra webbsidor).
 const HEADER = { "X-Akasha-Meet": "1" };
+const INGEN_TJANST = "Akasha Meet svarar inte. Se till att programmet är igång och försök igen. Det som redan är sparat ligger kvar.";
 const DEL_MS = 5000; // webblasaren skickar ljudet till disken var femte sekund
 // Varning om inget ljud kommer in: ljudnivan (RMS) under -80 dBFS i 10 sekunder. En avstangd
 // eller fel vald mikrofon ger nollor eller nastan nollor (16-bitarsljudets minsta steg ar ca
@@ -35,11 +36,15 @@ let talarvalAnkare = null; // det som oppnade talarvalsrutan, dit fokus gar till
 let modellerVisades = false; // modellkortet syntes vid senaste renderingen
 let modellerInteNu = false; // "Inte nu" tryckt i den har sidvisningen (bara nar rostmodellen saknas)
 let modellTimer = null;
+let halsaTimer = null; // nasta /health-fraga medan tjansten inte svarar
 let senastTillstand = null; // hamtningens tillstand vid senaste renderingen
 let modellAnrop = false; // ett POST fran "Hamta nu" ar pa vag: en rendering far inte skriva over knappen
 let stoppAnrop = false; // detsamma for "Stoppa hamtningen"
 
 // --- hjalpfunktioner -----------------------------------------------------------------------
+
+// Tjansten svarade inte alls (natfel), till skillnad fran ett svar med felkod.
+class TjanstFel extends Error {}
 
 async function api(metod, url, kropp, headers = {}) {
   const opt = { method: metod, headers: { ...HEADER, ...headers } };
@@ -49,7 +54,14 @@ async function api(metod, url, kropp, headers = {}) {
     opt.body = JSON.stringify(kropp);
     opt.headers["Content-Type"] = "application/json";
   }
-  const svar = await fetch(url, opt);
+  let svar;
+  try {
+    svar = await fetch(url, opt);
+  } catch {
+    // fetch avvisas bara vid natfel: tjansten ar nere.
+    tjanstenSvararInte();
+    throw new TjanstFel(INGEN_TJANST);
+  }
   let data = null;
   try { data = await svar.json(); } catch { /* inte JSON */ }
   if (!svar.ok) throw new Error((data && data.error) || `Fel ${svar.status}`);
@@ -206,20 +218,41 @@ function uppdateraTjanst(halsanNy = false) {
   }
 }
 
+// Etiketten blir rod och sidan fragar var femte sekund tills tjansten svarar igen.
+function tjanstenSvararInte() {
+  senastHalsa = false;
+  visaTjanst();
+  planeraHalsa();
+}
+
+function planeraHalsa() {
+  clearTimeout(halsaTimer);
+  halsaTimer = setTimeout(kollaTjanst, 5000);
+}
+
 async function kollaTjanst() {
   halsaPaVag = true;
   const version = modellVersion;
+  const varNere = senastHalsa === false;
   try {
     const svar = await fetch("/health");
     const h = await svar.json();
     $("datakatalog").textContent = h.datakatalog;
     senastHalsa = h;
     halsaPaVag = false;
+    if (varNere && senastModeller === "fel") senastModeller = null; // ett gammalt fel, fraga om
     uppdateraTjanst(version === modellVersion);
+    if (varNere) {
+      // Tjansten ar tillbaka: hamta om allt utan omladdning.
+      clearTimeout(halsaTimer);
+      kollaModeller();
+      uppdateraLista();
+    }
   } catch {
     halsaPaVag = false;
     senastHalsa = false;
     visaTjanst();
+    planeraHalsa();
   }
 }
 
@@ -251,8 +284,11 @@ async function kollaModeller() {
       senastModeller = "fel";
       uppdateraTjanst();
     }
-    // Syns kortet gar hamtningen kanske vidare: forsok igen.
-    if (modellerVisades) modellTimer = setTimeout(kollaModeller, 3000);
+    // Syns kortet gar hamtningen kanske vidare: forsok igen. Har inget riktigt svar kommit an
+    // provas det igen efter en stund aven om kortet inte syns.
+    if (modellerVisades || senastModeller === "fel") {
+      modellTimer = setTimeout(kollaModeller, modellerVisades ? 3000 : 10000);
+    }
     return;
   } finally {
     clearTimeout(timer);
@@ -543,7 +579,9 @@ async function skickaMedForsok(insp, nr, blob, sekunder) {
       return;
     } catch (e) {
       insp.fel = e.message;
-      $("sparat").textContent = `Kunde inte spara (försöker igen): ${e.message}`;
+      $("sparat").textContent = e instanceof TjanstFel
+        ? "Kunde inte spara (försöker igen): Akasha Meet svarar inte."
+        : `Kunde inte spara (försöker igen): ${e.message}`;
       await new Promise((r) => setTimeout(r, 1000 * 2 ** forsok));
     }
   }
@@ -664,7 +702,11 @@ function laddaUpp(fil) {
     $("fil").value = "";
     uppdateraLista();
   });
-  xhr.addEventListener("error", () => meddela("Uppladdningen misslyckades.", true));
+  xhr.addEventListener("error", () => {
+    meddela(`Uppladdningen misslyckades. ${INGEN_TJANST}`, true);
+    tjanstenSvararInte();
+    $("fil").value = "";
+  });
   xhr.send(form);
 }
 

@@ -57,6 +57,8 @@ pratar med tjänsten via JSON. Allt som ändrar något är `POST` och kräver he
 | `POST …/titel`, `…/namn`, `…/talare`, `…/talare/angra`, `…/radera` | Byt rubrik, spara talarnamn, rätta talare, ångra alla rättningar, radera |
 | `GET …/text.md`, `…/text.txt`, `…/ljud` | Nedladdningar. `?ladda_ner=1` på ljudet ger en fil att spara |
 
+När tjänsten inte svarar visar sidan "Akasha Meet svarar inte…" där felet hör hemma, etiketten blir "Tjänsten svarar inte", och sidan frågar var femte sekund tills tjänsten svarar igen.
+
 Medan ett jobb pågår har inspelningen fältet `framsteg`: `fas` (`koar`, `transkriberar` eller
 `talare`), `andel` (0–1) och `sekunder`, hur länge den här fasen har pågått. Sidan räknar ut
 ungefär hur lång tid som är kvar av transkriberingen ur `andel` och `sekunder`, och visar
@@ -303,7 +305,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
   fortsatt med `Range`, med omdirigering till en CDN-värd och rätt sha256. Körs för hand med
   `AKASHA_RIKTIG_HAMTNING=1 venv/bin/python -m unittest discover -s tester -p test_riktig_hamtning.py`.
   Taligenkänningen (1,5 GB) har aldrig hämtats på riktigt i provet.
-- **GitHub Actions:** flödet finns (ubuntu och Windows vid push till main och pull requests mot main, macOS för hand och vid versionstaggar), men har inte körts än.
+- **GitHub Actions** (2026-11-19): enhetstesterna, 144 st (1 överhoppat: den riktiga hämtningen), gröna på ubuntu-latest (Ubuntu 26.04, Python 3.12.16) och windows-latest (Python 3.12.10) vid push till main, och på macos-latest (arm64, Python 3.12.10) körd för hand. Ubuntu-jobbet tog 17 s, Windows-jobbet 43 s och macOS-jobbet 20 s. faster-whisper installeras inte där (testerna behöver den inte).
 - **`installera.sh` från början:** med en ersättare för launchd, även en ominstallation när
   tjänsten redan finns. Modellnedladdningen med sha256-kontroll gick igenom.
 - **`halsokoll/prov.sh`:** grön med båda motorerna.
@@ -332,7 +334,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
 **Inte provat än:**
 
-- enhetstesterna i GitHub Actions på ubuntu, Windows och macOS (arm64);
+- faster-whisper och transkribering på Windows (CI installerar inte faster-whisper);
 - första start på en riktig Mac och på Windows, och hämtning på ett företagsnät med proxy;
 - ett riktigt Google Meet-möte eller en Slack-huddle, där Chromes flikväljare och
   "Dela även flikljud" används på riktigt;

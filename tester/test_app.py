@@ -84,10 +84,10 @@ class TestApp(unittest.TestCase):
         self.assertEqual(r.status_code, 201)
 
     def test_sakerhetsheaders(self):
-        r = self.klient.get("/")
-        self.assertEqual(r.status_code, 200)
-        self.assertIn("default-src 'self'", r.headers["Content-Security-Policy"])
-        self.assertEqual(r.headers["X-Content-Type-Options"], "nosniff")
+        with self.klient.get("/") as r:
+            self.assertEqual(r.status_code, 200)
+            self.assertIn("default-src 'self'", r.headers["Content-Security-Policy"])
+            self.assertEqual(r.headers["X-Content-Type-Options"], "nosniff")
 
     # --- floden --------------------------------------------------------------------------
 
@@ -525,7 +525,7 @@ class TestModellerApi(unittest.TestCase):
     def test_8_hinder(self):
         with mock.patch.object(motor, "MOTOR", "whispercpp"), mock.patch.object(plattform, "whisper_cli", lambda: None):
             svar = self.get()
-            self.assertEqual(svar["hinder"], "whisper-cli saknas. Kor: brew install whisper-cpp")
+            self.assertEqual(svar["hinder"], "whisper-cli saknas. Kör: brew install whisper-cpp")
             self.assertEqual(svar["saknas"], [])
             self.assertFalse(svar["redo"])
             post = self.post()
