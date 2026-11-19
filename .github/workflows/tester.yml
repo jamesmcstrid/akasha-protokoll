@@ -1,0 +1,70 @@
+name: Tester
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore: ["**.md", "docs/**", "testljud/**"]
+  pull_request:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**", "testljud/**"]
+  workflow_dispatch:
+    inputs:
+      macos:
+        description: "Kör även på macOS (kostar som tio Linux-jobb)"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: tester-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  enhetstester:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: app/requirements.txt
+      - name: Visa system
+        run: python -c "import platform, sys; print(platform.platform(), platform.machine(), sys.version)"
+      - name: Beroenden (utan faster-whisper, som testerna inte behöver)
+        run: |
+          grep -v '^faster-whisper' app/requirements.txt > "$RUNNER_TEMP/krav.txt"
+          python -m pip install -r "$RUNNER_TEMP/krav.txt"
+      - name: Enhetstester
+        run: python -m unittest discover -s tester -v
+
+  macos:
+    # macOS kostar som tio Linux-jobb medan repot ar privat: bara vid release-tagg eller for hand.
+    if: github.ref_type == 'tag' || inputs.macos
+    runs-on: macos-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: app/requirements.txt
+      - name: Visa system
+        run: python -c "import platform, sys; print(platform.platform(), platform.machine(), sys.version)"
+      - name: Beroenden (utan faster-whisper, som testerna inte behöver)
+        run: |
+          grep -v '^faster-whisper' app/requirements.txt > "$RUNNER_TEMP/krav.txt"
+          python -m pip install -r "$RUNNER_TEMP/krav.txt"
+      - name: Enhetstester
+        run: python -m unittest discover -s tester -v
