@@ -168,6 +168,31 @@ class TestHamta(Bas):
         self.assertEqual(cm.exception.kod, "avbrott")
         self.assertEqual(len([u for u, _ in self.a.anrop if "cdn" in u]), modeller.FORSOK)
 
+    def sokvag_till(self, fil):
+        return "/" + fil.repo + "/resolve/" + fil.revision + "/" + fil.namn
+
+    def test_kontrollsummefelet_visar_paketets_namn(self):
+        with self.assertRaises(modeller.HamtFel) as cm:
+            modeller.hamta([("KB-Whisper medium", self.fil)],
+                           session=self.adapter(trasig_sokvag=self.sokvag_till(self.fil), trasig_ganger=1))
+        self.assertEqual(cm.exception.kod, "kontrollsumma")
+        self.assertTrue(str(cm.exception).startswith("KB-Whisper medium blev inte som den ska"))
+
+    def test_forsok_med_framsteg_raknas_inte(self):
+        fil = self.paket["faster", "medium"][1]
+        with mock.patch.object(modeller, "FRAMSTEG_MIN", 10_000):
+            modeller.hamta([("a", fil)], session=self.adapter(bryt_efter=30_000, bryt_ganger=5))
+        self.assertEqual(self.sha(fil), fil.sha256)
+        self.assertGreater(len([u for u, _ in self.a.anrop if "cdn" in u]), modeller.FORSOK)
+
+    def test_max_forsok_ar_en_ovre_grans(self):
+        fil = self.paket["faster", "medium"][1]
+        with mock.patch.object(modeller, "FRAMSTEG_MIN", 10_000), mock.patch.object(modeller, "MAX_FORSOK", 4):
+            with self.assertRaises(modeller.HamtFel) as cm:
+                modeller.hamta([("a", fil)], session=self.adapter(bryt_efter=30_000, bryt_ganger=100))
+        self.assertEqual(cm.exception.kod, "avbrott")
+        self.assertEqual(len([u for u, _ in self.a.anrop if "cdn" in u]), 4)
+
     def test_framsteg_vaxer_och_slutar_pa_totalt(self):
         filer = [("a", self.paket["faster", "medium"][0]), ("b", self.fil)]
         steg = []
@@ -249,6 +274,13 @@ class TestMain(Bas):
         self.assertEqual(kod, 2)
         self.assertIn("okänt läge: okant", fel)
 
+    def test_ctrl_c_ger_130_utan_traceback(self):
+        with mock.patch.object(modeller, "hamta", side_effect=KeyboardInterrupt):
+            kod, _, fel = self.kor(["talare"])
+        self.assertEqual(kod, 130)
+        self.assertIn("ligger kvar", fel)
+        self.assertNotIn("Traceback", fel)
+
     def test_hamtfel_ger_1(self):
         with mock.patch.object(modeller, "ny_session", lambda: self.adapter(status=500)):
             kod, _, fel = self.kor(["talare"])
@@ -261,6 +293,9 @@ class TestStorlekText(unittest.TestCase):
         self.assertEqual(modeller.storlek_text(1532909758), "1,5 GB")
         self.assertEqual(modeller.storlek_text(40257283), "40 MB")
         self.assertEqual(modeller.storlek_text(1573167041), "1,6 GB")
+        self.assertEqual(modeller.storlek_text(999_400_000), "999 MB")
+        self.assertEqual(modeller.storlek_text(999_600_000), "1,0 GB")
+        self.assertEqual(modeller.storlek_text(0), "0 MB")
 
 
 if __name__ == "__main__":

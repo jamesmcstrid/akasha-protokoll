@@ -89,7 +89,9 @@ DTW_PER_STORLEK = {"medium": "medium", "large": "large.v3"}
 INFO = {"taligenkanning": ("KB-Whisper {storlek}", "taligenkänning på svenska från Kungliga biblioteket (KBLab)", "Apache-2.0"),
         "talare": ("TitaNet small", "röstmodell som delar upp texten per talare (NVIDIA)", "CC-BY-4.0")}
 TILLATNA_VARDAR = ("huggingface.co",)   # plus allt som slutar pa ".huggingface.co" eller ".hf.co"
-FORSOK = 3            # forsok per fil vid avbrott, tidsgrans och natfel
+FORSOK = 3            # forsok utan framsteg per fil vid avbrott, tidsgrans och natfel
+FRAMSTEG_MIN = 1 << 20  # byte som ett forsok maste ha lagt till i .delvis for att inte raknas
+MAX_FORSOK = 20       # ovre grans per fil, sa att det aldrig snurrar for evigt
 PAUSER = (2, 5)       # sekunder mellan forsoken; testerna satter (0, 0)
 MARGINAL = 100_000_000  # byte som ska finnas kvar pa disken efter hamtningen
 
@@ -165,8 +167,9 @@ def ledigt(katalog=None):
 
 
 def storlek_text(byte):
-    if byte < 1_000_000_000:
-        return f"{round(byte / 1e6)} MB"
+    mb = round(byte / 1e6)  # avrunda forst, sa att 999,6 MB blir "1,0 GB" och aldrig "1000 MB"
+    if mb < 1000:
+        return f"{mb} MB"
     return f"{byte / 1e9:.1f}".replace(".", ",") + " GB"
 
 
@@ -321,14 +324,28 @@ def hamta(filer, framsteg=None, avbryt=None, session=None):
             if framsteg:
                 hogsta[0] = max(hogsta[0], klart + i_filen)
                 framsteg(namn, fas, hogsta[0], totalt)
-        for i in range(FORSOK):
+        # Ett forsok som har hamtat minst FRAMSTEG_MIN raknas inte mot FORSOK: ett skakigt nat ska inte
+        # ge "Forsok igen" nar hamtningen anda gar framat. MAX_FORSOK ar den ovre gransen.
+        utan_framsteg = forsok = 0
+        while True:
+            fore = delvis(fil)
             try:
                 hamta_fil(fil, session, rapportera, avbryt)
                 break
             except HamtFel as e:
-                if e.kod not in ("avbrott", "inget_nat") or i == FORSOK - 1:
+                if e.kod == "kontrollsumma":
+                    raise HamtFel("kontrollsumma", fil=namn) from e  # paketets namn, inte filnamnet
+                if e.kod not in ("avbrott", "inget_nat"):
                     raise
-                paus = PAUSER[min(i, len(PAUSER) - 1)]
+                forsok += 1
+                if delvis(fil) - fore >= FRAMSTEG_MIN:
+                    utan_framsteg = 0
+                    paus = PAUSER[0]
+                else:
+                    utan_framsteg += 1
+                    paus = PAUSER[min(utan_framsteg - 1, len(PAUSER) - 1)]
+                if utan_framsteg == FORSOK or forsok == MAX_FORSOK:
+                    raise
                 if avbryt is not None:
                     if avbryt.wait(paus):
                         raise HamtFel("avbruten")
@@ -376,6 +393,10 @@ def main(argv):
 
                 hamta([(fil.namn, fil)], framsteg=skriv)
                 print(f"OK: {fil.namn}", flush=True)
+    except KeyboardInterrupt:
+        print(f"\nAvbrutet. Det som redan hämtats ligger kvar i {MODELLKATALOG}, och nästa körning "
+              "fortsätter där det slutade.", file=sys.stderr)
+        return 130  # konventionen for Ctrl-C, sa att set -e i installera.sh stannar
     except HamtFel as e:
         print(f"FEL: {e}", file=sys.stderr)
         return 1
