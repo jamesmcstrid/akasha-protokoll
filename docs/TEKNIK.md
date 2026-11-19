@@ -303,7 +303,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
   fortsatt med `Range`, med omdirigering till en CDN-värd och rätt sha256. Körs för hand med
   `AKASHA_RIKTIG_HAMTNING=1 venv/bin/python -m unittest discover -s tester -p test_riktig_hamtning.py`.
   Taligenkänningen (1,5 GB) har aldrig hämtats på riktigt i provet.
-- **GitHub Actions:** enhetstesterna på ubuntu, macOS (arm64) och Windows.
+- **GitHub Actions:** flödet finns (ubuntu och Windows vid push till main och pull requests mot main, macOS för hand och vid versionstaggar), men har inte körts än.
 - **`installera.sh` från början:** med en ersättare för launchd, även en ominstallation när
   tjänsten redan finns. Modellnedladdningen med sha256-kontroll gick igenom.
 - **`halsokoll/prov.sh`:** grön med båda motorerna.
@@ -332,6 +332,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
 **Inte provat än:**
 
+- enhetstesterna i GitHub Actions på ubuntu, Windows och macOS (arm64);
 - första start på en riktig Mac och på Windows, och hämtning på ett företagsnät med proxy;
 - ett riktigt Google Meet-möte eller en Slack-huddle, där Chromes flikväljare och
   "Dela även flikljud" används på riktigt;

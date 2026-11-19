@@ -154,18 +154,25 @@ function visaKallaHjalp() {
 let senastHalsa = null; // /health, eller false nar tjansten inte svarade
 let senastModeller = null; // /api/modeller
 
-// Etiketten uppe till hoger. Ar det enda som hindrar modeller som sidan erbjuder att hamta ar den
-// neutral, inte rod. Ger tillbaka "fel" nar den visar Inte redo (da ska orsaken ocksa meddelas).
-function visaTjanst() {
+let halsaPaVag = false; // ett /health-anrop ar pa vag
+let modellVersion = 0; // raknas upp varje gang ett riktigt svar fran /api/modeller tas emot
+
+// Etiketten uppe till hoger. Den andras inte medan nagot svar saknas eller svaren motsager varandra
+// ("Kontrollerar…" star kvar), sa att den aldrig blinkar rod nar inget ar fel. Rod visas bara nar
+// /health inte svarar, vid hinder, nar /api/modeller inte svarar eller av ett annat skal. Ger
+// tillbaka "fel" nar den visar rott (da ska orsaken ocksa meddelas). halsanNy: /health-svaret ar
+// nyare an modellsvaret, sa att en motsagelse da ar riktig och inte ett gammalt svar.
+function visaTjanst(halsanNy = false) {
   const t = $("tjanst");
-  const h = senastHalsa;
-  if (h === null) return null; // inget svar an: etiketten star kvar som "Kontrollerar…"
-  if (h === false) {
-    t.textContent = "Tjänsten svarar inte";
-    t.title = "";
+  const rod = (text, title) => {
+    t.textContent = text;
+    t.title = title;
     t.className = "tjanst fel";
     return "fel";
-  }
+  };
+  const h = senastHalsa;
+  if (h === false) return rod("Tjänsten svarar inte", "");
+  if (h === null) return null; // inget svar an
   if (h.status === "ok") {
     t.textContent = h.talare === "ok" ? `Redo · ${h.modell}` : `Redo · utan talaruppdelning`;
     t.title = h.talare === "ok" ? "" : h.talare;
@@ -173,26 +180,44 @@ function visaTjanst() {
     return "ok";
   }
   const d = senastModeller;
-  if (d && !d.hinder && (d.saknas || []).some((p) => p.id === "taligenkanning")) {
+  if (d === null) return null; // /api/modeller har inte svarat an
+  if (d === "fel") return rod("Inte redo", h.problem || ""); // sa att sidan inte fastnar pa "Kontrollerar…"
+  if (d.hinder) return rod("Inte redo", d.hinder);
+  if ((d.saknas || []).some((p) => p.id === "taligenkanning")) {
     t.textContent = HAMTAR.has(d.hamtning.tillstand) ? "Hämtar modellerna…" : "Modellerna behöver hämtas";
     t.title = "";
     t.className = "tjanst vantar";
     return "vantar";
   }
-  t.textContent = "Inte redo";
-  t.title = h.problem || "";
-  t.className = "tjanst fel";
-  return "fel";
+  if (d.redo === true && !halsanNy) {
+    // Halsosvaret ar aldre an modellsvaret: be om ett nytt i stallet for att visa det gamla. Inte
+    // medan en hamtning pagar: da visar det nya svaret "Redo · utan talaruppdelning" mitt i
+    // hamtningen (taligenkanningen klar, rostmodellen kvar), och etiketten skulle blinka till.
+    if (!halsaPaVag && !HAMTAR.has(d.hamtning.tillstand)) kollaTjanst();
+    return null;
+  }
+  return rod("Inte redo", h.problem || "");
+}
+
+// Etiketten, och orsaken i #meddelande nar den blir rod och /health inte ar ok.
+function uppdateraTjanst(halsanNy = false) {
+  if (visaTjanst(halsanNy) === "fel" && senastHalsa && senastHalsa.status !== "ok") {
+    meddela(`Tjänsten är inte redo: ${senastHalsa.problem}`, true);
+  }
 }
 
 async function kollaTjanst() {
+  halsaPaVag = true;
+  const version = modellVersion;
   try {
     const svar = await fetch("/health");
     const h = await svar.json();
     $("datakatalog").textContent = h.datakatalog;
     senastHalsa = h;
-    if (visaTjanst() === "fel" && h.status !== "ok") meddela(`Tjänsten är inte redo: ${h.problem}`, true);
+    halsaPaVag = false;
+    uppdateraTjanst(version === modellVersion);
   } catch {
+    halsaPaVag = false;
     senastHalsa = false;
     visaTjanst();
   }
@@ -213,12 +238,24 @@ function storlekText(byte) {
 async function kollaModeller() {
   clearTimeout(modellTimer);
   let d;
+  let timer;
   try {
-    d = await api("GET", "/api/modeller");
+    // Tidsgrans, sa att etiketten inte fastnar pa "Kontrollerar…" om svaret aldrig kommer.
+    d = await Promise.race([
+      api("GET", "/api/modeller"),
+      new Promise((_, avvisa) => { timer = setTimeout(() => avvisa(new Error("tidsgräns")), 10000); }),
+    ]);
   } catch {
+    // Ett fel ersatter aldrig ett riktigt svar fran tidigare.
+    if (senastModeller === null) {
+      senastModeller = "fel";
+      uppdateraTjanst();
+    }
     // Syns kortet gar hamtningen kanske vidare: forsok igen.
     if (modellerVisades) modellTimer = setTimeout(kollaModeller, 3000);
     return;
+  } finally {
+    clearTimeout(timer);
   }
   renderaModeller(d);
   clearTimeout(modellTimer); // bara en timer, aven om tva anrop var pa vag samtidigt
@@ -229,7 +266,8 @@ async function kollaModeller() {
 // (bara rostmodellen) eller dolt. Allt byggs med el() och textContent, aldrig innerHTML.
 function renderaModeller(d) {
   senastModeller = d;
-  visaTjanst();
+  modellVersion++;
+  uppdateraTjanst();
   const h = d.hamtning;
   const saknas = d.saknas || [];
   const pagar = HAMTAR.has(h.tillstand);
