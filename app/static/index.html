@@ -95,7 +95,10 @@
         <button type="submit" class="knapp liten-knapp primar">Spara</button>
         <button id="v-rubrik-avbryt" type="button" class="knapp liten-knapp">Avbryt</button>
       </form>
-      <audio id="v-ljud" controls preload="none"></audio>
+      <div class="ljudrad">
+        <audio id="v-ljud" controls preload="none"></audio>
+        <a id="v-ljudfil" class="knapp liten-knapp" href="#">Ladda ner ljudet</a>
+      </div>
       <p id="v-status" class="meddelande"></p>
       <p id="v-varning" class="varning" hidden></p>
 
@@ -105,8 +108,11 @@
         <button id="v-kopiera" type="button" class="knapp">Kopiera texten</button>
         <a id="v-md" class="knapp" href="#">Ladda ner .md</a>
         <a id="v-txt" class="knapp" href="#">Ladda ner .txt</a>
+        <button id="v-angra" type="button" class="knapp" hidden>Ångra rättningarna</button>
       </div>
       <p class="dampad liten">Klicka på en tid för att lyssna. Kontrollera alltid texten mot ljudet.</p>
+      <p id="v-ratta-hjalp" class="dampad liten" hidden>Fel talare? Klicka på namnet för att byta talare för
+        hela repliken, eller markera några ord och välj vem som sa dem.</p>
       <div id="v-text" class="transkript"></div>
     </section>
 
@@ -117,6 +123,8 @@
       <p id="tom" class="dampad">Inga inspelningar än.</p>
     </section>
   </main>
+
+  <div id="talarval" class="talarval" role="dialog" aria-labelledby="talarval-rubrik" hidden></div>
 
   <script src="/static/app.js"></script>
 </body>

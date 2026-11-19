@@ -71,6 +71,12 @@ hos Talare 1. Nu används en annan metod som klarar samma inspelning:
    sekund fel. Svagheten: om whisper inte sätter något skiljetecken vid ett talarbyte kan ett kort
    svar som "Nej, precis." hamna hos den andra.
 
+**Rättningar för hand** (`app/rattning.py`): på webbsidan kan en hel replik, några markerade ord
+eller alla repliker från en talare få en annan talare. Repliker i följd med samma talare slås ihop.
+Ordtiderna sparas inte, så när en replik delas uppskattas tiden utifrån andelen text före
+delningen. Maskinens version sparas som `segment_original` i inspelningens `.json` vid första
+rättningen, så att allt kan ångras. Gör om ersätter båda.
+
 **Digitala möten:** mikrofonen och mötesfliken ligger i varsin kanal. Ett ord hör till den kanal
 som är starkast under ordet, om den är minst fyra gånger så stark; annars får ordet samma som
 närmaste säkra ord. Det du säger blir alltid Talare 1 ("Du"). Bara de andra (höger kanal) delas upp
@@ -183,7 +189,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
 **I en Linux-miljö utan grafikprocessor** (samma Python- och biblioteksversioner):
 
-- **Enhetstester:** 54 st, gröna. De täcker talaruppdelning (även digitala möten), lagring av
+- **Enhetstester:** 74 st, gröna. De täcker talaruppdelning (även digitala möten), lagring av
   inspelningar i delar, export, skydd mot andra webbsidor och alla API-flöden.
 - **`installera.sh` från början:** med en ersättare för launchd, även en ominstallation när
   tjänsten redan finns. Modellnedladdningen med sha256-kontroll gick igenom.

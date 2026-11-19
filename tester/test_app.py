@@ -248,6 +248,66 @@ class TestApp(unittest.TestCase):
         self.assertEqual(self.klient.post(f"/api/inspelningar/{id_}/radera", headers=H).status_code, 200)
         self.assertEqual(self.klient.get("/api/inspelningar").get_json()["inspelningar"], [])
 
+    def test_ratta_talare_dela_sla_ihop_och_angra(self):
+        id_ = self.ladda_upp()
+        url = f"/api/inspelningar/{id_}"
+        seg = self.klient.get(url).get_json()["resultat"]["segment"]
+        self.assertEqual([(s["speaker"], s["text"]) for s in seg], [(1, "Hej Bo."), (2, "Hej Anna.")])
+        # "Bo." sa talare 2: delas av och slås ihop med nästa replik
+        r = self.klient.post(f"{url}/talare", json={"replik": 0, "text": "Hej Bo.", "talare": 2, "fran": 1}, headers=H)
+        self.assertEqual(r.status_code, 200, r.get_json())
+        m = self.klient.get(url).get_json()
+        self.assertEqual([(s["speaker"], s["text"]) for s in m["resultat"]["segment"]],
+                         [(1, "Hej"), (2, "Bo. Hej Anna.")])
+        self.assertIn("**Talare 2** (00:00): Bo. Hej Anna.", self.klient.get(f"{url}/text.md").get_data(as_text=True))
+        lista = self.klient.get("/api/inspelningar").get_json()["inspelningar"]
+        self.assertTrue(lista[0]["rattad"])
+        # ny talare för hela första repliken
+        r = self.klient.post(f"{url}/talare", json={"replik": 0, "text": "Hej", "talare": "ny"}, headers=H)
+        self.assertEqual(r.get_json()["talare"], 3)
+        # alla repliker från talare 3 är talare 2: allt blir en replik, en talare
+        r = self.klient.post(f"{url}/talare", json={"replik": 0, "text": "Hej", "talare": 2, "alla": True}, headers=H)
+        res = self.klient.get(url).get_json()["resultat"]
+        self.assertEqual([(s["speaker"], s["text"]) for s in res["segment"]], [(2, "Hej Bo. Hej Anna.")])
+        self.assertEqual(res["talare"], 1)
+        # ångra: tillbaka till maskinens version
+        self.assertEqual(self.klient.post(f"{url}/talare/angra", headers=H).status_code, 200)
+        res = self.klient.get(url).get_json()["resultat"]
+        self.assertEqual([(s["speaker"], s["text"]) for s in res["segment"]], [(1, "Hej Bo."), (2, "Hej Anna.")])
+        self.assertNotIn("segment_original", res)
+        self.assertEqual(self.klient.post(f"{url}/talare/angra", headers=H).status_code, 409)
+
+    def test_ratta_talare_avvisar_fel(self):
+        id_ = self.ladda_upp()
+        url = f"/api/inspelningar/{id_}/talare"
+        fall = [
+            ({"replik": 0, "text": "Något annat", "talare": 2}, 409),  # texten har ändrats
+            ({"replik": 9, "text": "Hej Bo.", "talare": 2}, 400),
+            ({"replik": 0, "text": "Hej Bo.", "talare": 0}, 400),
+            ({"replik": 0, "text": "Hej Bo.", "talare": True}, 400),
+            ({"replik": 0, "text": "Hej Bo.", "talare": 2, "fran": 5}, 400),
+            ({"replik": 0, "text": "Hej Bo.", "talare": 2, "fran": "1"}, 400),
+        ]
+        for data, kod in fall:
+            self.assertEqual(self.klient.post(url, json=data, headers=H).status_code, kod, data)
+        self.assertEqual(self.klient.post(url, json={"replik": 0, "text": "Hej Bo.", "talare": 2}).status_code, 403)
+
+    def test_gor_om_tar_bort_rattningarna(self):
+        id_ = self.ladda_upp()
+        self.klient.post(f"/api/inspelningar/{id_}/talare", json={"replik": 0, "text": "Hej Bo.", "talare": 2}, headers=H)
+        self.klient.post(f"/api/inspelningar/{id_}/transkribera", json={"talare": "2"}, headers=H)
+        akasha._ko.join()
+        res = self.klient.get(f"/api/inspelningar/{id_}").get_json()["resultat"]
+        self.assertNotIn("segment_original", res)
+        self.assertEqual(len(res["segment"]), 2)
+
+    def test_ljud_kan_laddas_ner(self):
+        id_ = self.ladda_upp(titel="Möte med A/B")
+        r = self.klient.get(f"/api/inspelningar/{id_}/ljud?ladda_ner=1")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("attachment", r.headers["Content-Disposition"])
+        self.assertIn("M%C3%B6te%20med%20A-B.m4a", r.headers["Content-Disposition"])
+
     def test_ljud_kan_spolas(self):
         id_ = self.ladda_upp(innehall=b"0123456789")
         r = self.klient.get(f"/api/inspelningar/{id_}/ljud", headers={"Range": "bytes=2-4"})

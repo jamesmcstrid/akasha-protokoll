@@ -100,7 +100,7 @@ input[type=text], select {
 }
 input[type=text]::placeholder { color: var(--dampad); opacity: 0.8; }
 input[type=text]:focus, select:focus { border-color: var(--primar); }
-input[type=text]:focus, select:focus, .knapp:focus-visible, .tid:focus-visible, .post:focus-visible {
+input[type=text]:focus, select:focus, .knapp:focus-visible, .tid:focus-visible, .post:focus-visible, button.namn:focus-visible {
   outline: none; box-shadow: 0 0 0 4px var(--primar-skugga);
 }
 
@@ -187,5 +187,20 @@ audio { width: 100%; margin: 10px 0; }
 }
 .tid:hover { color: var(--primar); text-decoration: underline; }
 .namn { font-weight: 700; margin-right: 6px; }
+button.namn { font: inherit; font-weight: 700; background: none; border: 0; padding: 0 2px; cursor: pointer; border-radius: 6px; }
+button.namn:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
+
+.ljudrad { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+.ljudrad audio { flex: 1 1 260px; min-width: 0; }
+
+.talarval {
+  position: absolute; z-index: 10; width: max-content; max-width: min(380px, calc(100vw - 16px));
+  padding: 12px 14px; background: var(--kort); border: 1px solid var(--kant); border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+.talarval-rubrik { margin: 0 0 4px; font-weight: 700; }
+.talarval .citat { margin: 0 0 6px; color: var(--dampad); font-style: italic; overflow-wrap: anywhere; }
+.talarval .knappar { margin: 6px 0 10px; }
+.talarval .liten { margin: 4px 0 0; }
 .t1 { color: var(--t1); } .t2 { color: var(--t2); } .t3 { color: var(--t3); }
 .t4 { color: var(--t4); } .t5 { color: var(--t5); } .t6 { color: var(--t6); }

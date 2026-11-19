@@ -29,6 +29,7 @@ from flask import Flask, jsonify, request, send_file
 import export
 import lagring
 import motor
+import rattning
 import talare
 from installningar import DATAKATALOG, MAX_MB, ORDLISTA, PORT
 
@@ -128,6 +129,7 @@ def sammanfattning(meta):
     res = m.pop("resultat", None) or {}
     m["har_text"] = bool(res.get("segment"))
     m["langd_s"] = res.get("langd_s")
+    m["rattad"] = "segment_original" in res  # talarna har rättats för hand
     return m
 
 
@@ -379,6 +381,65 @@ def satt_namn(id_):
     return jsonify(namn=namn)
 
 
+@app.post("/api/inspelningar/<id_>/talare")
+def ratta_talare(id_):
+    """Byt talare för en replik, en del av den (orden fran..till) eller alla repliker från en
+    talare (alla). text måste vara repliken som webbsidan visade, annars har något ändrats."""
+    data = request.get_json(silent=True) or {}
+    with lagring._las:
+        meta = lagring.las(id_)
+        if meta["status"] in lagring.PAGAENDE:
+            raise lagring.Fel("Inspelningen transkriberas just nu.", 409)
+        res = meta.get("resultat") or {}
+        segment = res.get("segment") or []
+        i = data.get("replik")
+        if not isinstance(i, int) or not 0 <= i < len(segment) or "speaker" not in segment[i]:
+            raise lagring.Fel("Repliken finns inte.")
+        if segment[i]["text"] != data.get("text"):
+            raise lagring.Fel("Texten har ändrats sedan sidan visades. Ladda om sidan.", 409)
+        talare_nr = data.get("talare")
+        if talare_nr == "ny":
+            talare_nr = rattning.nytt_nummer(segment, meta.get("namn"))
+        if not isinstance(talare_nr, int) or isinstance(talare_nr, bool) or not 1 <= talare_nr <= 99:
+            raise lagring.Fel("Ogiltig talare.")
+        try:
+            if data.get("alla"):
+                nya = rattning.sla_ihop_talare(segment, segment[i]["speaker"], talare_nr)
+            else:
+                fran, till = data.get("fran"), data.get("till")
+                if any(x is not None and (not isinstance(x, int) or isinstance(x, bool)) for x in (fran, till)):
+                    raise ValueError("ogiltiga ord")
+                nya = rattning.byt_talare(segment, i, talare_nr, fran, till)
+        except ValueError as e:
+            raise lagring.Fel(f"Kunde inte byta talare: {e}.")
+        res.setdefault("segment_original", segment)  # maskinens version, för att kunna ångra
+        res["segment"] = nya
+        res["talare"] = len({s["speaker"] for s in nya if "speaker" in s})
+        meta["resultat"] = res
+        lagring.spara(meta)
+    skriv_text(meta)
+    return jsonify(talare=talare_nr)
+
+
+@app.post("/api/inspelningar/<id_>/talare/angra")
+def angra_talare(id_):
+    """Tillbaka till maskinens version: alla rättningar av talare försvinner."""
+    with lagring._las:
+        meta = lagring.las(id_)
+        res = meta.get("resultat") or {}
+        if "segment_original" not in res:
+            raise lagring.Fel("Det finns inga rättningar att ångra.", 409)
+        res["segment"] = res.pop("segment_original")
+        res["talare"] = len({s["speaker"] for s in res["segment"] if "speaker" in s})
+        lagring.spara(meta)
+    skriv_text(meta)
+    return jsonify(ok=True)
+
+
+def filnamn(meta):
+    return re.sub(r'[\\/:*?"<>|]+', "-", export.rubrik(meta)).strip() or meta["id"]
+
+
 @app.get("/api/inspelningar/<id_>/text.<fmt>")
 def ladda_ner_text(id_, fmt):
     meta = lagring.las(id_)
@@ -390,14 +451,17 @@ def ladda_ner_text(id_, fmt):
         innehall, mime = export.som_text(meta), "text/plain"
     else:
         raise lagring.Fel("Formatet finns inte.", 404)
-    filnamn = re.sub(r'[\\/:*?"<>|]+', "-", export.rubrik(meta)).strip() or meta["id"]
     return send_file(io.BytesIO(innehall.encode("utf-8")), mimetype=f"{mime}; charset=utf-8",
-                     as_attachment=True, download_name=f"{filnamn}.{fmt}")
+                     as_attachment=True, download_name=f"{filnamn(meta)}.{fmt}")
 
 
 @app.get("/api/inspelningar/<id_>/ljud")
 def ljud(id_):
-    return send_file(lagring.ljudfil(lagring.las(id_)), conditional=True)
+    meta = lagring.las(id_)
+    if request.args.get("ladda_ner"):
+        return send_file(lagring.ljudfil(meta), as_attachment=True,
+                         download_name=f"{filnamn(meta)}{meta.get('andelse', '')}")
+    return send_file(lagring.ljudfil(meta), conditional=True)
 
 
 @app.post("/api/inspelningar/<id_>/radera")

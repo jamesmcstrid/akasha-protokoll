@@ -26,7 +26,12 @@ Du får texten uppdelad per talare och kan byta "Talare 1" och "Talare 2" mot ri
    trycka **Ladda upp ljudfil…** och välja en fil, till exempel från Röstmemon.
 4. Vänta medan texten tas fram. Förloppet syns i listan.
 5. Skriv in vad talarna heter och tryck **Spara namn**. Kopiera texten eller ladda ner den som
-   `.md` eller `.txt`. Klicka på en tid för att lyssna på just det stället.
+   `.md` eller `.txt`. Klicka på en tid för att lyssna på just det stället. **Ladda ner ljudet**
+   finns bredvid ljudspelaren.
+6. Har en replik fått fel talare? Klicka på namnet i repliken och välj rätt person. Är bara en del
+   fel, markera de orden och välj vem som sa dem. Där kan du också säga att alla repliker från en
+   talare egentligen är någon annans. **Ångra rättningarna** tar texten tillbaka till hur den var
+   efter transkriberingen. **Gör om** tar bort rättningarna, så sidan frågar först.
 
 Inspelningen heter "Möte" och datum om du inte skriver en rubrik. Rubriken går att byta efteråt
 med **Byt rubrik**. Filnamnet på en uppladdad fil används aldrig, eftersom Röstmemon döper

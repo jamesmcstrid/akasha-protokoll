@@ -18,6 +18,7 @@ const STATUS = {
 const $ = (id) => document.getElementById(id);
 let inspelning = null; // pagaende inspelning i den har fliken
 let visadId = null;
+let visadMeta = null; // inspelningen som visas, med text: behovs nar talare ska rattas
 let pollTimer = null;
 
 // --- hjalpfunktioner -----------------------------------------------------------------------
@@ -370,7 +371,7 @@ function rendera(lista) {
         "Avsluta och transkribera"));
     }
     if (["sparad", "fel", "avbruten", "klar"].includes(m.status)) {
-      atgarder.append(el("button", { type: "button", class: "knapp liten-knapp", onclick: () => transkriberaIgen(m.id) },
+      atgarder.append(el("button", { type: "button", class: "knapp liten-knapp", onclick: () => transkriberaIgen(m) },
         m.status === "klar" ? "Gör om" : "Transkribera"));
     }
     if (!PAGAENDE.has(m.status) && !egenInspelning) {
@@ -410,7 +411,9 @@ async function avsluta(id) {
   uppdateraLista();
 }
 
-async function transkriberaIgen(id) {
+async function transkriberaIgen(m) {
+  const id = m.id;
+  if (m.rattad && !confirm(`Göra om "${m.rubrik}"? Dina rättningar av talarna försvinner.`)) return;
   const { talare, ord } = installningar();
   try {
     await api("POST", `/api/inspelningar/${id}/transkribera`, { talare, ord });
@@ -456,10 +459,16 @@ async function visa(id, tyst = false) {
     : `${STATUS[m.status] || m.status}${m.fel ? `: ${m.fel}` : ""}`;
   $("v-status").classList.toggle("fel", m.status === "fel");
 
+  visadMeta = m;
+  stangTalarval();
   renderaNamn(m);
   renderaText(m);
   $("v-md").href = `/api/inspelningar/${id}/text.md`;
   $("v-txt").href = `/api/inspelningar/${id}/text.txt`;
+  $("v-ljudfil").href = `/api/inspelningar/${id}/ljud?ladda_ner=1`;
+  const harTalare = harText && res.segment.some((s) => "speaker" in s);
+  $("v-ratta-hjalp").hidden = !harTalare || PAGAENDE.has(m.status);
+  $("v-angra").hidden = !(res && res.segment_original);
   if (byttId && !tyst) v.scrollIntoView({ behavior: "smooth", block: "start" });
   if (PAGAENDE.has(m.status)) uppdateraLista();
 }
@@ -497,18 +506,138 @@ async function sparaNamn(m, nummer) {
   } catch (e) { meddela(e.message, true); }
 }
 
+function farg(nr) {
+  return `t${((nr - 1) % 6) + 1}`;
+}
+
 function renderaText(m) {
   const yta = $("v-text");
   yta.replaceChildren();
   const segs = (m.resultat && m.resultat.segment) || [];
-  for (const s of segs) {
+  const kanRatta = !PAGAENDE.has(m.status);
+  segs.forEach((s, i) => {
     const tidKnapp = el("button", { type: "button", class: "tid", title: "Lyssna härifrån",
       onclick: () => { const a = $("v-ljud"); a.currentTime = s.start; a.play(); } }, tid(s.start));
-    const p = el("p", {}, tidKnapp);
-    if ("speaker" in s) p.append(el("span", { class: `namn t${((s.speaker - 1) % 6) + 1}` }, `${namnFor(m, s.speaker)}:`));
-    p.append(s.text);
+    const p = el("p", { "data-replik": String(i) }, tidKnapp);
+    if ("speaker" in s) {
+      const namn = `${namnFor(m, s.speaker)}:`;
+      p.append(kanRatta
+        ? el("button", { type: "button", class: `namn ${farg(s.speaker)}`, title: "Byt talare",
+          "aria-haspopup": "dialog", onclick: (e) => oppnaTalarval(e.currentTarget, i, null, null) }, namn)
+        : el("span", { class: `namn ${farg(s.speaker)}` }, namn));
+      // Varje ord i ett eget span, sa att markerade ord kan fa en annan talare.
+      const text = el("span", { class: "repliktext" });
+      s.text.trim().split(/\s+/).forEach((ord, k) => {
+        if (k) text.append(" ");
+        text.append(el("span", { "data-ord": String(k) }, ord));
+      });
+      p.append(text);
+    } else {
+      p.append(s.text);
+    }
     yta.append(p);
+  });
+}
+
+// --- ratta talare --------------------------------------------------------------------------
+
+function stangTalarval() {
+  const ruta = $("talarval");
+  if (ruta.hidden) return;
+  ruta.hidden = true;
+  ruta.replaceChildren();
+}
+
+function oppnaTalarval(ankare, i, fran, till) {
+  const m = visadMeta;
+  const s = m.resultat.segment[i];
+  const orden = s.text.trim().split(/\s+/);
+  const helReplik = fran === null;
+  const markerat = helReplik ? "" : orden.slice(fran, till).join(" ");
+  const ruta = $("talarval");
+  ruta.replaceChildren(el("p", { id: "talarval-rubrik", class: "talarval-rubrik" },
+    helReplik ? `Vem sa repliken (${tid(s.start)})?` : "Vem sa det markerade?"));
+  if (!helReplik) {
+    ruta.append(el("p", { class: "citat" }, `”${markerat.length > 80 ? markerat.slice(0, 77) + "…" : markerat}”`));
   }
+  const val = el("div", { class: "knappar" });
+  for (const nr of talarnummer(m)) {
+    if (helReplik && nr === s.speaker) continue;
+    val.append(el("button", { type: "button", class: `knapp liten-knapp ${farg(nr)}`,
+      onclick: () => ratta(i, { talare: nr, fran, till }) }, namnFor(m, nr)));
+  }
+  val.append(el("button", { type: "button", class: "knapp liten-knapp",
+    onclick: () => ratta(i, { talare: "ny", fran, till }) }, "Ny talare"));
+  ruta.append(val);
+  const andra = talarnummer(m).filter((nr) => nr !== s.speaker);
+  if (helReplik && andra.length) {
+    const alla = el("div", { class: "knappar" });
+    for (const nr of andra) {
+      alla.append(el("button", { type: "button", class: `knapp liten-knapp ${farg(nr)}`,
+        onclick: () => ratta(i, { talare: nr, alla: true }) }, namnFor(m, nr)));
+    }
+    ruta.append(el("p", { class: "dampad liten" }, `Alla repliker från ${namnFor(m, s.speaker)} är egentligen:`), alla);
+  }
+  ruta.append(el("button", { type: "button", class: "knapp liten-knapp", onclick: stangTalarval }, "Avbryt"));
+
+  ruta.hidden = false;
+  const r = ankare.getBoundingClientRect();
+  const bredd = document.documentElement.clientWidth;
+  ruta.style.top = `${r.bottom + window.scrollY + 6}px`;
+  ruta.style.left = `${Math.max(8, Math.min(r.left + window.scrollX, bredd - ruta.offsetWidth - 8 + window.scrollX))}px`;
+  ruta.querySelector("button").focus({ preventScroll: true });
+}
+
+async function ratta(i, val) {
+  const m = visadMeta;
+  stangTalarval();
+  window.getSelection().removeAllRanges();
+  try {
+    await api("POST", `/api/inspelningar/${m.id}/talare`, { replik: i, text: m.resultat.segment[i].text, ...val });
+    const y = window.scrollY;
+    await visa(m.id, true);
+    window.scrollTo(0, y);
+    uppdateraLista();
+  } catch (e) {
+    $("v-status").textContent = e.message;
+    $("v-status").classList.add("fel");
+  }
+}
+
+function markeradeOrd() {
+  // Markerade ord i en och samma replik -> [replik, fran, till] (till raknas inte med), annars null.
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount || !visadMeta) return null;
+  const r = sel.getRangeAt(0);
+  const replik = (n) => (n.nodeType === 1 ? n : n.parentElement)?.closest("#v-text p[data-replik]");
+  const p = replik(r.startContainer);
+  if (!p || p !== replik(r.endContainer)) return null;
+  const traffade = [...p.querySelectorAll("[data-ord]")].filter((ord) => {
+    const o = document.createRange();
+    o.selectNodeContents(ord);
+    // overlappar om markeringen borjar fore ordets slut och slutar efter ordets borjan
+    return r.compareBoundaryPoints(Range.END_TO_START, o) < 0 && r.compareBoundaryPoints(Range.START_TO_END, o) > 0;
+  });
+  if (!traffade.length) return null;
+  return [Number(p.dataset.replik), Number(traffade[0].dataset.ord),
+    Number(traffade[traffade.length - 1].dataset.ord) + 1, traffade[traffade.length - 1]];
+}
+
+function efterMarkering() {
+  setTimeout(() => {
+    if (!visadMeta || PAGAENDE.has(visadMeta.status)) return;
+    const m = markeradeOrd();
+    if (m) oppnaTalarval(m[3], m[0], m[1], m[2]);
+  }, 0);
+}
+
+async function angraRattningar() {
+  if (!confirm("Ångra alla rättningar av talarna? Texten går tillbaka till hur den var efter transkriberingen.")) return;
+  try {
+    await api("POST", `/api/inspelningar/${visadId}/talare/angra`);
+    visa(visadId, true);
+    uppdateraLista();
+  } catch (e) { meddela(e.message, true); }
 }
 
 async function kopiera() {
@@ -541,6 +670,8 @@ async function sparaRubrik(e) {
 
 function stangVisning() {
   visadId = null;
+  visadMeta = null;
+  stangTalarval();
   $("visning").hidden = true;
   $("v-ljud").removeAttribute("src");
 }
@@ -557,6 +688,13 @@ $("v-stang").addEventListener("click", stangVisning);
 $("v-byt-rubrik").addEventListener("click", () => visaRubrikform($("v-rubrikform").hidden));
 $("v-rubrik-avbryt").addEventListener("click", () => visaRubrikform(false));
 $("v-rubrikform").addEventListener("submit", sparaRubrik);
+$("v-angra").addEventListener("click", angraRattningar);
+$("v-text").addEventListener("mouseup", efterMarkering);
+$("v-text").addEventListener("keyup", (e) => { if (e.shiftKey) efterMarkering(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") stangTalarval(); });
+document.addEventListener("mousedown", (e) => {
+  if (!$("talarval").hidden && !$("talarval").contains(e.target)) stangTalarval();
+});
 window.addEventListener("beforeunload", (e) => {
   if (inspelning) { e.preventDefault(); e.returnValue = ""; }
 });
