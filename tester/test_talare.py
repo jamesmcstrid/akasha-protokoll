@@ -215,7 +215,7 @@ class TestDelar(unittest.TestCase):
     def test_kort_avvikelse_mitt_i_en_mening_far_meningens_talare(self):
         ord_ = " Jag har tyvarr ingen som jag kan sno stil och pride av.".split(" ")[1:]
         ord_lista = [(k * 0.3, k * 0.3 + 0.3, " " + o) for k, o in enumerate(ord_)]
-        etiketter = [1] * 8 + [2, 2, 2] + [1]
+        etiketter = [1] * 7 + [2, 2, 2, 2] + [1]  # "kan sno stil och" hos fel person
         self.assertEqual(talare.jamna_ut(ord_lista, etiketter), [1] * 12)
 
     def test_egen_mening_och_lang_avvikelse_rors_inte(self):
@@ -224,7 +224,7 @@ class TestDelar(unittest.TestCase):
                      (1.5, 1.8, " vi"), (1.8, 2.1, " ses"), (2.1, 2.4, " nasta"), (2.4, 2.7, " vecka"),
                      (2.7, 3.0, " och"), (3.0, 3.3, " da"), (3.3, 3.6, " tar"), (3.6, 3.9, " jag"),
                      (3.9, 4.2, " med"), (4.2, 4.5, " kaffe.")]
-        etiketter = [1, 1, 1, 2, 2] + [1] * 6 + [2] * 4
+        etiketter = [1, 1, 1, 2, 2] + [1] * 5 + [2] * 5  # sista meningen: 5 ord hos en annan
         self.assertEqual(talare.jamna_ut(ord_lista, etiketter), etiketter)
 
     def test_repliker_och_numrering(self):

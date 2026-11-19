@@ -64,7 +64,7 @@ hos Talare 1. Nu används en annan metod som klarar samma inspelning:
    är osäker, och det är oftast en kort avvikelse hos någon som redan finns.
 4. Varje ord får den grupp som fönstren närmast ordet liknar mest.
 5. Talaren byter sällan mitt i en mening. Inom en mening (som slutar vid punkt, frågetecken,
-   utropstecken eller en paus på 0,4 s) får korta avvikande sjok, högst 3 ord i rad, samma talare
+   utropstecken eller en paus på 0,4 s) får korta avvikande sjok, högst 4 ord i rad, samma talare
    som resten av meningen, om en talare har mer än hälften av meningens ord. Egna meningar som
    "Ja, ja." och längre avvikelser rörs inte. Det behövs eftersom ordtiderna är ungefärliga:
    whisper.cpp:s ordtider låg i ett riktigt möte i snitt 0,17 s före faster-whispers och ibland en
@@ -88,7 +88,12 @@ Meningsregeln (punkt 5 ovan) gjorde mest skillnad med whisper.cpp, som din Mac a
 möte med whisper.cpp:s ordtider: 141 repliker med 50 korta blev 70 med 6, med tre talare. I ett
 urval av de ändrade orden var ungefär 22 av 24 rätt. Med konstgjorda "mm" och skratt blev 97–99,6 %
 av orden rätt talare. I rummet gav regeln samma resultat för testdialogerna (100 %) och något
-bättre för AMI-mötena (75,3 → 75,7 %, 83,6 → 85,1 % och 89,0 → 90,6 %).
+bättre för AMI-mötena (75,3 → 76,0 %, 83,6 → 85,1 % och 89,0 → 90,8 %).
+
+Först fick bara sjok på högst 3 ord meningens talare. Omkört på Macen gav det 86 repliker i stället
+för 144, men tre sjok på 4 ord låg kvar hos fel person ("Att man lägger upp", "Så därför tycker
+jag", "Då vet jag inte"). Med högst 4 ord hamnade de rätt, och AMI-mötena, testdialogerna och
+testljudet med konstgjorda ljud blev lika bra eller något bättre.
 
 Utvärderat på ordnivå, med båda motorerna:
 

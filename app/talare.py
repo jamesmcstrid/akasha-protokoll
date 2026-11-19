@@ -32,7 +32,7 @@ MIN_NIVA = 0.2  # fonster tystare an sa har (andel av mediannivan) hoppas over: 
 VIKT_SIGMA_S = 0.35  # fonster nara ordets mitt vager tyngst (gaussisk vikt), 0 = lika vikt
 MIN_GRUPP = 3  # "vet inte": en talare maste ha minst sa manga fonster (1,5 s eget tal)
 MENING_PAUS_S = 0.4  # meningsregeln: en sa har lang paus avslutar ocksa en mening
-KORT_SJOK = 3  # meningsregeln: hogst sa manga ord i rad kan fa meningens talare
+KORT_SJOK = 4  # meningsregeln: hogst sa manga ord i rad kan fa meningens talare
 STOR_GRUPP_S = 30.0  # sammanslagning: grupper med minst sa mycket tal jamfors grupp for grupp
 SAKER_KVOT = 4.0  # digitalt mote: ena kanalen maste vara sa har mycket starkare for ett sakert beslut
 
