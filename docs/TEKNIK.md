@@ -64,9 +64,17 @@ hos Talare 1. Nu används en annan metod som klarar samma inspelning:
 4. Varje ord får den grupp som fönstren närmast ordet liknar mest.
 
 **Digitala möten:** mikrofonen och mötesfliken ligger i varsin kanal. Ett ord hör till den kanal
-som är starkast under ordet, om den är minst dubbelt så stark; annars får ordet samma som närmaste
-säkra ord. Det du säger blir alltid Talare 1 ("Du"). Bara de andra (höger kanal) delas upp efter
-röst, enligt stegen ovan.
+som är starkast under ordet, om den är minst fyra gånger så stark; annars får ordet samma som
+närmaste säkra ord. Det du säger blir alltid Talare 1 ("Du"). Bara de andra (höger kanal) delas upp
+efter röst, enligt stegen ovan.
+
+Först räckte dubbelt så stark. I ett riktigt digitalt möte (18 minuter, tre personer) blev då
+en tredjedel av replikerna bara 1–3 ord: när någon i mötet skrattade eller sa "mm" medan du
+pratade hamnade enstaka ord mitt i dina meningar hos de andra. Med fyra gånger så stark blev det
+65 repliker i stället för 99, och 6 korta i stället för 32. Av de 39 ord som bytte talare var
+ungefär 35 tydligt rätt utifrån innehållet. Med konstgjorda "mm" och skratt i testljudet, där
+facit finns, gick andelen ord med rätt talare från 80–91 % till 89–98 % (medel över åtta
+slumpvisa varianter), och rent ljud gav fortfarande 100 %.
 
 Utvärderat på ordnivå, med båda motorerna:
 

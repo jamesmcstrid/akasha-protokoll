@@ -139,6 +139,17 @@ class TestDigitaltMote(unittest.TestCase):
                      (2.5, 3.5, " vi"), (3.95, 4.25, " att"), (4.5, 5.5, " ses")]
         self.assertEqual(talare.kanal_per_ord(v, h, ord_lista), [True, False, True, False, False, False])
 
+    def test_samtidigt_ljud_i_motet_flyttar_inte_ditt_ord(self):
+        # Nagon i motet skrattar eller sager "mm" medan du pratar: flikkanalen ar 2-3 ganger sa
+        # stark som din mikrofon under ett av dina ord. Ordet ska anda vara ditt.
+        v = np.zeros(SR * 3, dtype=np.float32)
+        h = np.zeros(SR * 3, dtype=np.float32)
+        v[0:int(SR * 2.5)] = 0.1                   # du pratar 0-2,5 s
+        h[int(SR * 0.95):int(SR * 1.45)] = 0.25    # skratt i motet under ordet vid 1-1,4 s
+        ord_lista = [(0.1, 0.6, " det"), (0.6, 0.95, " är"), (1.0, 1.4, " svårt"), (1.5, 2.0, " att"),
+                     (2.0, 2.4, " matcha")]
+        self.assertEqual(talare.kanal_per_ord(v, h, ord_lista), [True] * 5)
+
     def test_monofil_raknas_inte_som_tva_kanaler(self):
         x = np.random.default_rng(1).normal(size=16000).astype(np.float32)
         self.assertFalse(talare.har_tva_kanaler(x, x.copy()))

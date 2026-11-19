@@ -31,7 +31,7 @@ MIN_NIVA = 0.2  # fonster tystare an sa har (andel av mediannivan) hoppas over: 
 VIKT_SIGMA_S = 0.35  # fonster nara ordets mitt vager tyngst (gaussisk vikt), 0 = lika vikt
 MIN_GRUPP = 3  # "vet inte": en talare maste ha minst sa manga fonster (1,5 s eget tal)
 STOR_GRUPP_S = 30.0  # sammanslagning: grupper med minst sa mycket tal jamfors grupp for grupp
-SAKER_KVOT = 2.0  # digitalt mote: ena kanalen maste vara sa har mycket starkare for ett sakert beslut
+SAKER_KVOT = 4.0  # digitalt mote: ena kanalen maste vara sa har mycket starkare for ett sakert beslut
 
 _las = threading.Lock()
 _extraktor = None
@@ -305,9 +305,12 @@ def har_tva_kanaler(vanster, hoger):
 def kanal_per_ord(vanster, hoger, ord_lista):
     """True for ord som sags i mikrofonen (du), False for ord fran motet.
 
-    Ett ord avgors av kanalen bara om den ena ar minst dubbelt sa stark (SAKER_KVOT). Annars,
-    t.ex. ett svagt ord nar bada kanalerna ar nastan tysta, far ordet samma som narmaste sakra
-    ord. Ett tydligt kort "ja" fran motet ar fortfarande sakert och raknas som de andras.
+    Ett ord avgors av kanalen bara om den ena ar minst fyra ganger sa stark (SAKER_KVOT). Annars
+    far ordet samma som narmaste sakra ord. Osakra ar t.ex. svaga ord nar bada kanalerna ar
+    nastan tysta, och ord dar nagon i motet later samtidigt som du pratar (ett skratt eller ett
+    "mm"). Med kravet dubbelt sa stark blev en tredjedel av replikerna i ett riktigt mote bara
+    1-3 ord, nar enstaka ord mitt i en mening hamnade hos fel person. Ett tydligt kort "ja" fran
+    motet ar fortfarande sakert och raknas som de andras.
     """
     beslut, saker = [], []
     for a, b, _ in ord_lista:
