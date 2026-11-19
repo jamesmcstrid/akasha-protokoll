@@ -149,6 +149,8 @@ input[type=text]:focus, select:focus { border-color: var(--primar); }
 .panelrad { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .niva { display: inline-flex; align-items: center; gap: 8px; }
 .niva label { font-size: 0.85rem; }
+.ko { margin: 12px 0; }
+.ko p { margin: 0 0 6px; }
 .tyst-varning { margin: 10px 0 0; font-weight: 600; border-left: 3px solid var(--varning-text); }
 .inspelningspanel .liten { margin: 8px 0 0; }
 .pricka { width: 12px; height: 12px; border-radius: 50%; background: var(--stopp); animation: puls 1.2s infinite; }

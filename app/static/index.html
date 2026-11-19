@@ -103,8 +103,17 @@
           <span id="sparat" class="dampad"></span>
         </div>
         <p id="tyst-varning" class="varning tyst-varning" role="alert" hidden></p>
-        <p class="dampad liten">Låt fliken vara öppen och datorn vaken under mötet. Ljudet sparas var femte
-          sekund, så om fliken stängs av misstag förlorar du som mest de senaste sekunderna.</p>
+        <p class="dampad liten">Låt fliken vara öppen och datorn vaken under mötet. Ljudet sparas på datorn
+          var femte sekund. Svarar inte Akasha Meet sparas ljudet i fliken under tiden och skickas när
+          Akasha Meet är igång igen.</p>
+      </div>
+
+      <div id="ko" class="ko varning" hidden>
+        <p id="ko-text" role="status" aria-live="polite"></p>
+        <div class="knappar">
+          <button id="ko-spara-fil" type="button" class="knapp">Spara ljudet som fil</button>
+          <button id="ko-klar" type="button" class="knapp" hidden>Klar</button>
+        </div>
       </div>
 
       <p id="meddelande" class="meddelande" role="status" aria-live="polite"></p>

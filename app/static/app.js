@@ -25,6 +25,7 @@ const STATUS = {
 
 const $ = (id) => document.getElementById(id);
 let inspelning = null; // pagaende inspelning i den har fliken
+let koInsp = null; // senaste inspelningen i fliken: rutan #ko och "Spara ljudet som fil" gar mot den
 let visadId = null;
 let visadMeta = null; // inspelningen som visas, med text: behovs nar talare ska rattas
 let doljOsakraOrd = false;
@@ -64,7 +65,11 @@ async function api(metod, url, kropp, headers = {}) {
   }
   let data = null;
   try { data = await svar.json(); } catch { /* inte JSON */ }
-  if (!svar.ok) throw new Error((data && data.error) || `Fel ${svar.status}`);
+  if (!svar.ok) {
+    const fel = new Error((data && data.error) || `Fel ${svar.status}`);
+    fel.status = svar.status; // sa att kon kan skilja 4xx fran 5xx
+    throw fel;
+  }
   return data;
 }
 
@@ -259,6 +264,7 @@ async function kollaTjanst() {
       // Tjansten ar tillbaka: hamta om allt utan omladdning.
       clearTimeout(halsaTimer);
       stadaTjanstFel();
+      knuffaKo(); // inspelningens kon skickar direkt i stallet for att vanta ut sin paus
       kollaModeller();
       uppdateraLista();
     }
@@ -502,8 +508,14 @@ async function spelaIn() {
   const stream = ljud.stream;
   const rec = new MediaRecorder(stream, {
     mimeType: format.mime, audioBitsPerSecond: inst.kalla === "digitalt" ? 96000 : 64000 });
-  const insp = { id, rec, ljud, nr: 0, sparade: 0, ko: Promise.resolve(), start: Date.now(), fel: null };
+  // delar: alla delar i ordning, aven de som redan ar sparade (raddningsfilen ska bli hela
+  // inspelningen). sparade: antal delar servern har kvitterat.
+  const insp = { id, rec, ljud, start: Date.now(), delar: [], sparade: 0, skickar: false, fel: null,
+    lage: "spelar", mime: format.mime, andelse: format.andelse, filSparad: false, vackning: null,
+    nere: false, harVantat: false, stoppad: false, tomma: [], senastKoText: null };
   inspelning = insp;
+  koInsp = insp;
+  $("ko").hidden = true;
   rec.addEventListener("dataavailable", (e) => { if (e.data && e.data.size) skickaDel(e.data); });
   rec.start(DEL_MS);
 
@@ -578,31 +590,136 @@ function stangLjud(ljud) {
 
 function skickaDel(blob) {
   const insp = inspelning;
-  const nr = insp.nr++;
   const sekunder = (Date.now() - insp.start) / 1000; // ljudet fram till hit finns i den har delen
-  insp.ko = insp.ko.then(() => skickaMedForsok(insp, nr, blob, sekunder));
+  insp.delar.push({ blob, sekunder });
+  skickaKo(insp);
 }
 
-async function skickaMedForsok(insp, nr, blob, sekunder) {
-  for (let forsok = 0; forsok < 6; forsok++) {
+// Vantetider i sekunder mellan forsoken nar tjansten inte svarar: 1, 2, 4, 8 och sedan var 10:e.
+function vantetid(forsok) { return [1, 2, 4, 8][forsok] ?? 10; }
+
+// Vantar ms millisekunder, men kan vackas av knuffaKo() nar /health svarar igen.
+function vanta(insp, ms) {
+  return new Promise((klar) => {
+    const timer = setTimeout(klar, ms);
+    insp.vackning = () => { clearTimeout(timer); klar(); };
+  }).finally(() => { insp.vackning = null; });
+}
+
+function knuffaKo() {
+  inspelning?.vackning?.();
+}
+
+// En enda slinga skickar delarna i ordning. Servern vagrar luckor, sa en del far aldrig hoppas over:
+// svarar tjansten inte forsoker slingan igen for alltid, och ett riktigt serverfel stoppar den.
+async function skickaKo(insp) {
+  if (insp.skickar || insp.fel) return;
+  insp.skickar = true;
+  let forsok = 0;
+  let serverForsok = 0;
+  while (insp.sparade < insp.delar.length && !insp.fel) {
+    const nr = insp.sparade;
     try {
-      await api("POST", `/api/inspelningar/${insp.id}/del?nr=${nr}`, blob,
+      await api("POST", `/api/inspelningar/${insp.id}/del?nr=${nr}`, insp.delar[nr].blob,
         { "Content-Type": "application/octet-stream" });
       insp.sparade = nr + 1;
-      $("sparat").textContent = `Sparat: ${tid(sekunder)}`;
-      return;
+      insp.nere = false;
+      forsok = 0;
+      serverForsok = 0;
+      uppdateraKo(insp);
+      losTomma(insp);
     } catch (e) {
-      insp.fel = e.message;
-      insp.felTjanst = e instanceof TjanstFel;
-      $("sparat").textContent = e instanceof TjanstFel
-        ? "Kunde inte spara (försöker igen): Akasha Meet svarar inte."
-        : `Kunde inte spara (försöker igen): ${e.message}`;
-      await new Promise((r) => setTimeout(r, 1000 * 2 ** forsok));
+      if (e instanceof TjanstFel) {
+        insp.nere = true;
+        insp.harVantat = true;
+        uppdateraKo(insp);
+        await vanta(insp, vantetid(forsok++) * 1000);
+      } else if (e.status >= 500 && serverForsok < 3) {
+        await vanta(insp, 2000 * 2 ** serverForsok++);
+      } else {
+        insp.fel = e.message.replace(/\.+$/, "");
+        uppdateraKo(insp);
+      }
     }
   }
-  meddela(insp.felTjanst
-    ? "Ljudet kunde inte sparas eftersom Akasha Meet inte svarar. Det som sparades innan dess ligger kvar. Stoppa inspelningen och starta en ny när Akasha Meet är igång igen."
-    : `Ljudet kunde inte sparas: ${insp.fel.replace(/\.+$/, "")}. Stoppa inspelningen.`, true);
+  insp.skickar = false; // ingen await mellan loopvillkoret och hit: en ny del hinner inte slinka igenom
+  losTomma(insp);
+}
+
+// Loser upp den som vantar pa att kon ar tom (eller har fatt ett fel).
+function losTomma(insp) {
+  if (insp.sparade < insp.delar.length && !insp.fel) return;
+  insp.tomma.splice(0).forEach((r) => r());
+}
+
+function vantaPaKon(insp) {
+  if (insp.sparade >= insp.delar.length || insp.fel) return Promise.resolve();
+  return new Promise((r) => insp.tomma.push(r));
+}
+
+// Rutan #ko och raden #sparat. Texten i rutan skrivs bara nar laget eller felet byts, sa att
+// skarmlasare inte laser upp den varje sekund. Mangden som vantar star bara i #sparat.
+function uppdateraKo(insp) {
+  if (koInsp !== insp) return;
+  const vantande = insp.delar.slice(insp.sparade);
+  const sistaSparad = insp.sparade ? insp.delar[insp.sparade - 1].sekunder : 0;
+  const sist = insp.delar.length ? insp.delar[insp.delar.length - 1].sekunder : 0;
+  const mangd = `${tid(sist - sistaSparad)} ljud (${storlekText(vantande.reduce((n, d) => n + d.blob.size, 0))})`;
+  if (insp.harVantat && !vantande.length && !insp.nere) {
+    insp.harVantat = false;
+    if (!insp.stoppad && !insp.fel) kvitto("Akasha Meet svarar igen, och allt ljud är sparat.");
+  }
+  const vantar = insp.nere || (insp.harVantat && (vantande.length > 0 || insp.klarVantar));
+
+  let sparat = "";
+  if (insp.fel) sparat = "Sparas inte: se rutan nedan";
+  else if (vantar && vantande.length) sparat = `Väntar på att få spara: ${mangd}`;
+  else if (insp.sparade) sparat = `Sparat: ${tid(sistaSparad)}`;
+  if ($("sparat").textContent !== sparat) $("sparat").textContent = sparat;
+
+  let text = null;
+  let sort = ""; // vilken text det ar: rutan skrivs bara om nar sorten byts
+  if (insp.fel) {
+    sort = insp.stoppad ? "fel-stoppad" : "fel-spelar";
+    text = insp.stoppad
+      ? `Ljudet kunde inte sparas på datorn: ${insp.fel}. Spara ljudet som en fil och ladda upp den med knappen Ladda upp ljudfil. Tryck Klar när filen är sparad.`
+      : `Ljudet kan inte sparas på datorn: ${insp.fel}. Inspelningen fortsätter i den här fliken. Stoppa när mötet är slut och spara ljudet som en fil.`;
+  } else if (vantar) {
+    sort = !insp.stoppad ? "spelar" : vantande.length ? "vantar-ljud" : "vantar-klar";
+    if (!insp.stoppad) {
+      text = "Akasha Meet svarar inte just nu. Inspelningen fortsätter, och ljudet sparas i den här fliken tills Akasha Meet är igång igen. Stäng inte fliken.";
+    } else if (vantande.length) {
+      text = `Inspelningen är stoppad. ${mangd} väntar på att sparas, eftersom Akasha Meet inte svarar. Sidan försöker igen av sig själv och startar transkriberingen när allt har kommit fram. Stäng inte fliken. Vill du inte vänta kan du spara ljudet som en fil.`;
+    } else {
+      text = "Inspelningen är stoppad och sparad. Transkriberingen startar när Akasha Meet svarar igen. Stäng inte fliken.";
+    }
+  }
+  const nyckel = `${sort}|${insp.fel}`;
+  $("ko").hidden = text === null;
+  if (text === null) insp.senastKoText = null;
+  else if (insp.senastKoText !== nyckel) {
+    insp.senastKoText = nyckel;
+    $("ko-text").textContent = text;
+  }
+}
+
+// Hela inspelningen som en fil, sa att ljudet inte forloras om tjansten aldrig kommer tillbaka.
+function sparaLjudSomFil(insp) {
+  if (!insp || !insp.delar.length) return;
+  const url = URL.createObjectURL(new Blob(insp.delar.map((d) => d.blob), { type: insp.mime.split(";")[0] }));
+  const d = new Date(insp.start);
+  const p = (n) => String(n).padStart(2, "0");
+  // Bara ASCII i filnamnet: ett namn med a, a eller o blev "download" i Chromium.
+  const namn = `Akasha Meet ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}.${p(d.getMinutes())}${insp.andelse}`;
+  const lank = el("a", { href: url, download: namn });
+  document.body.append(lank);
+  lank.click();
+  lank.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  insp.filSparad = true;
+  kvitto(insp.fel
+    ? "Ljudet är sparat som en fil bland dina hämtade filer. Ladda upp den med knappen Ladda upp ljudfil. Den ofullständiga inspelningen i listan kan du radera."
+    : "Ljudet är sparat som en fil bland dina hämtade filer. Sidan fortsätter att försöka spara inspelningen här.");
 }
 
 function starta_niva(stream) {
@@ -627,7 +744,7 @@ function starta_niva(stream) {
       return rms;
     };
     const steg = () => {
-      if (inspelning !== insp) return;
+      if (inspelning !== insp || insp.slut) return;
       const rms = insp.lasNiva();
       if (rms !== null) $("niva").value = Math.min(1, rms * 4);
       requestAnimationFrame(steg);
@@ -640,6 +757,7 @@ function uppdateraKlocka(insp) {
   const t = tid((Date.now() - insp.start) / 1000);
   $("klocka").textContent = t;
   insp.lasNiva?.();
+  uppdateraKo(insp);
   const tyst = !!insp.lasNiva && Date.now() - insp.senastLjud >= TYST_MS;
   visaTystnad(tyst);
   document.title = `${tyst ? "⚠ Inget ljud" : "●"} ${t} – ${SIDTITEL}`;
@@ -656,40 +774,76 @@ function visaTystnad(tyst) {
 
 async function stoppa() {
   const insp = inspelning;
-  if (!insp) return;
+  if (!insp || insp.stoppad) return;
+  insp.stoppad = true;
+  insp.lage = "vantar";
+  // Antal talare, ord och rubrik lases nu, sa att de kan andras under motet. En tom rubrik
+  // skickas inte, och da behalls den fran starten.
+  const { talare, ord, titel } = installningar();
+  insp.klarData = { talare, ord, titel };
   $("stoppa").disabled = true;
   meddela("Sparar de sista sekunderna…");
   await new Promise((r) => { insp.rec.addEventListener("stop", r, { once: true }); insp.rec.stop(); });
-  await insp.ko;
+  await vantaPaKon(insp); // tom, eller servern vagrar delen (insp.fel)
+  insp.slut = true;
   stangLjud(insp.ljud);
   clearInterval(insp.klocka);
   insp.ljudctx?.close();
   try { await insp.wakeLock?.release(); } catch { /* valfritt */ }
-  inspelning = null;
 
   $("stoppa").hidden = true;
   $("stoppa").disabled = false;
-  $("spela-in").hidden = false;
-  $("valj-fil").disabled = false;
-  $("kalla").disabled = false;
   $("inspelningspanel").hidden = true;
   $("niva").value = 0;
   visaTystnad(false);
   document.title = SIDTITEL;
-  try {
-    // Antal talare, ord och rubrik lases nu, sa att de kan andras under motet. En tom rubrik
-    // skickas inte, och da behalls den fran starten.
-    const { talare, ord, titel } = installningar();
-    await api("POST", `/api/inspelningar/${insp.id}/klar`, { starta: true, talare, ord, titel });
-    $("titel").value = ""; // annars far nasta inspelning samma rubrik
-    meddela("Inspelningen är sparad och transkriberas nu.");
-    visa(insp.id);
-  } catch (e) {
-    meddela(e instanceof TjanstFel
-      ? "Inspelningen är sparad, men transkriberingen startade inte eftersom Akasha Meet inte svarade. Starta den från listan när Akasha Meet är igång igen."
-      : `Inspelningen är sparad, men transkriberingen startade inte: ${e.message}`, true);
+  meddela("");
+  if (insp.fel) {
+    // Inget /klar: inspelningen ar ofullstandig. Rutan #ko star kvar med raddningsknappen.
+    insp.lage = "fel";
+    slappInspelning(insp);
+    uppdateraKo(insp);
+  } else {
+    await avslutaInspelning(insp);
   }
   uppdateraLista();
+}
+
+function slappInspelning(insp) {
+  if (inspelning === insp) inspelning = null;
+  $("spela-in").hidden = false;
+  $("valj-fil").disabled = false;
+  $("kalla").disabled = false;
+}
+
+// Allt ljud ar sparat: starta transkriberingen. Svarar inte tjansten forsoker sidan igen.
+async function avslutaInspelning(insp) {
+  for (let forsok = 0; ; forsok++) {
+    try {
+      await api("POST", `/api/inspelningar/${insp.id}/klar`, { starta: true, ...insp.klarData });
+      break;
+    } catch (e) {
+      if (!(e instanceof TjanstFel)) {
+        meddela(`Inspelningen är sparad, men transkriberingen startade inte: ${e.message}`, true);
+        $("ko").hidden = true;
+        slappInspelning(insp);
+        return;
+      }
+      insp.nere = true;
+      insp.harVantat = true;
+      insp.klarVantar = true;
+      uppdateraKo(insp);
+      await vanta(insp, vantetid(forsok) * 1000);
+    }
+  }
+  insp.nere = false;
+  insp.harVantat = false;
+  insp.klarVantar = false;
+  $("ko").hidden = true;
+  slappInspelning(insp);
+  $("titel").value = ""; // annars far nasta inspelning samma rubrik
+  meddela("Inspelningen är sparad och transkriberas nu." + (insp.filSparad ? " Filen du sparade behövs inte." : ""));
+  visa(insp.id);
 }
 
 // --- uppladdning ---------------------------------------------------------------------------
@@ -1583,6 +1737,7 @@ function stangVisning() {
 $("spela-in").addEventListener("click", spelaIn);
 $("kalla").addEventListener("change", () => { meddela(""); visaKallaHjalp(); });
 $("stoppa").addEventListener("click", stoppa);
+$("ko-spara-fil").addEventListener("click", () => sparaLjudSomFil(koInsp));
 $("valj-fil").addEventListener("click", () => $("fil").click());
 $("fil").addEventListener("change", () => { if ($("fil").files[0]) laddaUpp($("fil").files[0]); });
 $("v-kopiera").addEventListener("click", kopiera);
