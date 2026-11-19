@@ -75,7 +75,7 @@ class TestSlaIhop(unittest.TestCase):
 
     def test_nytt_nummer_krockar_inte_med_namn(self):
         self.assertEqual(rattning.nytt_nummer(SEG, {}), 3)
-        self.assertEqual(rattning.nytt_nummer(SEG, {"4": "Jennie"}), 5)
+        self.assertEqual(rattning.nytt_nummer(SEG, {"4": "Eva"}), 5)
 
 
 if __name__ == "__main__":
