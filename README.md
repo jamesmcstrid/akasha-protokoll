@@ -4,7 +4,7 @@ Transkribera möten på din egen Mac. Spela in direkt i webbläsaren, eller ladd
 Du får texten uppdelad per talare och kan byta "Talare 1" och "Talare 2" mot riktiga namn.
 
 - **Allt stannar på datorn.** Tal till text och talaruppdelning görs lokalt. Inget skickas till
-  någon molntjänst.
+  någon molntjänst. Internet används bara en gång, för att hämta modellerna.
 - **Svensk taligenkänning** med [KB-Whisper](https://huggingface.co/KBLab/kb-whisper-medium) från
   Kungliga biblioteket. På Mac med Apple Silicon används grafikprocessorn (Metal).
 - **Möten i rummet och digitalt.** Med datorns mikrofon, eller Google Meet och Slack i Chrome.
@@ -115,6 +115,11 @@ På Apple Silicon installerar den också `whisper-cpp` via Homebrew, så att gra
 Den lägger in tjänsten så att den startar när du loggar in, och öppnar webbsidan. Första gången
 du spelar in frågar webbläsaren om lov att använda mikrofonen.
 
+Saknas en modell när tjänsten startar, till exempel efter att du har valt `MODELL=large`, visar
+sidan vad som behöver hämtas, hur stort det är och varifrån det kommer. Tryck **Hämta nu**, så
+hämtas och kontrolleras det utan att du behöver starta om något. En avbruten hämtning fortsätter
+där den slutade nästa gång.
+
 Kontrollera att allt fungerar (tar några minuter):
 
 ```bash
@@ -141,8 +146,11 @@ Vill du ha den någon annanstans anger du `DATAKATALOG` i `.env`.
 ## Integritet och säkerhet
 
 - Tjänsten lyssnar bara på `127.0.0.1`. Ingen annan dator i nätverket kommer åt den.
-- Efter installationen kopplar den inte upp sig mot internet. Modellerna hämtas en gång från
-  Hugging Face, med låsta versioner och kontrollerade kontrollsummor (sha256).
+- Akasha Meet använder internet bara för att hämta modellerna, en gång: när du trycker **Hämta nu**
+  på sidan eller kör installationen. Filerna kommer från Hugging Face (huggingface.co), med låsta
+  versioner, och varje fil kontrolleras med sha256 innan den används. Programmet följer bara
+  vidarekopplingar till Hugging Faces egna adresser, över https. Inga inspelningar, texter eller
+  uppgifter om dig skickas, varken då eller senare.
 - Andra webbsidor du har öppna kan inte styra tjänsten. Den svarar bara på `localhost`, och allt som
   ändrar något kräver en särskild header som en främmande sida inte får skicka.
 - Ingen språkmodell skriver om eller sammanfattar texten. Det whisper hör är det som står.
@@ -154,8 +162,8 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 
 | Inställning | Standard | Vad |
 |---|---|---|
-| `MOTOR` | `auto` | `auto` väljer whisper.cpp med Metal på Apple Silicon och faster-whisper på processorn annars. Går att tvinga med `whispercpp` eller `faster` (kör då `bash mac/installera.sh` igen) |
-| `MODELL` | `medium` | `large` gör färre fel men tar längre tid och behöver 1,1 GB till. Kör `bash mac/installera.sh` efter att du ändrat, så hämtas modellen |
+| `MOTOR` | `auto` | `auto` väljer whisper.cpp med Metal på Apple Silicon och faster-whisper på processorn annars. Går att tvinga med `whispercpp` eller `faster` (starta om tjänsten; sidan erbjuder att hämta det som saknas) |
+| `MODELL` | `medium` | `large` gör färre fel men tar längre tid och behöver 1,1 GB till (3,1 GB utan Apple Silicon). Starta om tjänsten efter att du ändrat. Sidan erbjuder då att hämta modellen |
 | `ORDLISTA` | tom | Ord som alltid ska stavas rätt, till exempel företagets namn |
 | `DATAKATALOG` | `~/AkashaMeet` | Var inspelningar och texter sparas |
 | `PORT` | `8611` | Webbsidans port |
@@ -167,7 +175,12 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 | Problem | Gör så här |
 |---|---|
 | Sidan öppnas inte | `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`. Läs loggen `~/AkashaMeet/akasha-meet.log` |
-| "Inte redo" uppe till höger | Håll muspekaren över texten för att se orsaken. Oftast saknas modellerna: `bash mac/installera.sh` |
+| "Inte redo" uppe till höger | Håll muspekaren över texten för att se orsaken. Det är något som en hämtning inte kan rätta, till exempel en inställning i `.env`. |
+| "Modellerna behöver hämtas" uppe till höger | Tryck **Hämta nu** i rutan överst på sidan. Det görs bara en gång. |
+| Hämtningen säger "Kunde inte nå Hugging Face" | Kontrollera att datorn är ansluten till internet och tryck **Försök igen**. Det som redan hämtats ligger kvar. |
+| Hämtningen fungerar inte på ett företagsnät (certifikatfel eller inget svar) | Lägg in nätets proxy i `.env`, till exempel `HTTPS_PROXY=http://proxy.foretaget.se:8080`, och vid behov företagets certifikat med `REQUESTS_CA_BUNDLE=/sökväg/till/certifikat.pem`. Starta sedan om tjänsten och tryck **Försök igen**. |
+| "Det får inte plats på disken" | Frigör utrymme och tryck **Försök igen**. Sidan visar hur mycket som behövs. |
+| "Kontrollsumman stämmer inte" | Filen har tagits bort. Tryck **Försök igen**. Händer det igen kan filen ha ändrats hos Hugging Face. |
 | `Bootstrap failed: 5` vid installation | Uppdatera (`git pull`) och kör `bash mac/installera.sh` igen. Hjälper inte det: Systeminställningar → Allmänt → Inloggningsobjekt, tillåt `bash` i bakgrunden |
 | "Fick inte tillgång till mikrofonen" | Tillåt mikrofonen för sidan i webbläsarens inställningar, och för webbläsaren i Systeminställningar → Integritet och säkerhet → Mikrofon |
 | Texten är inte uppdelad per talare | Tryck **Transkribera igen** i listan och välj fler än 1 under "Hur många pratar?" |
@@ -182,12 +195,14 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 
 Hur det fungerar inuti, hur talaruppdelningen utvärderades och vad som är testat står i
 [docs/TEKNIK.md](docs/TEKNIK.md). Enhetstesterna körs med
-`venv/bin/python -m unittest discover -s tester`.
+`venv/bin/python -m unittest discover -s tester`. `venv/bin/python tester/forsta_start.py` startar
+sidan som vid första start, med en låtsaskälla i stället för Hugging Face.
 
 ## Källor och licenser
 
 | Del | Licens |
 |---|---|
+| Akasha Meet (det här programmet) | Apache-2.0, se [LICENSE](LICENSE) |
 | [KB-Whisper medium](https://huggingface.co/KBLab/kb-whisper-medium) (KBLab, Kungliga biblioteket) | Apache-2.0 |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | MIT |
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2.0 |

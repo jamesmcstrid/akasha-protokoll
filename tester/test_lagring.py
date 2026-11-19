@@ -1,6 +1,7 @@
 import io
 import os
 import unittest
+from unittest import mock
 
 import hjalp
 import lagring
@@ -76,6 +77,31 @@ class TestLagring(unittest.TestCase):
         lagring.radera(a["id"])
         self.assertFalse(os.path.exists(lagring.ljudfil(a)))
         self.assertEqual(len(lagring.lista()), 1)
+
+    def test_spara_forsoker_igen_om_filen_ar_last(self):
+        # Windows: os.replace ger PermissionError om en annan trad just laser .json-filen.
+        m = lagring.ny_inspelning(".webm", "Före", INST)
+        riktig = os.replace
+        anrop = []
+
+        def last_en_gang(a, b):
+            anrop.append(a)
+            if len(anrop) == 1:
+                raise PermissionError("last")
+            return riktig(a, b)
+
+        with mock.patch("lagring.time.sleep"), mock.patch("lagring.os.replace", last_en_gang):
+            lagring.uppdatera(m["id"], titel="Efter")
+        self.assertEqual(len(anrop), 2)
+        self.assertEqual(lagring.las(m["id"])["titel"], "Efter")
+
+    def test_spara_ger_upp_efter_fem_forsok(self):
+        m = lagring.ny_inspelning(".webm", "", INST)
+        with mock.patch("lagring.time.sleep"), \
+                mock.patch("lagring.os.replace", side_effect=PermissionError("last")) as ers:
+            with self.assertRaises(PermissionError):
+                lagring.uppdatera(m["id"], titel="X")
+        self.assertEqual(ers.call_count, 5)
 
 
 if __name__ == "__main__":

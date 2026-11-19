@@ -545,12 +545,15 @@ def transkribera_direkt():
         if antal != 1 and talare.problem():
             return jsonify(error=talare.problem()), 503
     data = fil.read()
-    with tempfile.NamedTemporaryFile(suffix=os.path.splitext(fil.filename or "")[1] or ".audio") as tmp:
-        tmp.write(data)
-        tmp.flush()
+    # En egen katalog i stallet for NamedTemporaryFile: Windows later inte en oppen temporar fil
+    # oppnas igen med namnet, och avkodaren oppnar den.
+    with tempfile.TemporaryDirectory(prefix="akasha-meet-") as katalog:
+        sokvag = os.path.join(katalog, "ljud" + (os.path.splitext(fil.filename or "")[1] or ".audio"))
+        with open(sokvag, "wb") as f:
+            f.write(data)
         t0 = time.time()
         try:
-            samples = motor.avkoda(tmp.name)
+            samples = motor.avkoda(sokvag)
         except Exception as e:
             raise lagring.Fel(f"ljudet kunde inte lasas: {e}")
     try:

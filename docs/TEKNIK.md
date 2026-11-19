@@ -25,10 +25,11 @@ app/app.py (Flask, bara 127.0.0.1) ── sparar i ~/AkashaMeet ── köar ett
 
 | Mapp | Innehåll |
 |---|---|
-| `app/` | Tjänsten (`app.py`), motorerna (`motor.py`), talaruppdelningen (`talare.py`), lagring, export och webbsidan i `static/` |
-| `mac/` | `installera.sh`, `hamta-modeller.sh`, `kor.sh`, `avinstallera.sh` och launchd-mallen |
+| `app/` | Tjänsten (`app.py`), motorerna (`motor.py`), modellerna och hämtningen (`modeller.py`), talaruppdelningen (`talare.py`), det som skiljer mellan operativsystemen (`plattform.py`), lagring, export och webbsidan i `static/` |
+| `mac/` | `installera.sh`, `hamta-modeller.sh`, `kor.sh`, `avinstallera.sh` och launchd-mallen. Skripten som hämtar modeller anropar `app/modeller.py` |
 | `halsokoll/` | `prov.sh`: provet efter installation. `sammanfatta.sh` och `talardiagnos.sh`: hur en transkribering gick, utan att visa texten (se nedan) |
-| `tester/` | Enhetstester. De behöver inga modeller |
+| `tester/` | Enhetstester. De behöver inga modeller. Här finns också `falsk_hf.py` (en låtsaskälla som spelar Hugging Face), `forsta_start.py` (startar sidan som vid första start, med låtsaskällan) och `test_riktig_hamtning.py` (hämtar röstmodellen på riktigt, bara för hand) |
+| `.github/workflows/` | Testerna i GitHub Actions |
 | `testljud/` | Tre testljud ur FLEURS, se [KALLOR.md](../testljud/KALLOR.md) |
 | `docs/` | Den här filen och bilderna till README |
 
@@ -51,6 +52,8 @@ pratar med tjänsten via JSON. Allt som ändrar något är `POST` och kräver he
 | `POST /api/inspelningar/fil` | Uppladdad fil (multipart) |
 | `POST /api/inspelningar/<id>/transkribera` | "Transkribera igen" (och "Försök igen"): `talare` och `ord` från dialogen. Källan behålls alltid, eftersom kanalerna i filen inte ändras |
 | `GET /api/inspelningar`, `GET /api/inspelningar/<id>` | Listan, och en inspelning med text |
+| `GET /api/modeller` | Vilka modeller som saknas (med storlek, källa och licens), hur mycket som redan är hämtat, ledigt utrymme, och hur hämtningen går. `hinder` är satt när något saknas som en hämtning inte kan rätta |
+| `POST /api/modeller/hamta` | Startar hämtningen av det som saknas, i en bakgrundstråd. Kroppen läses inte. En hämtning som redan pågår startas inte om. `POST /api/modeller/avbryt` stoppar den; det som hämtats ligger kvar |
 | `POST …/titel`, `…/namn`, `…/talare`, `…/talare/angra`, `…/radera` | Byt rubrik, spara talarnamn, rätta talare, ångra alla rättningar, radera |
 | `GET …/text.md`, `…/text.txt`, `…/ljud` | Nedladdningar. `?ladda_ner=1` på ljudet ger en fil att spara |
 
@@ -74,6 +77,50 @@ Sidan i korthet:
   och 3 Använd texten. Ett klick på ett osäkert ord spelar från 2 s före ordets uppskattade tid.
 - **Kvitton och fel** från listan och visningen visas i en ruta nederst i fönstret. Kvitton
   försvinner efter 6 s, fel ligger kvar tills man stänger dem.
+
+## Modellerna och hämtningen
+
+Modellerna är för stora för att följa med i repot (1,6 GB med standardvalet), så de hämtas från
+Hugging Face första gången. Det är den enda användningen av internet. Allt om dem står i
+`app/modeller.py`, och bara där: repo, revision, filnamn, katalog, storlek och sha256 för varje
+fil. Skripten i `mac/` har ingen egen kopia utan anropar `python app/modeller.py`, och webbsidan
+använder samma modul genom API:t ovan.
+
+- **"Finns" betyder rätt storlek.** Det kostar inget och kontrolleras vid varje anrop till
+  `/health` och `/api/modeller`. sha256 räknas när en fil har hämtats, inte vid varje start
+  (1,5 GB tar flera sekunder).
+- **Halva filer** heter `<namn>.delvis` bredvid målet och har aldrig målets namn. När sha256
+  stämmer döps filen om med `os.replace`, som är atomiskt på alla tre systemen. Stämmer den inte
+  tas `.delvis` bort. En avbruten hämtning fortsätter med `Range: bytes=N-`. Svarar servern 200 i
+  stället för 206 börjar filen om från början.
+- **Omdirigeringar följs för hand**, högst fem, och bara till `huggingface.co`, `*.huggingface.co`
+  och `*.hf.co`, över https. Varje adress kontrolleras innan den begärs. Startadressen byggs alltid
+  av manifestet, och varje försök börjar om därifrån, eftersom adresserna till CDN:et är signerade
+  och går ut.
+- **Egna omförsök:** avbrott, tidsgräns och nätfel ger två nya försök (efter 2 och 5 s) innan
+  felet visas. Ett försök som har hunnit hämta minst 1 MiB räknas inte, men en fil får högst
+  20 försök.
+- **Proxy och certifikat:** `requests` följer `HTTPS_PROXY`, `NO_PROXY`, `REQUESTS_CA_BUNDLE` och
+  `CURL_CA_BUNDLE`. Det läser inte `SSL_CERT_FILE`, så `ny_session()` använder den om ingen av de
+  andra är satt. `.env` läses av `mac/kor.sh`, så proxyn kan stå där. Operativsystemets egna
+  certifikat används inte.
+- **`HF_HUB_OFFLINE=1`** sätts överst i `motor.py`, så att faster-whisper aldrig hämtar något
+  själv.
+- **Motorn väljs om efter hämtningen.** `motor.mal_motor()` säger vilken motor modellerna ska
+  hämtas för: på en Mac med `whisper-cli` är det whisper.cpp även när GGML-filen saknas.
+  `motor.uppdatera()` räknar om den aktiva motorn efter en lyckad hämtning och vid anrop till
+  `/health` och `/api/modeller`. Den väntar aldrig på transkriberingslåset, så tjänsten blir redo
+  utan omstart, även om modellerna hämtades med skriptet i en terminal.
+- **Vad som erbjuds:** taligenkänningen bara om den aktiva motorn inte är redo, och röstmodellen om
+  den saknas. Den som redan kör faster-whisper på en Mac får alltså ingen uppmaning att hämta
+  GGML-modellen. Sådant som en hämtning inte kan rätta, till exempel `whisper-cli` som saknas med
+  `MOTOR=whispercpp` eller en okänd `MODELL`, visas som "Inte redo".
+- **Testkällan:** `tester/falsk_hf.py` är en transport för `requests` som spelar Hugging Face:
+  omdirigering till en CDN-värd, `Range`, avbrott mitt i en fil, fel innehåll, serverfel och
+  nätfel. Testerna och `forsta_start.py` byter bara ut sessionen (`modeller.ny_session`), så all
+  riktig kod körs oförändrad: adresserna, omdirigeringarna, kravet på https och sha256. Det finns
+  ingen flagga, miljövariabel eller undantag för http i `app/`. Transporten stoppar alla andra
+  värdar än de falska, så inget test når nätet.
 
 ## Talaruppdelningen
 
@@ -245,8 +292,18 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
 **I en Linux-miljö utan grafikprocessor** (samma Python- och biblioteksversioner):
 
-- **Enhetstester:** 81 st, gröna. De täcker talaruppdelning (även digitala möten), lagring av
-  inspelningar i delar, export, skydd mot andra webbsidor och alla API-flöden.
+- **Enhetstester:** 143 st, gröna, och ett till som bara körs för hand (se nedan). De täcker
+  talaruppdelning (även digitala möten), lagring av inspelningar i delar, export, skydd mot andra
+  webbsidor, alla API-flöden och modellhämtningen mot låtsaskällan.
+- **Första start i Chromium**, med låtsaskällan i stället för Hugging Face: kortet med modellerna,
+  hämtning, stopp och fortsättning, en sida som laddas om mitt i hämtningen, och alla felfall
+  (avbrott, fel kontrollsumma, inget nät och full disk) med "Försök igen". Både i ljust och mörkt
+  läge, utan fel i konsolen.
+- **Riktig hämtning av röstmodellen** (40 MB) från Hugging Face: avbruten efter några MB och
+  fortsatt med `Range`, med omdirigering till en CDN-värd och rätt sha256. Körs för hand med
+  `AKASHA_RIKTIG_HAMTNING=1 venv/bin/python -m unittest discover -s tester -p test_riktig_hamtning.py`.
+  Taligenkänningen (1,5 GB) har aldrig hämtats på riktigt i provet.
+- **GitHub Actions:** enhetstesterna på ubuntu, macOS (arm64) och Windows.
 - **`installera.sh` från början:** med en ersättare för launchd, även en ominstallation när
   tjänsten redan finns. Modellnedladdningen med sha256-kontroll gick igenom.
 - **`halsokoll/prov.sh`:** grön med båda motorerna.
@@ -275,6 +332,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
 **Inte provat än:**
 
+- första start på en riktig Mac och på Windows, och hämtning på ett företagsnät med proxy;
 - ett riktigt Google Meet-möte eller en Slack-huddle, där Chromes flikväljare och
   "Dela även flikljud" används på riktigt;
 - inspelning via webbsidan i Safari (Safari spelar in i ett annat format än Chrome);

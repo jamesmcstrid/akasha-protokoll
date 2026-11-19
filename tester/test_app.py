@@ -328,16 +328,17 @@ class TestApp(unittest.TestCase):
 
     def test_ljud_kan_laddas_ner(self):
         id_ = self.ladda_upp(titel="Möte med A/B")
-        r = self.klient.get(f"/api/inspelningar/{id_}/ljud?ladda_ner=1")
-        self.assertEqual(r.status_code, 200)
-        self.assertIn("attachment", r.headers["Content-Disposition"])
-        self.assertIn("M%C3%B6te%20med%20A-B.m4a", r.headers["Content-Disposition"])
+        # with: send_file haller filen oppen tills svaret stangs, och Windows tar inte bort en oppen fil.
+        with self.klient.get(f"/api/inspelningar/{id_}/ljud?ladda_ner=1") as r:
+            self.assertEqual(r.status_code, 200)
+            self.assertIn("attachment", r.headers["Content-Disposition"])
+            self.assertIn("M%C3%B6te%20med%20A-B.m4a", r.headers["Content-Disposition"])
 
     def test_ljud_kan_spolas(self):
         id_ = self.ladda_upp(innehall=b"0123456789")
-        r = self.klient.get(f"/api/inspelningar/{id_}/ljud", headers={"Range": "bytes=2-4"})
-        self.assertEqual(r.status_code, 206)
-        self.assertEqual(r.get_data(), b"234")
+        with self.klient.get(f"/api/inspelningar/{id_}/ljud", headers={"Range": "bytes=2-4"}) as r:
+            self.assertEqual(r.status_code, 206)
+            self.assertEqual(r.get_data(), b"234")
 
     def test_framsteg_visar_hur_lange_steget_har_hallit_pa(self):
         id_ = self.klient.post("/api/inspelningar", headers=H, json={"andelse": ".webm"}).get_json()["id"]

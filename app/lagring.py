@@ -11,6 +11,7 @@ import json
 import os
 import re
 import threading
+import time
 from datetime import datetime
 
 from installningar import DATAKATALOG
@@ -58,7 +59,16 @@ def spara(meta):
     tmp = sokvag + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, sokvag)
+    # Pa Windows ger os.replace PermissionError om en annan trad just laser .json-filen (listan
+    # lases varannan sekund medan ett jobb skriver). Det gar over efter nagra millisekunder.
+    for forsok in range(5):
+        try:
+            os.replace(tmp, sokvag)
+            return
+        except PermissionError:
+            if forsok == 4:
+                raise
+            time.sleep(0.05)
 
 
 def uppdatera(id_, **falt):

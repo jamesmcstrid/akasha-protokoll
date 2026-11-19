@@ -4,3 +4,5 @@ faster-whisper==1.0.3
 # faster-whisper 1.0.3 importerar requests men anger det inte som beroende.
 requests==2.34.2
 sherpa-onnx==2.0.1
+# Anvands direkt av app/ (motor, talare). Kom tidigare bara med faster-whisper.
+numpy==2.5.5

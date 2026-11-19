@@ -1,0 +1,6 @@
+# Radslut: bash-skript med CRLF gar inte att kora. Windows checkar annars ut text med CRLF.
+* text=auto
+*.sh text eol=lf
+*.m4a binary
+*.webm binary
+*.png binary
