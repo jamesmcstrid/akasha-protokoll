@@ -101,6 +101,20 @@ class BeroendeLogik(unittest.TestCase):
         r = pe.kontrollera(t, system_stammar=stammar)
         self.assertEqual(len(r.fel), 3)
 
+    def test_egna_bibliotek_godtas_aldrig_fran_system32(self):
+        namn = ["onnxruntime.dll", "DirectML.dll", "libomp140.x86_64.dll", "libiomp5md.dll", "sherpa-onnx-c-api.dll",
+                "whisper.dll", "ggml-base.dll", "ggml-cpu-haswell.dll"]
+        t = trad({"a.dll": info(namn)})
+        r = pe.kontrollera(t, system_stammar={pe.stam(n) for n in namn} | {"kernel32"})
+        self.assertEqual(len(r.fel), len(namn), r.fel)
+        self.assertEqual(r.system, {})
+        # finns de i paketet hittas de som vanligt
+        ok = trad({"a.dll": info(namn), **{n: info() for n in namn}})
+        self.assertEqual(pe.kontrollera(ok, system_stammar={pe.stam(n) for n in namn}).fel, [])
+
+    def test_vc_saknas_namnger_inte_onnxruntime(self):
+        self.assertEqual(pe.vc_saknas(trad({"a.dll": info(["onnxruntime.dll", "VCRUNTIME140.dll"])})), ["VCRUNTIME140.dll"])
+
     def test_system_katalog_godtar_andra_dll_och_listar_dem(self):
         t = trad({"a.dll": info(["avicap32x.dll", "kernel32.dll"])})
         self.assertEqual(len(pe.kontrollera(t).fel), 1)
@@ -169,22 +183,50 @@ class BeroendeLogik(unittest.TestCase):
         self.assertEqual(len(res.fel_rader), 1)  # VCOMP140X.dll finns inte
         self.assertIn("VCOMP140X.dll", res.fel_rader[0])
 
-    def test_hitta_runtime_tar_system32_for_visual_studio(self):
+    def test_hitta_runtime_tar_hogsta_redist_versionen_for_system32(self):
         mapp = tempfile.mkdtemp(prefix="akasha-pe-")
         self.addCleanup(shutil.rmtree, mapp, True)
         sys32 = os.path.join(mapp, "Windows", "System32")
         os.makedirs(sys32)
-        skriv(os.path.join(sys32, "vcruntime140.dll"), b"x")
-        redist = os.path.join(mapp, "VS", "VC", "Redist", "MSVC", "14.44.1", "x64", "Microsoft.VC143.OpenMP")
-        os.makedirs(redist)
-        skriv(os.path.join(redist, "vcomp140.dll"), b"y")
+        skriv(os.path.join(sys32, "vcruntime140.dll"), b"sys")
+        skriv(os.path.join(sys32, "msvcp140.dll"), b"sys")
+        def redist(version, mapp_namn, fil, data):
+            d = os.path.join(mapp, "VS", "VC", "Redist", "MSVC", version, "x64", mapp_namn)
+            os.makedirs(d, exist_ok=True)
+            skriv(os.path.join(d, fil), data)
+            return os.path.join(d, fil)
+        redist("14.9.1", "Microsoft.VC143.CRT", "vcruntime140.dll", b"gammal")
+        ny = redist("14.44.35207", "Microsoft.VC143.CRT", "vcruntime140.dll", b"ny")
+        redist("14.50.0", "Microsoft.VC143.CRT.debug_nonredist", "vcruntime140.dll", b"debug")
+        omp = redist("14.44.35207", "Microsoft.VC143.OpenMP", "vcomp140.dll", b"omp")
         with mock.patch.dict(os.environ, {"SystemRoot": os.path.join(mapp, "Windows")}), \
              mock.patch.object(verktyg, "vs_kataloger", lambda: [os.path.join(mapp, "VS")]):
-            self.assertEqual(verktyg.hitta_runtime("vcruntime140.dll")[0], os.path.join(sys32, "vcruntime140.dll"))
-            self.assertEqual(verktyg.hitta_runtime("vcomp140.dll")[0], os.path.join(redist, "vcomp140.dll"))
+            self.assertEqual(verktyg.hitta_runtime("vcruntime140.dll")[0], ny)  # 14.44 > 14.9, inte debug
+            self.assertEqual(verktyg.hitta_runtime("vcomp140.dll")[0], omp)
+            # finns den inte i Redist tas System32
+            self.assertEqual(verktyg.hitta_runtime("msvcp140.dll")[0], os.path.join(sys32, "msvcp140.dll"))
             sokvag, text = verktyg.hitta_runtime("finns-inte.dll")
             self.assertIsNone(sokvag)
             self.assertIn("finns-inte.dll", text)
+
+    def test_kopiera_runtime_skriver_kalla_och_versioner(self):
+        mapp = tempfile.mkdtemp(prefix="akasha-pe-")
+        self.addCleanup(shutil.rmtree, mapp, True)
+        ut = os.path.join(mapp, "ut")
+        os.makedirs(ut)
+        skriv(os.path.join(ut, "whisper-cli.exe"), b"x")
+        kalla = os.path.join(mapp, "vcruntime140.dll")
+        skriv(kalla, b"x")
+        skriv(os.path.join(mapp, "VCRUNTIME140.dll"), b"y")  # samma fil i (falska) System32
+        res = verktyg.kontroll_hjalp.Resultat("prov")
+        with mock.patch.object(pe, "las_pe", lambda s: info(["VCRUNTIME140.dll"] if s.endswith(".exe") else [])), \
+             mock.patch.object(verktyg, "hitta_runtime", lambda n: (kalla, None)), \
+             mock.patch.object(verktyg, "filversion", lambda s: "14.44.35211.0"), \
+             mock.patch.object(verktyg, "system32", lambda: mapp), mock.patch("builtins.print"):
+            verktyg.kopiera_runtime(ut, res)
+        self.assertEqual(len(res.ok_rader), 1)
+        self.assertIn("version 14.44.35211.0", res.ok_rader[0])
+        self.assertIn("samma fil i System32: version 14.44.35211.0", res.ok_rader[0])
 
 
 def bygg_pe(maskin, importer):

@@ -3,9 +3,11 @@
 # med whisper.cpp:s egna Windows-flaggor (jobbet "windows" i dess release.yml), utom SDL2.
 #   bash paketering/bygg-whisper-cli-windows.sh VERSION UTKATALOG       (kors fran repots rot, i Git Bash)
 #   PYTHON=build/venv/Scripts/python bash paketering/bygg-whisper-cli-windows.sh v1.9.5 build/whisper
-# Resultat: UTKATALOG/ut/ med whisper-cli.exe, whisper.dll, ggml.dll, ggml-base.dll, en ggml-cpu-<variant>.dll per
-# processorvariant och C-runtime-DLL:erna som filerna importerar. Kors i Actions (paketering/ ar inte till for anvandaren).
-# PYTHON ska ha pefile (byggets venv): den hittar vilka C-runtime-DLL:er som ska kopieras in.
+# Resultat: UTKATALOG/kompilerat/ med bara det som kompilatorn gav: whisper-cli.exe, whisper.dll, ggml.dll, ggml-base.dll och
+# en ggml-cpu-<variant>.dll per processorvariant. Det ar det som cachas i flodet (nyckel: version + hash av det har skriptet).
+# C-runtime-DLL:erna, fillistan och beroendekontrollen gors av samla-whisper-cli-windows.sh, som kors efter varje bygge och
+# varje cachetraff (sa att en rattning i verktygen inte tvingar fram ett nytt kompilerat bygge). Kors i Actions.
+# PYTHON ska ha byggets venv (anvands bara for fillistan).
 set -euo pipefail
 trap 'echo "FEL: bygg-whisper-cli-windows.sh stannade pa rad $LINENO: $BASH_COMMAND" >&2' ERR
 
@@ -14,8 +16,8 @@ UT="${2:?ange en utkatalog}"
 PYTHON="${PYTHON:-python}"
 ROT="$(cd "$(dirname "$0")/.." && pwd)"
 
-if [ -e "$UT/src" ] || [ -e "$UT/bygg" ] || [ -e "$UT/ut" ]; then
-  echo "FEL: $UT/src, $UT/bygg eller $UT/ut finns redan. Anvand en tom utkatalog." >&2
+if [ -e "$UT/src" ] || [ -e "$UT/bygg" ] || [ -e "$UT/kompilerat" ]; then
+  echo "FEL: $UT/src, $UT/bygg eller $UT/kompilerat finns redan. Anvand en tom utkatalog." >&2
   exit 1
 fi
 mkdir -p "$UT"
@@ -47,7 +49,7 @@ fi
 # Dessutom av: SDL2 (inget mikrofonprogram), tester, server och curl.
 # OpenMP (GGML_OPENMP) ar pa som standard; vcomp140.dll tas med bland C-runtime-filerna nedan om den importeras.
 # C-runtimen lankas dynamiskt (/MD, CMake:s standard): vcruntime140.dll och de andra kopieras in bredvid
-#   programmet, eftersom hos anvandaren inte alltid finns Visual C++ Redistributable.
+#   programmet av samla-whisper-cli-windows.sh, eftersom hos anvandaren inte alltid finns Visual C++ Redistributable.
 echo "== Byggmiljon"
 cmake --version | sed -n 1p
 echo "-- CMakes standardgenerator (markerad med *):"
@@ -97,26 +99,23 @@ if [ -z "$BIN" ]; then
 fi
 BIN_KAT="$(dirname "$BIN")"
 echo "whisper-cli.exe: $BIN"
-mkdir -p "$UT/ut"
-cp "$BIN" "$UT/ut/"
+mkdir -p "$UT/kompilerat"
+cp "$BIN" "$UT/kompilerat/"
 # Alla DLL-filer som byggdes ligger normalt bredvid exe-filen (whisper.cpp satter utkatalogen till bin/).
-cp "$BIN_KAT"/*.dll "$UT/ut/" 2>/dev/null || echo "VARNING: inga .dll i $BIN_KAT"
+cp "$BIN_KAT"/*.dll "$UT/kompilerat/" 2>/dev/null || echo "VARNING: inga .dll i $BIN_KAT"
 # Och om nagon byggdes pa annat stalle, till exempel i ett eget undermapp per mal:
 for dll in $(find "$UT/bygg" \( -name 'whisper.dll' -o -name 'ggml*.dll' \) -not -path '*CMakeFiles*'); do
-  if [ ! -f "$UT/ut/$(basename "$dll")" ]; then
+  if [ ! -f "$UT/kompilerat/$(basename "$dll")" ]; then
     echo "VARNING: $dll lag inte bredvid whisper-cli.exe, kopieras in"
-    cp "$dll" "$UT/ut/"
+    cp "$dll" "$UT/kompilerat/"
   fi
 done
 
-echo "== C-runtime-DLL:er (vcruntime140, msvcp140, vcomp140 ...): kopieras in bredvid programmet"
-"$PYTHON" "$ROT/paketering/bygg_windows_verktyg.py" runtime "$UT/ut"
-
-echo "== Filerna i $UT/ut"
-"$PYTHON" "$ROT/paketering/bygg_windows_verktyg.py" lista "$UT/ut"
+echo "== Filerna i $UT/kompilerat"
+"$PYTHON" "$ROT/paketering/bygg_windows_verktyg.py" lista "$UT/kompilerat"
 
 echo "== Processorvarianter (ggml-cpu-*.dll)"
-VARIANTER="$(find "$UT/ut" -name 'ggml-cpu-*.dll' | sort)"
+VARIANTER="$(find "$UT/kompilerat" -name 'ggml-cpu-*.dll' | sort)"
 if [ -z "$VARIANTER" ]; then
   echo "FEL: ingen ggml-cpu-<variant>.dll byggdes: whisper-cli skulle sakna processorstod. Bygget gav (slutkod $KOD):" >&2
   find "$UT/bygg" -name '*.dll' -not -path '*CMakeFiles*' >&2
@@ -124,13 +123,9 @@ if [ -z "$VARIANTER" ]; then
 fi
 echo "$VARIANTER" | sed 's|.*/||'
 echo "OK: $(echo "$VARIANTER" | grep -c .) processorvarianter"
-[ -f "$UT/ut/whisper.dll" ] && [ -f "$UT/ut/ggml.dll" ] && [ -f "$UT/ut/ggml-base.dll" ] || {
-  echo "FEL: whisper.dll, ggml.dll eller ggml-base.dll saknas i $UT/ut" >&2
+[ -f "$UT/kompilerat/whisper.dll" ] && [ -f "$UT/kompilerat/ggml.dll" ] && [ -f "$UT/kompilerat/ggml-base.dll" ] || {
+  echo "FEL: whisper.dll, ggml.dll eller ggml-base.dll saknas i $UT/kompilerat" >&2
   exit 1
 }
 echo "OK: whisper-cli.exe, whisper.dll, ggml.dll och ggml-base.dll finns"
-
-echo "== Beroenden (alla importer ska hittas i samma katalog eller bland Windows egna DLL-filer)"
-SYS="${SYSTEMROOT:-C:\\Windows}\\System32"
-"$PYTHON" "$ROT/paketering/kontrollera_pe.py" "$UT/ut" --system-katalog "$SYS"
-echo "== Klar"
+echo "== Klar (det kompilerade ligger i $UT/kompilerat)"

@@ -204,7 +204,7 @@ class Paketering(unittest.TestCase):
 
 WINDOWS_PY = ("kontroll_hjalp.py", "kontrollera_pe.py", "kontrollera_whisper_cli_windows.py", "kontrollera_windows.py",
               "bygg_windows_verktyg.py")
-WINDOWS_SH = ("bygg-whisper-cli-windows.sh", "bygg-windows.sh")
+WINDOWS_SH = ("bygg-whisper-cli-windows.sh", "samla-whisper-cli-windows.sh", "bygg-windows.sh")
 
 
 def kommentarer(delar):
@@ -402,6 +402,8 @@ class WindowsFlodet(unittest.TestCase):
         text = self.text()
         self.assertIn('PYTHONUTF8: "1"', text)
         self.assertIn("PYTHONIOENCODING: utf-8", text)
+        self.assertIn("LANG: C.UTF-8", text)  # Git Bash for over argument med a-ring m.m. som UTF-8
+        self.assertIn("LC_ALL: C.UTF-8", text)
         self.assertIn('MSYS_NO_PATHCONV: "1"', text)  # /v till reg och /FI till tasklist skrivs annars om
 
     def test_samma_versioner_av_atgarderna_som_mac_flodet(self):
@@ -417,7 +419,7 @@ class WindowsFlodet(unittest.TestCase):
 
     def test_stegen_i_ordning_med_ratt_kommandon(self):
         text = self.text()
-        ordning = ["bygg-whisper-cli-windows.sh", "kontrollera_whisper_cli_windows.py", "bygg-windows.sh",
+        ordning = ["bygg-whisper-cli-windows.sh", "samla-whisper-cli-windows.sh", "kontrollera_whisper_cli_windows.py", "bygg-windows.sh",
                    "paketering/kontrollera.py", "kontrollera_windows.py", "name: Sammanfattning", "name: Samla loggar"]
         lage = [text.index(o) for o in ordning]
         self.assertEqual(lage, sorted(lage))
@@ -433,10 +435,10 @@ class WindowsFlodet(unittest.TestCase):
     def test_kontrollstegen_stoppar_inte_jobbet_och_allt_syns_i_sammanfattningen(self):
         d = self.yaml()
         steg = {s["id"]: s for s in d["jobs"]["bygg"]["steps"] if "id" in s}
-        kontroller = ("tester", "bygg_cli", "kontroll_cli", "bygg", "kontroll_program", "kontroll_windows")
+        kontroller = ("tester", "bygg_cli", "samla_cli", "kontroll_cli", "bygg", "kontroll_program", "kontroll_windows")
         for id_ in kontroller:
             self.assertTrue(steg[id_].get("continue-on-error"), id_)
-        for id_ in ("kontroll_cli", "bygg", "kontroll_program", "kontroll_windows"):
+        for id_ in ("samla_cli", "kontroll_cli", "bygg", "kontroll_program", "kontroll_windows"):
             self.assertEqual(steg[id_]["if"], "${{ !cancelled() }}", id_)  # kors aven om ett tidigare steg fell
         sammanfattning = next(s for s in d["jobs"]["bygg"]["steps"] if s.get("name") == "Sammanfattning")
         self.assertEqual(sammanfattning["if"], "${{ always() }}")
@@ -459,8 +461,25 @@ class WindowsFlodet(unittest.TestCase):
         spara = next(s for s in d["jobs"]["bygg"]["steps"] if s.get("uses", "").startswith("actions/cache/save"))
         self.assertIn("steps.bygg_cli.outcome == 'success'", spara["if"])
         nyckel = next(s for s in d["jobs"]["bygg"]["steps"] if s.get("id") == "cli")["with"]["key"]
-        self.assertIn("hashFiles('paketering/bygg-whisper-cli-windows.sh'", nyckel)
+        # bara skriptet som kompilerar ingar i nyckeln: en rattning i verktygen far inte ge ett nytt bygge
+        self.assertIn("hashFiles('paketering/bygg-whisper-cli-windows.sh')", nyckel)
+        self.assertNotIn("verktyg", nyckel)
+        self.assertNotIn("kontrollera_pe", nyckel)
         self.assertTrue(nyckel.endswith("-windows2025"))
+        for s_ in d["jobs"]["bygg"]["steps"]:
+            if s_.get("uses", "").startswith("actions/cache/"):
+                self.assertEqual(s_["with"]["path"], "build/whisper/kompilerat")
+        samla = next(s_ for s_ in d["jobs"]["bygg"]["steps"] if s_.get("id") == "samla_cli")
+        self.assertNotIn("cache-hit", str(samla.get("if")))  # kors efter bygge och cachetraff
+        self.assertIn("samla-whisper-cli-windows.sh build/whisper/kompilerat build/whisper/ut", samla["run"])
+
+    def test_cachelagret_har_inte_runtime_eller_verktyg(self):
+        bygg = las("paketering", "bygg-whisper-cli-windows.sh")
+        self.assertNotIn('bygg_windows_verktyg.py" runtime', bygg)  # kopieringen ligger i samla
+        self.assertNotIn('kontrollera_pe.py"', bygg)
+        samla = las("paketering", "samla-whisper-cli-windows.sh")
+        for stycke in ("runtime", "kontrollera_pe.py", "lista", "ggml-cpu-*.dll"):
+            self.assertIn(stycke, samla)
 
     def test_signera_finns_men_kors_aldrig(self):
         text = self.text()

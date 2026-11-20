@@ -34,6 +34,9 @@ jobs:
       # Git Bash skriver annars om argument som borjar med / (till exempel /v till reg och /FI till tasklist).
       MSYS_NO_PATHCONV: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      # Sa att Git Bash saker for over argument med a-ring, a-prickar och o-prickar som UTF-8 till Python.
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -67,12 +70,15 @@ jobs:
         id: tester
         continue-on-error: true
         run: build/venv/Scripts/python -m unittest discover -s tester --durations 15
-      - name: whisper-cli ur cachen
+      # Bara det kompilerade cachas (nyckel: version + hash av bygg-whisper-cli-windows.sh). C-runtime-filerna, fillistan och
+      # beroendekontrollen gors av steget Samla whisper-cli efter varje bygge och varje cachetraff, sa att en rattning i
+      # verktygen inte tvingar fram ett nytt bygge av whisper.cpp.
+      - name: whisper-cli ur cachen (det kompilerade)
         id: cli
         uses: actions/cache/restore@v6
         with:
-          path: build/whisper/ut
-          key: whisper-cli-win-${{ inputs.whisper_version }}-${{ hashFiles('paketering/bygg-whisper-cli-windows.sh', 'paketering/bygg_windows_verktyg.py', 'paketering/kontrollera_pe.py') }}-windows2025
+          path: build/whisper/kompilerat
+          key: whisper-cli-win-${{ inputs.whisper_version }}-${{ hashFiles('paketering/bygg-whisper-cli-windows.sh') }}-windows2025
       - name: Bygg whisper-cli
         id: bygg_cli
         if: steps.cli.outputs.cache-hit != 'true'
@@ -84,8 +90,15 @@ jobs:
         if: steps.cli.outputs.cache-hit != 'true' && steps.bygg_cli.outcome == 'success'
         uses: actions/cache/save@v6
         with:
-          path: build/whisper/ut
+          path: build/whisper/kompilerat
           key: ${{ steps.cli.outputs.cache-primary-key }}
+      - name: Samla whisper-cli (C-runtime, fillista, beroenden)
+        id: samla_cli
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          PYTHON=build/venv/Scripts/python bash paketering/samla-whisper-cli-windows.sh build/whisper/kompilerat build/whisper/ut 2>&1 | tee build/loggar/samla-whisper-cli.log
       - name: Kontrollera whisper-cli
         id: kontroll_cli
         if: ${{ !cancelled() }}
@@ -133,13 +146,14 @@ jobs:
         env:
           TESTER: ${{ steps.tester.outcome }}
           BYGG_CLI: ${{ steps.bygg_cli.outcome }}
+          SAMLA_CLI: ${{ steps.samla_cli.outcome }}
           KONTROLL_CLI: ${{ steps.kontroll_cli.outcome }}
           BYGG: ${{ steps.bygg.outcome }}
           KONTROLL_PROGRAM: ${{ steps.kontroll_program.outcome }}
           KONTROLL_WINDOWS: ${{ steps.kontroll_windows.outcome }}
         run: |
           fel=0
-          for rad in "Enhetstester=$TESTER" "Bygg whisper-cli (skipped betyder ur cachen)=$BYGG_CLI" "Kontroll av whisper-cli=$KONTROLL_CLI" \
+          for rad in "Enhetstester=$TESTER" "Bygg whisper-cli (skipped betyder ur cachen)=$BYGG_CLI" "Samla whisper-cli=$SAMLA_CLI" "Kontroll av whisper-cli=$KONTROLL_CLI" \
                      "Bygg av programmet=$BYGG" "Kontroll av programmet=$KONTROLL_PROGRAM" "Sökvägar och talare=$KONTROLL_WINDOWS"; do
             namn="${rad%=*}"
             utfall="${rad##*=}"
@@ -163,6 +177,7 @@ jobs:
           cp build/whisper/*.log build/loggar/ 2>/dev/null || true
           cp build/whisper/src/CMakeLists.txt build/loggar/whisper-CMakeLists.txt 2>/dev/null || true
           cp build/whisper/bygg/CMakeCache.txt build/loggar/whisper-CMakeCache.txt 2>/dev/null || true
+          ls -lR build/whisper/kompilerat > build/loggar/whisper-kompilerat-filer.txt 2>&1 || true
           ls -lR build/whisper/ut > build/loggar/whisper-ut-filer.txt 2>&1 || true
           ls -l dist > build/loggar/dist-filer.txt 2>&1 || true
           ls -lR build/uppackad > build/loggar/uppackad-filer.txt 2>&1 || true

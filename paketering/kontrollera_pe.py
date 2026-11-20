@@ -14,7 +14,9 @@ En katalog som anges med --sjalvstandig (till exempel _internal/whisper, dar whi
 process) far bara hitta DLL-filer i sig sjalv och bland Windows egna: processen ar startad med
 CreateProcess, som inte arver programmets DLL-kataloger.
 Windows egna DLL-filer (kernel32, user32, api-ms-win-* osv.) behover inte finnas i katalogen. C-runtimen
-(vcruntime140, msvcp140, vcomp140) raknas aldrig som Windows egen: hos anvandaren finns den inte sakert.
+(vcruntime140, msvcp140, vcomp140) och biblioteken vi levererar (onnxruntime, DirectML, libomp, libiomp, sherpa*, whisper*,
+ggml*) raknas aldrig som Windows egna, inte heller om de finns i System32: hos anvandaren finns de inte sakert, eller
+i en annan version.
 Med --system-katalog (till exempel C:\\Windows\\System32) godtas dessutom varje annan DLL som finns dar, och den
 listas som INFO sa att namnet kan laggas till i listan nedan.
 
@@ -35,6 +37,10 @@ ENDELSER = (".exe", ".dll", ".pyd")
 
 # C-runtimen och Python: maste ligga i programmet (hos anvandaren finns inte alltid Visual C++ Redistributable).
 EGNA_PREFIX = ("vcruntime", "msvcp", "vcomp", "concrt", "vccorlib", "python")
+# Bibliotek som programmet levererar sjalv och som aldrig far godtas fran System32, ens med --system-katalog: Windows 10
+# och 11 har egna (aldre) onnxruntime.dll och DirectML.dll, och en saknad fil i paketet skulle da ladda fel version hos
+# anvandaren.
+LEVERERAS_SJALV = EGNA_PREFIX + ("onnxruntime", "directml", "libomp", "libiomp", "sherpa", "whisper", "ggml")
 SYSTEM_PREFIX = ("api-ms-win-", "ext-ms-win-")
 # Namn utan .dll, gemener. Windows egna DLL-filer som ingar i Windows 10 och 11.
 SYSTEM = frozenset("""
@@ -63,7 +69,7 @@ def ar_egen(namn):
 def ar_system(namn, system_stammar=None):
     """Sant for en DLL som Windows har (inte C-runtimen). system_stammar: namnen (stam) som finns i System32."""
     s = stam(namn)
-    if s.startswith(EGNA_PREFIX):
+    if s.startswith(LEVERERAS_SJALV):
         return False
     if s.startswith(SYSTEM_PREFIX) or s in SYSTEM:
         return True

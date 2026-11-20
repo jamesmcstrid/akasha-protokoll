@@ -127,19 +127,54 @@ def vs_kataloger():
     return ut
 
 
-def hitta_runtime(namn):
-    """-> (sokvag, var) for en C-runtime-DLL: System32 forst, sedan Visual Studios VC\\Redist\\MSVC\\*\\x64\\. (None, text) om den
-    inte finns."""
-    sok = []
-    rot = os.environ.get("SystemRoot") or os.environ.get("SYSTEMROOT") or r"C:\Windows"
-    sok.append(os.path.join(rot, "System32", namn))
+def _versionsnyckel(sokvag):
+    """Sorteringsnyckel for ...\\MSVC\\14.44.35207\\x64\\...: versionen som tal (14.9 < 14.44)."""
+    delar = sokvag.replace("\\", "/").split("/")
+    for i, d in enumerate(delar[:-1]):
+        if d.upper() == "MSVC":
+            return tuple(int(x) if x.isdigit() else 0 for x in delar[i + 1].split("."))
+    return ()
+
+
+def filversion(sokvag):
+    """Filversionen ur versionsresursen (pefile), eller None."""
+    try:
+        import pefile
+
+        pe = pefile.PE(sokvag, fast_load=True)
+        try:
+            pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"]])
+            f = pe.VS_FIXEDFILEINFO[0]
+            return f"{f.FileVersionMS >> 16}.{f.FileVersionMS & 0xFFFF}.{f.FileVersionLS >> 16}.{f.FileVersionLS & 0xFFFF}"
+        finally:
+            pe.close()
+    except Exception:
+        return None
+
+
+def system32():
+    return os.path.join(os.environ.get("SystemRoot") or os.environ.get("SYSTEMROOT") or r"C:\Windows", "System32")
+
+
+def redist_kandidater(namn):
+    """Filer med det namnet i Visual Studios VC\\Redist\\MSVC\\<version>\\x64\\Microsoft.VC*.CRT och .OpenMP, hogsta versionen forst."""
+    traffar = []
     for vs in vs_kataloger():
-        traffar = glob.glob(os.path.join(vs, "VC", "Redist", "MSVC", "*", "x64", "Microsoft.VC*.*", namn))
-        sok += sorted((t for t in traffar if "debug_nonredist" not in t.lower()), reverse=True)
-    for s in sok:
+        traffar += glob.glob(os.path.join(vs, "VC", "Redist", "MSVC", "*", "x64", "Microsoft.VC*.*", namn))
+    traffar = [t for t in traffar if "debug_nonredist" not in t.lower() and os.path.isfile(t)]
+    return sorted(set(traffar), key=lambda t: (_versionsnyckel(t), t), reverse=True)
+
+
+def hitta_runtime(namn):
+    """-> (sokvag, var) for en C-runtime-DLL. Forst Visual Studios Redist-katalog (hogsta versionen): filen ska vara
+    minst lika ny som kompilatorn som byggde, och Redist-katalogen hor till den. Sedan System32, som kan ha en aldre.
+    (None, text) om den inte finns."""
+    sok = redist_kandidater(namn)
+    sys32 = os.path.join(system32(), namn)
+    for s in sok + [sys32]:
         if os.path.isfile(s):
             return s, None
-    return None, "sokte: " + "; ".join(sok[:6]) + (" ..." if len(sok) > 6 else "")
+    return None, "sokte: " + "; ".join((sok or ["(ingen Redist-katalog)"])[:4] + [sys32])
 
 
 def kopiera_runtime(katalog, res):
@@ -159,7 +194,10 @@ def kopiera_runtime(katalog, res):
                 continue
             shutil.copy2(kalla, os.path.join(katalog, namn))
             kopierade.append(namn)
-            res.ok(f"{namn} kopierad fran {kalla} ({os.path.getsize(kalla)} byte)")
+            jamfor = os.path.join(system32(), namn)
+            res.ok(f"{namn} kopierad fran {kalla} (version {filversion(kalla) or 'okand'}, {os.path.getsize(kalla)} byte); "
+                   f"samma fil i System32: "
+                   + (f"version {filversion(jamfor) or 'okand'}" if os.path.isfile(jamfor) else "finns inte"))
     if not kopierade:
         res.ok("inga C-runtime-DLL:er saknas (filerna importerar inga, eller de ligger redan bredvid)")
     return kopierade
