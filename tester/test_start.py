@@ -93,7 +93,22 @@ class TestLage(unittest.TestCase):
         return srv.server_address[1]
 
     def test_ledig(self):
-        self.assertEqual(start.lage(ledig_port()), "ledig")
+        port = ledig_port()
+        with mock.patch.object(urllib.request, "build_opener") as opener:
+            t0 = time.monotonic()
+            lage = start.lage(port)
+            tid = time.monotonic() - t0
+        self.assertEqual(lage, "ledig")
+        self.assertLess(tid, 0.5)
+        opener.assert_not_called()  # inget natanrop for en ledig port
+
+    def test_bunden_men_inte_lyssnande_ar_annat(self):
+        s = socket.socket()
+        self.addCleanup(s.close)
+        s.bind(("127.0.0.1", 0))  # utan SO_REUSEADDR och utan listen()
+        t0 = time.monotonic()
+        self.assertEqual(start.lage(s.getsockname()[1]), "annat")
+        self.assertLess(time.monotonic() - t0, 2)
 
     def test_akasha_med_200_och_503(self):
         svar = json.dumps({"motor": "faster", "datakatalog": "/x"}).encode()
@@ -365,34 +380,50 @@ class TestTexter(Stadning):
                          ("Vill du avsluta Akasha Meet?", "Avbryt", "Avsluta ändå"))
 
 
-@unittest.skipUnless(sys.platform.startswith("linux"),
-                     "startar en riktig process och öppnar en webbläsare (BROWSER) bara på Linux; "
-                     "SIGTERM finns inte på Windows")
 class TestHelaStarten(unittest.TestCase):
-    def test_start_andra_start_och_sigterm(self):
+    def forbered(self):
         katalog = tempfile.mkdtemp(prefix="akasha-meet-hel-")
         self.addCleanup(shutil.rmtree, katalog, ignore_errors=True)
-        port = ledig_port()
-        env = dict(os.environ, PORT=str(port), MOTOR="faster", BROWSER="true",
+        self.katalog = katalog
+        self.port = ledig_port()
+        env = dict(os.environ, PORT=str(self.port), MOTOR="faster", BROWSER="true",
                    DATAKATALOG=os.path.join(katalog, "data"), MODELLKATALOG=os.path.join(katalog, "m"),
                    XDG_DATA_HOME=os.path.join(katalog, "xdg"), HOME=katalog)
         for namn in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"):
             env.pop(namn, None)
-        kor = [sys.executable, os.path.join(APP, "start.py")]
-        forsta = subprocess.Popen(kor, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.env = env
+        self.kor = [sys.executable, os.path.join(APP, "start.py")]
+        forsta = subprocess.Popen(self.kor, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.addCleanup(forsta.kill)
+        self.addCleanup(forsta.wait)
         for _ in range(200):
-            if start.lage(port) == "akasha" or forsta.poll() is not None:
+            if start.lage(self.port) == "akasha" or forsta.poll() is not None:
                 break
             time.sleep(0.1)
-        self.assertEqual(start.lage(port), "akasha")
-        andra = subprocess.run(kor, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+        self.assertEqual(start.lage(self.port), "akasha")
+        return forsta
+
+    # Pa Mac oppnar oppna_webblasare den riktiga webblasaren med /usr/bin/open (BROWSER hjalper inte).
+    @unittest.skipIf(sys.platform == "darwin", "oppnar den riktiga webblasaren pa Mac")
+    def test_start_och_andra_start(self):
+        forsta = self.forbered()
+        andra = subprocess.run(self.kor, env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               timeout=5)
         self.assertEqual(andra.returncode, 0)
         self.assertIsNone(forsta.poll())  # den forsta gar fortfarande
+        forsta.terminate()  # SIGTERM pa Unix, TerminateProcess pa Windows
+        forsta.wait(20)
+        self.assertIsNotNone(forsta.poll())
+
+    @unittest.skipIf(os.name == "nt", "SIGTERM och ett rent avslut finns inte pa Windows")
+    @unittest.skipIf(sys.platform == "darwin", "oppnar den riktiga webblasaren pa Mac")
+    def test_sigterm_ger_rent_avslut(self):
+        forsta = self.forbered()
         forsta.send_signal(signal.SIGTERM)
         self.assertEqual(forsta.wait(20), 0)
-        self.assertEqual(start.lage(port), "ledig")
-        with open(os.path.join(katalog, "xdg", "akasha-meet", "logg", "akasha-meet.log"), encoding="utf-8") as f:
+        self.assertEqual(start.lage(self.port), "ledig")
+        with open(os.path.join(self.katalog, "xdg", "akasha-meet", "logg", "akasha-meet.log"),
+                  encoding="utf-8") as f:
             self.assertIn("Akasha Meet avslutas", f.read())
 
 

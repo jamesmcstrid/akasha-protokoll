@@ -208,6 +208,21 @@ def stall_in_loggning():
 def lage(port=None, tidsgrans=1.0):
     """'akasha' (en Akasha Meet svarar), 'ledig' eller 'annat' (nagot annat anvander porten)."""
     port = port or aktuell_port()
+    # Bind forst: lyckas det lyssnar ingen pa porten, och inget natanrop behovs. Windows vagrar
+    # en anslutning till en stangd port forst efter cirka 2 s, sa att fraga forst gav "annat"
+    # for en ledig port. Luckan mellan det har provet och skapa_server() hanteras redan av
+    # Tjanst.starta(), som ger StartFel om porten tas under tiden.
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        if os.name != "nt":
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # som waitress
+        s.bind(("127.0.0.1", port))
+        return "ledig"
+    except OSError:
+        pass  # nagot haller porten: fraga vem
+    finally:
+        s.close()
+    # Nagot lyssnar (eller har bundit) porten, sa svaret kommer direkt, ocksa pa Windows.
     oppnare = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # aldrig proxy for 127.0.0.1
     try:
         try:
@@ -218,23 +233,9 @@ def lage(port=None, tidsgrans=1.0):
         data = json.loads(kropp.decode("utf-8", "replace"))
         if isinstance(data, dict) and "motor" in data and "datakatalog" in data:
             return "akasha"
-        return "annat"
-    except urllib.error.URLError as e:
-        if not isinstance(e.reason, ConnectionRefusedError):
-            return "annat"
-    except (OSError, ValueError, http.client.HTTPException):
-        return "annat"
-    # Anslutningen vagrades: ar porten ledig att binda?
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        if os.name != "nt":
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # som waitress
-        s.bind(("127.0.0.1", port))
-        return "ledig"
-    except OSError:
-        return "annat"
-    finally:
-        s.close()
+    except (OSError, ValueError, http.client.HTTPException):  # URLError ar en OSError
+        pass
+    return "annat"
 
 
 def forbered():
