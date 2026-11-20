@@ -16,6 +16,44 @@ UIDN="$(id -u)"
 command -v "$PY" >/dev/null || { echo "FEL: $PY saknas. Kor: brew install python@3.12"; exit 1; }
 [ "$(uname -s)" = "Darwin" ] || echo "OBS: skriptet ar gjort for macOS (launchd)."
 
+# launchd startar tjansten med bash, och macOS later inte en bakgrundstjanst lasa i Skrivbord,
+# Dokument, Hamtade filer (Apple) eller i iCloud Drive, molnmappar och /Volumes (antaget).
+# Darfor stannar vi har, innan nagot ar installerat eller hamtat.
+# plattform.py anvander bara standardbiblioteket, sa den gar att kora med systemets python3.12
+# innan venv finns. -B: skriv ingen __pycache__ i repot innan kontrollen ar gjord.
+VERKLIG="$(cd "$REPO" && pwd -P)"
+SKYDDAD="$("$PY" -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import plattform; print(plattform.skyddad_plats(sys.argv[2]) or "")' "$REPO/app" "$VERKLIG")"
+if [ -n "$SKYDDAD" ]; then
+  MAL="$HOME/akasha-meet"; [ -e "$MAL" ] && MAL="$HOME/akasha-meet-ny"
+  RUBRIK="Gor sa har:"
+  FINNS=""
+  if [ -f "$HOME/akasha-meet/mac/installera.sh" ]; then
+    PULL=""; [ -d "$HOME/akasha-meet/.git" ] && PULL=" && git pull"
+    FINNS="Det finns redan en Akasha Meet-mapp i $HOME/akasha-meet. Kor installationen darifran i stallet:
+  cd \"$HOME/akasha-meet\"$PULL && bash mac/installera.sh
+
+"
+    RUBRIK="Eller flytta den har mappen:"
+  fi
+  cat <<TEXT
+FEL: Akasha Meet ligger i $VERKLIG.
+macOS later inte bakgrundstjanster lasa i den mappen ($SKYDDAD), sa tjansten skulle inte
+kunna starta harifran. Inget har installerats eller hamtats an.
+
+${FINNS}$RUBRIK
+  1. Flytta mappen till din hemkatalog (mappen med huset i Finder). I Terminal:
+       mv "$VERKLIG" "$MAL"
+  2. Har du kort installationen i den gamla mappen tidigare, ta bort mappen venv i den
+     flyttade mappen. Den fungerar inte efter en flytt och skapas igen:
+       rm -rf "$MAL/venv"
+     Modellerna i modeller/ och installningarna i .env foljer med och hamtas inte igen.
+  3. Kor installationen fran den nya platsen:
+       cd "$MAL" && bash mac/installera.sh
+Inspelningarna i ~/AkashaMeet paverkas inte.
+TEXT
+  exit 1
+fi
+
 [ -f "$REPO/.env" ] || { cp "$REPO/.env.example" "$REPO/.env"; echo "== skapade .env (standardinstallningar)"; }
 set -a; . "$REPO/.env"; set +a
 MOTOR="${MOTOR:-auto}"
@@ -62,6 +100,12 @@ if ! launchctl print "$TJANST" >/dev/null 2>&1 && curl -s -o /dev/null "http://1
   echo "FEL: Akasha Meet (programmet) ar igang pa port $PORT. Avsluta det forst (Akasha Meet > Avsluta Akasha Meet) och kor skriptet igen."; exit 1
 fi
 
+# Loggen fylls pa av launchd over tid. Vi minns hur lang den ar nu, sa att vi i slutet bara
+# visar det den har starten skrev och inte gamla rader fran en tidigare misslyckad installation.
+FORE=0
+if [ -f "$LOGG" ]; then FORE="$(wc -l < "$LOGG" | tr -d ' ')" || FORE=0; fi
+case "$FORE" in ''|*[!0-9]*) FORE=0 ;; esac
+
 echo "== launchd: $ETIKETT"
 sed -e "s#__REPO__#$REPO#g" -e "s#__LOGG__#$LOGG#g" "$REPO/mac/$ETIKETT.plist" > "$LA/$ETIKETT.plist"
 if command -v plutil >/dev/null; then
@@ -99,7 +143,22 @@ if curl -s "http://127.0.0.1:$PORT/health" | grep -q '"status": *"ok"'; then
   echo "Klart. Akasha Meet: http://127.0.0.1:$PORT  (motor: $AKTIV, inspelningar i $DATA)"
   command -v open >/dev/null && open "http://127.0.0.1:$PORT"
 else
-  echo "Tjansten svarar inte som den ska. Se loggen: $LOGG"
-  curl -s "http://127.0.0.1:$PORT/health" || true
+  # || true: inget har far avbryta skriptet (set -e) innan forklaringen ar skriven
+  NYA="$(tail -n +$((FORE + 1)) "$LOGG" 2>/dev/null || true)"
+  echo "Tjansten svarar inte som den ska. Det sista den skrev i loggen ($LOGG):"
+  echo "-----"
+  if [ -n "$NYA" ]; then printf '%s\n' "$NYA" | tail -n 15 || true; else echo "(tjansten skrev inget i loggen)"; fi
+  echo "-----"
+  launchctl print "$TJANST" 2>/dev/null | grep -E "^[[:space:]]*(state|last exit code) =" || true
+  case "$NYA" in
+    *"Operation not permitted"*)
+      echo "\"Operation not permitted\" betyder att macOS inte later tjansten lasa mappen $REPO."
+      echo "Flytta mappen till din hemkatalog, ta bort venv i den och kor installationen igen"
+      echo "(se README, Felsokning). Modellerna foljer med."
+      ;;
+    *)
+      echo "Skicka raderna ovan till den som hjalper dig. Loggen innehaller inga inspelningar eller texter."
+      ;;
+  esac
   exit 1
 fi
