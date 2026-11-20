@@ -113,17 +113,24 @@ Silicon (M1 eller senare) och macOS 14 eller senare.
    ned **Akasha-Meet-mac-arm64.zip** under **Artifacts**.
 2. Öppna zip-filen i Hämtade filer om Safari inte redan har gjort det, och dra **Akasha Meet** till
    **Program**.
-3. Dubbelklicka på Akasha Meet. Första gången visar macOS en varning om att appen inte går att
-   kontrollera. Stäng varningen utan att flytta appen till papperskorgen.
-4. Välj Apple-menyn > Systeminställningar och klicka på **Integritet och säkerhet** i sidofältet
-   (du kanske måste rulla nedåt). Gå till **Säkerhet** och klicka på **Öppna** vid raden om Akasha
-   Meet. Klicka sedan på **Öppna ändå**. Knappen finns i omkring en timme efter att du försökte
-   öppna appen; gör om steg 3 om den saknas. Ange ditt inloggningslösenord och klicka på **OK**.
-   Det behövs bara första gången. Apple beskriver stegen i
+3. Dubbelklicka på Akasha Meet. Första gången säger macOS att "Akasha Meet" öppnades inte, eftersom
+   Apple inte kunde verifiera att den är fri från sabotageprogram. Tryck **Klar**. (Den förvalda
+   knappen är Flytta till papperskorgen; tryck inte på den.)
+4. Välj Apple-menyn > Systeminställningar och klicka på **Integritet och säkerhet** i sidofältet (du
+   kanske måste rulla nedåt). Under rubriken **Säkerhet** står "Akasha Meet" blockerades för att
+   skydda din dator. Tryck **Öppna ändå** på den raden. (På en del versioner av macOS heter knappen
+   där **Öppna**; tryck i så fall på den.) Knappen finns i omkring en timme efter att du försökte
+   öppna appen. Saknas den, gör om steg 3.
+5. En ruta frågar Vill du öppna "Akasha Meet"? Tryck **Öppna ändå**.
+6. Bekräfta med Touch ID, eller tryck **Använd lösenord…** och ange ditt lösenord. Det behövs bara
+   första gången; sedan öppnas Akasha Meet med dubbelklick som andra program. Apple beskriver stegen
+   i
    [Öppna en Mac-app från en okänd utvecklare](https://support.apple.com/sv-se/guide/mac-help/mh40616/mac).
-5. Sidan öppnas och erbjuder att hämta modellerna (cirka 1,6 GB, bara första gången).
+7. Sidan öppnas och erbjuder att hämta modellerna (cirka 1,6 GB, bara första gången). Har du
+   installerat från Terminal tidigare används de modeller du redan har (se nedan).
 
-Säger macOS att programmet är skadat, eller finns ingen Öppna ändå-knapp, kör en gång i Terminal:
+Säger macOS i stället att programmet är skadat, eller syns ingen rad om Akasha Meet under Säkerhet
+direkt efter ett försök att öppna det, kör en gång i Terminal:
 `xattr -dr com.apple.quarantine "/Applications/Akasha Meet.app"` och öppna programmet igen.
 
 **Igång och avsluta:** när Akasha Meet är igång har ikonen i Dock en prick under sig. Klicka på
@@ -231,7 +238,7 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 | Sidan öppnas inte | Programmet: avsluta och öppna Akasha Meet igen. Loggen finns i `~/Library/Logs/Akasha Meet/akasha-meet.log` (öppnas med appen Konsol). Från Terminal: `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`, och loggen `~/AkashaMeet/akasha-meet.log` |
 | "Operation not permitted" i loggen, eller installationen säger att mappen ligger fel | Mappen med Akasha Meet ligger där macOS inte låter bakgrundstjänster läsa (Hämtade filer, Dokument, Skrivbord, iCloud Drive). Flytta den till hemkatalogen, ta bort mappen `venv` i den, och kör `bash mac/installera.sh` igen. Modellerna och .env följer med. |
 | "Akasha Meet svarar inte" | Programmet har avslutats eller stannat. Öppna Akasha Meet igen. Från Terminal: tjänsten startar av sig själv när du loggar in, så logga ut och in igen, eller kör `launchctl kickstart -k gui/$(id -u)/local.akasha-meet` i Terminal. Det du redan spelat in ligger kvar. Sidan märker själv när Akasha Meet är igång igen. |
-| macOS varnar och Akasha Meet öppnas inte, eller "är skadat" | Se steg 3 och 4 under Som program. Hjälper inte det, kör `xattr -dr com.apple.quarantine "/Applications/Akasha Meet.app"` i Terminal. |
+| "Akasha Meet" öppnades inte, eller "är skadat" | Se steg 3–6 under Som program: Klar, sedan Öppna ändå under Integritet och säkerhet → Säkerhet. Säger macOS att programmet är skadat, kör `xattr -dr com.apple.quarantine "/Applications/Akasha Meet.app"` i Terminal. |
 | "Akasha Meet kan inte starta" (port 8611) | Ett annat program använder porten. Avsluta det, eller ange en annan port med `PORT=` i inställningarna. |
 | "Akasha Meet startade inte" | Tryck **Visa loggen** och läs de sista raderna, eller skicka dem till den som hjälper dig. Loggen innehåller inga inspelningar eller texter. |
 | "Inte redo" uppe till höger | Håll muspekaren över texten för att se orsaken. Det är något som en hämtning inte kan rätta, till exempel en inställning i `.env` eller `installningar.env`. |

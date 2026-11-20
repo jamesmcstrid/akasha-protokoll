@@ -426,11 +426,17 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 - Ett riktigt samtal inspelat i Chrome och ett röstmemo uppladdat i Safari delades upp i två talare.
 - DTW kostade lite: för ett samtal på 48 s gick transkriberingen från 5,9 till 7,1 s.
 
+- Programmet på en riktig Mac med Apple Silicon (prov 2026-11-20, bygget från Mac-körning 2):
+  Gatekeeper (Klar, Öppna ändå under Integritet och säkerhet, Öppna ändå i nästa ruta, Touch ID
+  eller lösenord); övertagande av en terminalinstallation (frågan kom, modellerna togs in utan
+  hämtning, ikonen i Dock); installation från grunden (sidan erbjöd att hämta modellerna, och
+  hämtningen startade).
+
 **Inte provat än:**
 
-- programmet på en riktig Mac: Gatekeeper, Dock, Metal och transkribering med KB-Whisper (bygget och kontrollen i GitHub Actions är gjorda, se Programmet (Mac));
+- programmet på en riktig Mac: hämtningen till slut, transkribering med KB-Whisper (tid och Metal), avslut mitt i en transkribering och loggfilen (Gatekeeper, övertagande och första start är provade, se ovan);
 - faster-whisper och transkribering på Windows (CI installerar inte faster-whisper);
-- första start på en riktig Mac och på Windows, och hämtning på ett företagsnät med proxy;
+- första start på Windows, och hämtning på ett företagsnät med proxy;
 - ett riktigt Google Meet-möte eller en Slack-huddle, där Chromes flikväljare och
   "Dela även flikljud" används på riktigt;
 - inspelning med avbrott och räddningsfil i Safari och Edge (provat i Chromium);
