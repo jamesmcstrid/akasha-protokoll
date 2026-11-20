@@ -3,6 +3,7 @@
 Far bara importera standardbiblioteket: installningar.py importerar den.
 """
 import contextlib
+import ctypes
 import logging
 import os
 import platform
@@ -11,6 +12,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import webbrowser
 
@@ -26,6 +28,8 @@ NY_DATAKATALOG = "~/AkashaProtokoll"
 FIL_GICK_INTE = "Filen gick inte att läsa ({orsak}). Inga inställningar ur den används."
 FIL_KODNING = ("Filen är inte sparad som ren text i UTF-8. Inga inställningar ur den används. "
                "Spara den igen i TextEdit med Format → Gör till ren text, och välj Unicode (UTF-8).")
+FIL_KODNING_WINDOWS = ("Filen är inte sparad som ren text i UTF-8. Inga inställningar ur den används. "
+                       "Öppna den i Anteckningar, välj Arkiv → Spara som och välj kodningen UTF-8.")
 RAD_FEL = "Rad {nr} förstods inte och hoppades över. En rad ska se ut som NAMN=värde."
 
 _NAMNMONSTER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*$")
@@ -157,7 +161,7 @@ def las_installningsfil(sokvag):
     try:
         text = _avkoda(data)
     except UnicodeError:
-        return {}, [FIL_KODNING]
+        return {}, [FIL_KODNING_WINDOWS if system() == "Windows" else FIL_KODNING]
     resultat = {}
     problem = []
     for nr, rad in enumerate(text.splitlines(), 1):
@@ -194,6 +198,10 @@ def whisper_cli():
 
     if ar_paketerad() and WHISPERCPP_BIN == "whisper-cli":
         # Bara den medfoljande, provade versionen: ingen gissning pa vad som ligger i PATH.
+        if system() == "Windows":
+            # whisper-cli.exe ligger med sina DLL-filer i en egen mapp; Windows har ingen korbarhetsbit.
+            kandidat = os.path.join(sys._MEIPASS, "whisper", "whisper-cli.exe")
+            return kandidat if os.path.isfile(kandidat) else None
         kandidat = os.path.join(sys._MEIPASS, "whisper-cli")
         if os.path.isfile(kandidat) and os.access(kandidat, os.X_OK):
             return kandidat
@@ -218,20 +226,32 @@ def visa_fil(sokvag):
         if system() == "Darwin":
             subprocess.Popen(["/usr/bin/open", "-R", sokvag])
         elif system() == "Windows":
-            subprocess.Popen(["explorer", "/select,", sokvag])
+            # Ett enda argument: "/select,<sokvag>" (inte ett mellanslag efter kommat, som ger tva
+            # argument). Pythons citering satter hela argumentet inom citattecken om det har mellanslag.
+            subprocess.Popen(["explorer", "/select," + sokvag.replace("/", "\\")])
         else:
             webbrowser.open("file://" + os.path.dirname(sokvag))
     except OSError as e:
         log.warning("kunde inte visa %s: %s", sokvag, e)
 
 
+ES_CONTINUOUS = 0x80000000
+ES_SYSTEM_REQUIRED = 0x00000001
+
+
 @contextlib.contextmanager
 def hall_vaken():
     """Pa Mac: lat inte datorn somna av sig sjalv medan ett jobb pagar (caffeinate -i).
     Ett stangt lock sover anda, och da pausas jobbet tills locket oppnas.
-    -w gor att caffeinate slutar nar var process gor det, ocksa om programmet avslutas mitt i ett jobb."""
+    -w gor att caffeinate slutar nar var process gor det, ocksa om programmet avslutas mitt i ett jobb.
+    Pa Windows: SetThreadExecutionState for den tradarn som anropar (ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+    och ES_CONTINUOUS igen vid slutet. Ett stangt lock foljer energiinstallningarna, som pa Mac."""
     process = None
-    if system() == "Darwin" and shutil.which("caffeinate"):
+    windows = system() == "Windows"
+    if windows:
+        if not _exekvering(ES_CONTINUOUS | ES_SYSTEM_REQUIRED):
+            log.warning("kunde inte hindra datorn fran att somna (SetThreadExecutionState)")
+    elif system() == "Darwin" and shutil.which("caffeinate"):
         try:
             process = subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
         except OSError as e:
@@ -239,12 +259,149 @@ def hall_vaken():
     try:
         yield
     finally:
+        if windows:
+            _exekvering(ES_CONTINUOUS)
         if process:
             process.terminate()
             try:
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 process.kill()
+
+
+def _exekvering(flaggor):
+    """SetThreadExecutionState: tidigare lage (skilt fran 0), eller 0 om anropet misslyckades."""
+    try:
+        return _kernel32().SetThreadExecutionState(flaggor)
+    except (OSError, AttributeError) as e:
+        log.warning("SetThreadExecutionState misslyckades: %s", e)
+        return 0
+
+
+# --- Windows: anrop i kernel32. Inget av det har rors fore forsta anropet, och aldrig pa Mac eller Linux.
+
+CREATE_NO_WINDOW = 0x08000000
+JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
+JobObjectExtendedLimitInformation = 9
+ERROR_ALREADY_EXISTS = 183
+
+
+class _BasicLimit(ctypes.Structure):
+    _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                ("LimitFlags", ctypes.c_uint32), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", ctypes.c_uint32),
+                ("Affinity", ctypes.c_size_t), ("PriorityClass", ctypes.c_uint32),
+                ("SchedulingClass", ctypes.c_uint32)]
+
+
+class _IoCounters(ctypes.Structure):
+    _fields_ = [(namn, ctypes.c_uint64) for namn in (
+        "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+        "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+
+
+class _ExtendedLimit(ctypes.Structure):
+    _fields_ = [("BasicLimitInformation", _BasicLimit), ("IoInfo", _IoCounters),
+                ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+
+_k32 = None
+_jobb = None            # handtaget (int) till jobbobjektet; lever lika lange som processen
+_jobb_forsokt = False
+_mutex = None           # handtaget till mutexen i en_kopia(); lever lika lange som processen
+_las_win = threading.Lock()
+
+
+def _kernel32():
+    """kernel32 med typer pa handtag (64 bitar: utan argtypes klipps ett handtag till 32 bitar)."""
+    global _k32
+    if _k32 is None:
+        k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.CreateJobObjectW.restype = ctypes.c_void_p
+        k.CreateJobObjectW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+        k.SetInformationJobObject.restype = ctypes.c_int
+        k.SetInformationJobObject.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
+        k.AssignProcessToJobObject.restype = ctypes.c_int
+        k.AssignProcessToJobObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        k.CreateMutexW.restype = ctypes.c_void_p
+        k.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p]
+        k.SetThreadExecutionState.restype = ctypes.c_uint32
+        k.SetThreadExecutionState.argtypes = [ctypes.c_uint32]
+        k.CloseHandle.restype = ctypes.c_int
+        k.CloseHandle.argtypes = [ctypes.c_void_p]
+        _k32 = k
+    return _k32
+
+
+def _fel():
+    """GetLastError for den senaste kernel32-anropet i den har tradarn (use_last_error=True)."""
+    return ctypes.get_last_error()
+
+
+def _nolla_fel():
+    ctypes.set_last_error(0)
+
+
+def _skapa_jobb():
+    """Ett jobbobjekt som dodar alla processer i det nar sista handtaget stangs, ocksa vid krasch
+    och TerminateProcess av programmet. Skapas en gang per process. None om det inte gick."""
+    global _jobb, _jobb_forsokt
+    with _las_win:
+        if _jobb_forsokt:
+            return _jobb
+        _jobb_forsokt = True
+        k = _kernel32()
+        handtag = k.CreateJobObjectW(None, None)
+        if not handtag:
+            log.warning("jobbobjekt: CreateJobObjectW misslyckades (fel %s)", _fel())
+            return None
+        info = _ExtendedLimit()
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if not k.SetInformationJobObject(handtag, JobObjectExtendedLimitInformation,
+                                         ctypes.byref(info), ctypes.sizeof(info)):
+            log.warning("jobbobjekt: SetInformationJobObject misslyckades (fel %s)", _fel())
+            k.CloseHandle(handtag)
+            return None
+        _jobb = handtag
+        return _jobb
+
+
+def starta_barn(cmd, cwd=None, **kw):
+    """subprocess.Popen for en barnprocess som programmet startar (whisper-cli).
+    Pa Windows: utan konsolfonster (CREATE_NO_WINDOW), och processen laggs i ett jobbobjekt sa att den
+    dor nar programmet dor, ocksa vid Aktivitetshanteraren, utloggning eller krasch (Windows
+    avslutar annars inte barnprocesser). Gar det inte att lagga den i jobbet loggas det och processen
+    kors anda. Pa Mac och Linux bara Popen."""
+    if system() != "Windows":
+        return subprocess.Popen(cmd, cwd=cwd, **kw)
+    kw["creationflags"] = kw.get("creationflags", 0) | CREATE_NO_WINDOW
+    p = subprocess.Popen(cmd, cwd=cwd, **kw)
+    try:
+        jobb = _skapa_jobb()
+        if jobb and not _kernel32().AssignProcessToJobObject(jobb, int(p._handle)):
+            log.warning("jobbobjekt: kunde inte lagga processen %s i jobbet (fel %s)", p.pid, _fel())
+    except (OSError, AttributeError, TypeError, ValueError) as e:
+        log.warning("jobbobjekt: %s", e)
+    return p
+
+
+def en_kopia(namn):
+    """Sant om det har ar den forsta kopian av programmet for den inloggade anvandaren, falskt om en annan
+    redan har mutexen `namn` (till exempel "Local\\AkashaProtokoll"). Handtaget sparas i modulen sa att
+    mutexen lever lika lange som processen. Utanfor Windows alltid sant."""
+    global _mutex
+    if system() != "Windows":
+        return True
+    k = _kernel32()
+    _nolla_fel()
+    handtag = k.CreateMutexW(None, False, namn)
+    fel = _fel()
+    if not handtag:
+        log.warning("en_kopia: CreateMutexW misslyckades (fel %s), forutsatter att det ar ensamt", fel)
+        return True
+    _mutex = handtag
+    return fel != ERROR_ALREADY_EXISTS
 
 
 # Mappar dar macOS inte later en bakgrundstjanst (launchd) lasa, och som ett program med fonster

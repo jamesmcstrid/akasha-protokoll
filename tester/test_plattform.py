@@ -1,6 +1,8 @@
 """Plattformen: kataloger, installningsfil, medfoljande whisper-cli och den gamla launchd-tjansten."""
 import hjalp  # noqa: F401  (maste importeras forst)
 
+import contextlib
+import ctypes
 import importlib
 import os
 import plistlib
@@ -8,6 +10,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
+import threading
+import time
 import unittest
 from unittest import mock
 
@@ -445,6 +450,203 @@ class TestWhisperCli(Tillfallig):
         which.assert_called_once_with(installningar.WHISPERCPP_BIN)
 
 
+class TestWhisperCliWindows(Tillfallig):
+    def paketerad(self):
+        return (mock.patch.object(sys, "frozen", True, create=True),
+                mock.patch.object(sys, "_MEIPASS", self.katalog, create=True),
+                mock.patch.object(installningar, "WHISPERCPP_BIN", "whisper-cli"),
+                mock.patch.object(shutil, "which", side_effect=AssertionError("which ska inte anropas")))
+
+    def test_exe_i_mappen_whisper(self):
+        mapp = os.path.join(self.katalog, "whisper")
+        os.mkdir(mapp)
+        fil = os.path.join(mapp, "whisper-cli.exe")
+        with open(fil, "wb") as f:
+            f.write(b"MZ")
+        # en fil utan .exe i roten ska inte hittas pa Windows
+        with open(os.path.join(self.katalog, "whisper-cli"), "wb") as f:
+            f.write(b"x")
+        a, b, c, d = self.paketerad()
+        with a, b, c, d, system("Windows"):
+            self.assertEqual(plattform.whisper_cli(), fil)
+
+    def test_utan_exe(self):
+        a, b, c, d = self.paketerad()
+        with a, b, c, d, system("Windows"):
+            self.assertIsNone(plattform.whisper_cli())
+
+    def test_vald_bin_i_installningarna_ar_ovrort(self):
+        with mock.patch.object(sys, "frozen", True, create=True), \
+             mock.patch.object(installningar, "WHISPERCPP_BIN", "C:\\egen\\whisper-cli.exe"), \
+             mock.patch.object(shutil, "which", return_value="X") as which, system("Windows"):
+            self.assertEqual(plattform.whisper_cli(), "X")
+        which.assert_called_once_with("C:\\egen\\whisper-cli.exe")
+
+
+class FalskKernel32:
+    """Ersatter kernel32 pa Linux. Skriver ner anropen och vad som skickades."""
+
+    def __init__(self, jobb=1234, mutex=77, sista_fel=0, tilldela=1, sats=1, exekvering=0x80000000):
+        self.anrop = []
+        self.flaggor = None
+        self.jobb, self.mutex, self.tilldela, self.sats, self.exekvering = jobb, mutex, tilldela, sats, exekvering
+
+    def CreateJobObjectW(self, attr, namn):
+        self.anrop.append(("CreateJobObjectW", attr, namn))
+        return self.jobb
+
+    def SetInformationJobObject(self, jobb, klass, info, storlek):
+        self.anrop.append(("SetInformationJobObject", jobb, klass, storlek))
+        self.flaggor = info._obj.BasicLimitInformation.LimitFlags
+        return self.sats
+
+    def AssignProcessToJobObject(self, jobb, process):
+        self.anrop.append(("AssignProcessToJobObject", jobb, process))
+        return self.tilldela
+
+    def CloseHandle(self, h):
+        self.anrop.append(("CloseHandle", h))
+        return 1
+
+    def CreateMutexW(self, attr, agare, namn):
+        self.anrop.append(("CreateMutexW", attr, agare, namn))
+        return self.mutex
+
+    def SetThreadExecutionState(self, flaggor):
+        self.anrop.append(("SetThreadExecutionState", flaggor))
+        return self.exekvering
+
+
+@contextlib.contextmanager
+def falsk_win(k32):
+    """Windows-grenen pa Linux: system() = Windows, falsk kernel32 och nollstallt tillstand i modulen."""
+    with system("Windows"), mock.patch.object(plattform, "_kernel32", return_value=k32), \
+         mock.patch.object(plattform, "_jobb", None), mock.patch.object(plattform, "_jobb_forsokt", False), \
+         mock.patch.object(plattform, "_mutex", None), mock.patch.object(plattform, "_fel", lambda: 0), \
+         mock.patch.object(plattform, "_nolla_fel"):
+        yield
+
+
+class FalskBarn:
+    pid = 4242
+    _handle = 999
+
+
+class TestStartaBarn(unittest.TestCase):
+    def test_mac_och_linux_ar_bara_popen(self):
+        for namn in ("Darwin", "Linux"):
+            with system(namn), mock.patch.object(subprocess, "Popen") as popen, \
+                 mock.patch.object(plattform, "_kernel32", side_effect=AssertionError("ingen kernel32")):
+                plattform.starta_barn(["x", "-a"], cwd="/mapp", stdout=subprocess.DEVNULL)
+            popen.assert_called_once_with(["x", "-a"], cwd="/mapp", stdout=subprocess.DEVNULL)
+
+    def test_windows_utan_fonster_och_i_jobbet(self):
+        k = FalskKernel32()
+        with falsk_win(k), mock.patch.object(subprocess, "Popen", return_value=FalskBarn()) as popen:
+            p = plattform.starta_barn(["x.exe"], cwd="C:\\mapp", stderr=subprocess.PIPE)
+        self.assertIsInstance(p, FalskBarn)
+        popen.assert_called_once_with(["x.exe"], cwd="C:\\mapp", stderr=subprocess.PIPE,
+                                      creationflags=0x08000000)
+        self.assertEqual(k.flaggor, 0x2000)  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        self.assertEqual([x[0] for x in k.anrop],
+                         ["CreateJobObjectW", "SetInformationJobObject", "AssignProcessToJobObject"])
+        self.assertEqual(k.anrop[1][2:], (9, ctypes.sizeof(plattform._ExtendedLimit)))
+        self.assertEqual(k.anrop[2][1:], (1234, 999))
+
+    def test_egna_flaggor_behalls(self):
+        with falsk_win(FalskKernel32()), mock.patch.object(subprocess, "Popen", return_value=FalskBarn()) as popen:
+            plattform.starta_barn(["x"], creationflags=0x200)
+        self.assertEqual(popen.call_args[1]["creationflags"], 0x200 | 0x08000000)
+
+    def test_ett_jobb_per_process(self):
+        k = FalskKernel32()
+        with falsk_win(k), mock.patch.object(subprocess, "Popen", return_value=FalskBarn()):
+            plattform.starta_barn(["x"])
+            plattform.starta_barn(["y"])
+        self.assertEqual([x[0] for x in k.anrop].count("CreateJobObjectW"), 1)
+        self.assertEqual([x[0] for x in k.anrop].count("AssignProcessToJobObject"), 2)
+
+    def test_misslyckad_tilldelning_loggas_och_processen_kors_anda(self):
+        with falsk_win(FalskKernel32(tilldela=0)), mock.patch.object(subprocess, "Popen", return_value=FalskBarn()), \
+             self.assertLogs("akasha-protokoll", "WARNING") as logg:
+            p = plattform.starta_barn(["x"])
+        self.assertIsInstance(p, FalskBarn)
+        self.assertTrue(any("jobbobjekt" in r for r in logg.output), logg.output)
+
+    def test_jobb_som_inte_gar_att_skapa(self):
+        k = FalskKernel32(jobb=None)
+        with falsk_win(k), mock.patch.object(subprocess, "Popen", return_value=FalskBarn()), \
+             self.assertLogs("akasha-protokoll", "WARNING"):
+            plattform.starta_barn(["x"])
+            plattform.starta_barn(["y"])  # forsoker inte igen
+        self.assertEqual([x[0] for x in k.anrop], ["CreateJobObjectW"])
+
+    def test_jobb_vars_installning_misslyckas_stangs_och_ignoreras(self):
+        k = FalskKernel32(sats=0)
+        with falsk_win(k), mock.patch.object(subprocess, "Popen", return_value=FalskBarn()), \
+             self.assertLogs("akasha-protokoll", "WARNING"):
+            plattform.starta_barn(["x"])
+        self.assertIn(("CloseHandle", 1234), k.anrop)
+        self.assertNotIn("AssignProcessToJobObject", [x[0] for x in k.anrop])
+
+    def test_strukturen_har_ratt_storlek_pa_64_bitar(self):
+        if ctypes.sizeof(ctypes.c_void_p) != 8:
+            self.skipTest("bara 64 bitar")
+        self.assertEqual(ctypes.sizeof(plattform._BasicLimit), 64)
+        self.assertEqual(ctypes.sizeof(plattform._ExtendedLimit), 144)
+
+
+class TestEnKopia(unittest.TestCase):
+    def test_utanfor_windows_alltid_sant(self):
+        for namn in ("Darwin", "Linux"):
+            with system(namn), mock.patch.object(plattform, "_kernel32", side_effect=AssertionError("ingen")):
+                self.assertTrue(plattform.en_kopia("Local\\X"))
+                self.assertTrue(plattform.en_kopia("Local\\X"))
+
+    def test_forsta_och_andra(self):
+        k = FalskKernel32()
+        fel = iter([0, 183])
+        with falsk_win(k), mock.patch.object(plattform, "_fel", lambda: next(fel)):
+            self.assertTrue(plattform.en_kopia("Local\\AkashaProtokoll"))
+            self.assertEqual(plattform._mutex, 77)
+            self.assertFalse(plattform.en_kopia("Local\\AkashaProtokoll"))
+        self.assertEqual(k.anrop[0], ("CreateMutexW", None, False, "Local\\AkashaProtokoll"))
+
+    def test_mutexen_gick_inte_att_skapa_raknas_som_ensam(self):
+        with falsk_win(FalskKernel32(mutex=None)), mock.patch.object(plattform, "_fel", lambda: 5), \
+             self.assertLogs("akasha-protokoll", "WARNING"):
+            self.assertTrue(plattform.en_kopia("Local\\X"))
+            self.assertIsNone(plattform._mutex)
+
+
+class TestHallVakenWindows(unittest.TestCase):
+    def test_satter_och_slapper(self):
+        k = FalskKernel32()
+        with falsk_win(k):
+            with plattform.hall_vaken():
+                self.assertEqual(k.anrop, [("SetThreadExecutionState", 0x80000001)])
+        self.assertEqual(k.anrop[1:], [("SetThreadExecutionState", 0x80000000)])
+
+    def test_slapper_aven_vid_fel_i_jobbet(self):
+        k = FalskKernel32()
+        with falsk_win(k), self.assertRaises(ValueError):
+            with plattform.hall_vaken():
+                raise ValueError
+        self.assertEqual(k.anrop[-1], ("SetThreadExecutionState", 0x80000000))
+
+    def test_misslyckat_anrop_loggas_men_stoppar_inte_jobbet(self):
+        k = FalskKernel32(exekvering=0)
+        with falsk_win(k), self.assertLogs("akasha-protokoll", "WARNING"):
+            with plattform.hall_vaken():
+                pass
+
+    def test_inget_pa_linux(self):
+        with system("Linux"), mock.patch.object(plattform, "_kernel32", side_effect=AssertionError("ingen")), \
+             mock.patch.object(subprocess, "Popen", side_effect=AssertionError("ingen")):
+            with plattform.hall_vaken():
+                pass
+
+
 class TestHallVaken(unittest.TestCase):
     def test_caffeinate_med_w(self):
         process = mock.Mock()
@@ -454,6 +656,160 @@ class TestHallVaken(unittest.TestCase):
                 popen.assert_called_once_with(["caffeinate", "-i", "-w", str(os.getpid())])
                 process.terminate.assert_not_called()
         process.terminate.assert_called_once()
+
+
+class TestVisaFil(unittest.TestCase):
+    def test_windows_ett_select_argument(self):
+        with system("Windows"), mock.patch.object(subprocess, "Popen") as popen:
+            plattform.visa_fil("C:\\Users\\Åsa Öberg\\AkashaProtokoll\\en fil.txt")
+        popen.assert_called_once_with(["explorer", "/select,C:\\Users\\Åsa Öberg\\AkashaProtokoll\\en fil.txt"])
+
+    def test_windows_snedstreck_blir_omvanda(self):
+        with system("Windows"), mock.patch.object(subprocess, "Popen") as popen:
+            plattform.visa_fil("C:/Users/x/fil.txt")
+        self.assertEqual(popen.call_args[0][0], ["explorer", "/select,C:\\Users\\x\\fil.txt"])
+
+    def test_citeringen_ger_ett_argument_till_explorer(self):
+        rad = subprocess.list2cmdline(["explorer", "/select,C:\\Users\\Åsa Öberg\\fil.txt"])
+        self.assertEqual(rad, 'explorer "/select,C:\\Users\\Åsa Öberg\\fil.txt"')
+
+    def test_mac_ar_oforandrat(self):
+        with system("Darwin"), mock.patch.object(subprocess, "Popen") as popen:
+            plattform.visa_fil("/x/y.txt")
+        popen.assert_called_once_with(["/usr/bin/open", "-R", "/x/y.txt"])
+
+
+class TestFilKodning(Tillfallig):
+    def test_olika_text_pa_mac_och_windows(self):
+        fil = os.path.join(self.katalog, "i.env")
+        with open(fil, "wb") as f:
+            f.write("ORDLISTA=Västerås\n".encode("latin-1"))
+        with system("Windows"):
+            _, problem = plattform.las_installningsfil(fil)
+        self.assertEqual(problem, [plattform.FIL_KODNING_WINDOWS])
+        self.assertEqual(problem, ["Filen är inte sparad som ren text i UTF-8. Inga inställningar ur den används. "
+                                   "Öppna den i Anteckningar, välj Arkiv → Spara som och välj kodningen UTF-8."])
+        self.assertNotIn("TextEdit", problem[0])
+        with system("Darwin"):
+            _, problem = plattform.las_installningsfil(fil)
+        self.assertEqual(problem, [plattform.FIL_KODNING])
+        self.assertIn("TextEdit", problem[0])
+
+
+@unittest.skipUnless(os.name == "nt", "bara pa Windows: riktiga anrop till kernel32")
+class TestWindowsRiktigt(unittest.TestCase):
+    """Kors bara pa Windows (windows-latest i tester.yml). Inga fonster; allt som vantar har en tidsgrans."""
+    APP = os.path.join(os.path.dirname(os.path.abspath(hjalp.__file__)), "..", "app")
+
+    def kor_skript(self, kod, *args, **kw):
+        fil = os.path.join(tempfile.mkdtemp(prefix="akasha-win-"), "skript.py")
+        self.addCleanup(shutil.rmtree, os.path.dirname(fil), True)
+        with open(fil, "w", encoding="utf-8") as f:
+            f.write(textwrap.dedent(kod))
+        p = subprocess.Popen([sys.executable, fil, os.path.abspath(self.APP), *args],
+                             stdout=subprocess.PIPE, stdin=subprocess.PIPE, text=True,
+                             creationflags=0x08000000, **kw)
+        # Tidsgrans: hanger skriptet dodas det efter en minut, sa att readline() inte vantar for evigt.
+        vakt = threading.Timer(60, p.kill)
+        vakt.daemon = True
+        vakt.start()
+        self.addCleanup(vakt.cancel)
+        return p
+
+    @staticmethod
+    def _k32():
+        k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.OpenProcess.restype = ctypes.c_void_p
+        k.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+        k.WaitForSingleObject.restype = ctypes.c_uint32
+        k.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        k.TerminateProcess.restype = ctypes.c_int
+        k.TerminateProcess.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        k.CloseHandle.restype = ctypes.c_int
+        k.CloseHandle.argtypes = [ctypes.c_void_p]
+        return k
+
+    def vanta_pa_slut(self, pid, ms):
+        """True om processen har avslutats inom ms millisekunder."""
+        k = self._k32()
+        h = k.OpenProcess(0x00100000 | 0x0001, 0, pid)  # SYNCHRONIZE | PROCESS_TERMINATE
+        if not h:  # finns inte langre
+            return True
+        try:
+            return k.WaitForSingleObject(h, ms) == 0
+        finally:
+            k.CloseHandle(h)
+
+    def doda(self, pid):
+        k = self._k32()
+        h = k.OpenProcess(0x0001, 0, pid)
+        if h:
+            k.TerminateProcess(h, 1)
+            k.CloseHandle(h)
+
+    def test_barnet_dor_nar_foraldern_avslutas_med_terminateprocess(self):
+        mellan = self.kor_skript("""
+            import subprocess, sys, time
+            sys.path.insert(0, sys.argv[1])
+            import plattform
+            barn = plattform.starta_barn([sys.executable, "-c", "import time; time.sleep(60)"])
+            print(barn.pid, flush=True)
+            time.sleep(60)
+        """)
+        barn_pid = None
+        try:
+            barn_pid = int(mellan.stdout.readline())  # slutar vanta nar mellanprocessen har dott
+            self.assertFalse(self.vanta_pa_slut(barn_pid, 500), "barnet dog av sig sjalv")
+            mellan.kill()  # TerminateProcess
+            mellan.wait(timeout=20)
+            self.assertTrue(self.vanta_pa_slut(barn_pid, 15000), "barnprocessen lever kvar")
+        finally:
+            if mellan.poll() is None:
+                mellan.kill()
+                mellan.wait(timeout=20)
+            for ror in (mellan.stdout, mellan.stdin):
+                ror.close()
+            if barn_pid:
+                self.doda(barn_pid)
+
+    def test_exekveringsstatet_svarar_annat_an_noll(self):
+        # Forsta anropet satter ES_CONTINUOUS | ES_SYSTEM_REQUIRED; det andra far det som tidigare
+        # lage, alltsa inte 0.
+        with plattform.hall_vaken():
+            self.assertNotEqual(plattform._exekvering(plattform.ES_CONTINUOUS | plattform.ES_SYSTEM_REQUIRED), 0)
+        self.assertNotEqual(plattform._exekvering(plattform.ES_CONTINUOUS), 0)
+
+    def test_en_kopia_i_tva_processer_ger_sant_och_falskt(self):
+        namn = "Local\\AkashaProtokollTest" + str(os.getpid()) + str(int(time.time()))
+        kod = """
+            import sys
+            sys.path.insert(0, sys.argv[1])
+            import plattform
+            print(plattform.en_kopia(sys.argv[2]), flush=True)
+            sys.stdin.readline()
+        """
+        a = self.kor_skript(kod, namn)
+        b = None
+        try:
+            self.assertEqual(a.stdout.readline().strip(), "True")
+            b = self.kor_skript(kod, namn)
+            self.assertEqual(b.stdout.readline().strip(), "False")
+        finally:
+            for p in (a, b):
+                if p is None:
+                    continue
+                try:
+                    p.stdin.write("\n")
+                    p.stdin.flush()
+                except OSError:
+                    pass
+                try:
+                    p.wait(timeout=20)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    p.wait(timeout=20)
+                p.stdout.close()
+                p.stdin.close()
 
 
 class TestSkyddadPlats(unittest.TestCase):

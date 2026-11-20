@@ -130,6 +130,13 @@ class TestWhispercpp(unittest.TestCase):
         self.assertIn("kod 1", str(e.exception))
         self.assertIsNone(motor._process)
 
+    def test_startar_via_plattformens_starta_barn(self):
+        with mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
+             mock.patch.object(plattform, "starta_barn", return_value=FalskProcess()) as starta:
+            with self.assertRaises(motor.MotorFel):
+                motor._whispercpp(np_tyst(), False, "", None)
+        self.assertEqual(starta.call_args[0][0][0], "/x/whisper-cli")
+
     def test_loggar_tiden_till_forsta_framsteg_och_total_tid(self):
         class MedFramsteg(FalskProcess):
             stderr = ["whisper_print_progress_callback: progress =  10%\n",

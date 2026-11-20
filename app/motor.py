@@ -269,7 +269,7 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
             cmd += ["-ml", "1", "-sow", "--dtw", DTW, "-nfa", "-ojf"]
 
         t0 = time.monotonic()
-        p = subprocess.Popen(
+        p = plattform.starta_barn(
             cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, errors="replace"
         )
         _process = p
