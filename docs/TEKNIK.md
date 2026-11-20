@@ -387,7 +387,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
 **I en Linux-miljö utan grafikprocessor** (samma Python- och biblioteksversioner):
 
-- **Enhetstester:** 255 st (2 överhoppade), gröna, och ett till som bara körs för hand (se nedan). De täcker
+- **Enhetstester:** 263 st (2 överhoppade), gröna, och ett till som bara körs för hand (se nedan). De täcker
   talaruppdelning (även digitala möten), lagring av inspelningar i delar, export, skydd mot andra
   webbsidor, alla API-flöden och modellhämtningen mot låtsaskällan.
 - **Första start i Chromium**, med låtsaskällan i stället för Hugging Face: kortet med modellerna,
@@ -425,16 +425,16 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
   Whisper fastnade inte och tappade inga stycken.
 - Ett riktigt samtal inspelat i Chrome och ett röstmemo uppladdat i Safari delades upp i två talare.
 - DTW kostade lite: för ett samtal på 48 s gick transkriberingen från 5,9 till 7,1 s.
-
 - Programmet på en riktig Mac med Apple Silicon (prov 2026-11-20, bygget från Mac-körning 2):
   Gatekeeper (Klar, Öppna ändå under Integritet och säkerhet, Öppna ändå i nästa ruta, Touch ID
   eller lösenord); övertagande av en terminalinstallation (frågan kom, modellerna togs in utan
-  hämtning, ikonen i Dock); installation från grunden (sidan erbjöd att hämta modellerna, och
-  hämtningen startade).
+  hämtning, ikonen i Dock); installation från grunden (sidan erbjöd att hämta modellerna, hämtningen
+  på 1,6 GB blev klar på omkring fem minuter, uppskattat och inte mätt, och en inspelning på 11 s
+  transkriberades direkt efteråt utan märkbar väntan).
 
 **Inte provat än:**
 
-- programmet på en riktig Mac: hämtningen till slut, transkribering med KB-Whisper (tid och Metal), avslut mitt i en transkribering och loggfilen (Gatekeeper, övertagande och första start är provade, se ovan);
+- programmet på en riktig Mac: tider för en längre inspelning och för Metal vid första transkriberingen (inte mätta), avslut mitt i en transkribering och loggfilen (Gatekeeper, övertagande, första start, hämtning och en kort transkribering är provade, se ovan);
 - faster-whisper och transkribering på Windows (CI installerar inte faster-whisper);
 - första start på Windows, och hämtning på ett företagsnät med proxy;
 - ett riktigt Google Meet-möte eller en Slack-huddle, där Chromes flikväljare och
