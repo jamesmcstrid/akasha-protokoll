@@ -130,6 +130,40 @@ class TestWhispercpp(unittest.TestCase):
         self.assertIn("kod 1", str(e.exception))
         self.assertIsNone(motor._process)
 
+    def test_loggar_tiden_till_forsta_framsteg_och_total_tid(self):
+        class MedFramsteg(FalskProcess):
+            stderr = ["whisper_print_progress_callback: progress =  10%\n",
+                      "whisper_print_progress_callback: progress = 100%\n"]
+            returncode = 0
+
+            def wait(self, timeout=None):
+                return 0
+
+        def popen(cmd, **kw):
+            ut = cmd[cmd.index("-of") + 1]
+            with open(ut + ".json", "w", encoding="utf-8") as f:
+                f.write('{"transcription": []}')
+            return MedFramsteg()
+
+        framsteg = []
+        with mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
+             mock.patch.object(motor.subprocess, "Popen", popen), \
+             self.assertLogs("akasha-meet", "INFO") as loggat:
+            motor._whispercpp(np_tyst(), False, "", framsteg.append)
+        self.assertEqual(framsteg, [0.1, 1.0])
+        rader = [r for r in loggat.output if "whisper-cli: forsta framsteg efter" in r]
+        self.assertEqual(len(rader), 1, loggat.output)
+        self.assertRegex(rader[0], r"forsta framsteg efter \d+\.\d s, klar efter \d+\.\d s \(kod 0, ")
+
+    def test_loggraden_visar_streck_om_inget_framsteg_kom(self):
+        with mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
+             mock.patch.object(motor.subprocess, "Popen", return_value=FalskProcess()), \
+             self.assertLogs("akasha-meet", "INFO") as loggat:
+            with self.assertRaises(motor.MotorFel):
+                motor._whispercpp(np_tyst(), False, "", None)
+        self.assertTrue(any("forsta framsteg efter - s," in r and "kod 1" in r for r in loggat.output),
+                        loggat.output)
+
     def test_saknad_cli_ger_motorfel(self):
         with mock.patch.object(plattform, "whisper_cli", lambda: None), \
              mock.patch.object(plattform, "ar_paketerad", lambda: True):

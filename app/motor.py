@@ -19,6 +19,7 @@ import re
 import subprocess
 import tempfile
 import threading
+import time
 import wave
 
 import numpy as np
@@ -267,6 +268,7 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
             # faster-whisper, men fungerar bara utan flash attention. Darfor bara har.
             cmd += ["-ml", "1", "-sow", "--dtw", DTW, "-nfa", "-ojf"]
 
+        t0 = time.monotonic()
         p = subprocess.Popen(
             cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, errors="replace"
         )
@@ -275,12 +277,18 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
             if _avslutas:  # stoppa() hann inte se processen
                 p.terminate()
             sista = collections.deque(maxlen=15)
+            forsta = None  # tiden till forsta framsteg (pa Mac kompileras Metal-biblioteken forst)
             for rad in p.stderr:
                 sista.append(rad.rstrip())
                 m = PROGRESS_RE.search(rad)
+                if m and forsta is None:
+                    forsta = time.monotonic() - t0
                 if m and framsteg:
                     framsteg(int(m.group(1)) / 100)
             kod = p.wait()
+            log.info("whisper-cli: forsta framsteg efter %s s, klar efter %.1f s (kod %d, %.0f s ljud)",
+                     "%.1f" % forsta if forsta is not None else "-", time.monotonic() - t0, kod,
+                     len(samples) / SR)
         finally:
             _process = None
         if kod != 0 and _avslutas:
