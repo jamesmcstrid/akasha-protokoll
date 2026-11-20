@@ -77,6 +77,17 @@ def mal_motor(onskad=MOTOR, system=None, har_cli=None):
     return "whispercpp" if system in ("Darwin", "Windows") and har_cli else "faster"
 
 
+def motor_text():
+    """Motorn som den ska stå i startraden i loggen. Saknas modellen for malmotorn star det: valj_motor()
+    ger da faster tills modellen har hamtats, fast malet (och det som hamtas) ar en annan motor."""
+    mal = mal_motor()
+    try:
+        saknas = bool(modeller.saknade(mal, MODELL))
+    except KeyError:  # okand MODELL: hinder() sager ifran
+        saknas = False
+    return f"motor {mal}, modellen saknas" if saknas else f"motor {AKTIV}"
+
+
 AKTIV = valj_motor()  # bestams nar tjansten startar, och raknas om av uppdatera()
 
 

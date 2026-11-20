@@ -174,35 +174,48 @@ class TestBorja(Skalprov):
         self.webb.assert_not_called()
         self.assertEqual(self.fraga.rutor, [(start.STARTAR_REDAN_RUBRIK, start.STARTAR_REDAN_TEXT, OK)])
 
-    def test_andra_kopian_vantar_hogst_120_sekunder(self):
-        self.assertEqual(windows_app.VANTA_ANDRA_KOPIAN, 120)
+    def test_andra_kopian_vantar_hogst_10_sekunder(self):
+        self.assertEqual(windows_app.VANTA_ANDRA_KOPIAN, 10)
 
     def fast_klocka(self):
         klocka = FalskKlocka()
         return klocka, mock.patch.object(windows_app, "time", klocka)
 
-    def test_andra_kopian_oppnar_sidan_aven_nar_svaret_kommer_sent(self):
+    def test_andra_kopian_oppnar_sidan_direkt_nar_den_forsta_redan_svarar(self):
         plattform.en_kopia.return_value = False
         klocka, pa = self.fast_klocka()
-        with pa, mock.patch.object(start, "lage", side_effect=lambda *a, **k: "akasha" if klocka.nu >= 100 else "ledig"), \
+        with pa, mock.patch.object(start, "lage", return_value="akasha"), \
+             mock.patch.object(start, "url", return_value="u"), \
+             self.assertLogs("akasha-protokoll", "INFO") as logg:
+            self.assertFalse(self.skal.borja())
+        self.webb.assert_called_once_with("u")
+        self.assertEqual(klocka.nu, 0)  # ingen vantan
+        self.assertEqual(self.fraga.rutor, [])
+        self.assertIn("INFO:akasha-protokoll:win: den forsta kopian svarade efter 0.0 s", logg.output)
+
+    def test_andra_kopian_oppnar_sidan_nar_svaret_kommer_efter_8_s(self):
+        plattform.en_kopia.return_value = False
+        klocka, pa = self.fast_klocka()
+        with pa, mock.patch.object(start, "lage", side_effect=lambda *a, **k: "akasha" if klocka.nu >= 8 else "ledig"), \
              mock.patch.object(start, "url", return_value="u"), \
              self.assertLogs("akasha-protokoll", "INFO") as logg:
             self.assertFalse(self.skal.borja())
         self.webb.assert_called_once_with("u")
         self.assertEqual(self.fraga.rutor, [])  # ingenting visas under vantan
-        self.assertIn("INFO:akasha-protokoll:win: den forsta kopian svarade efter 100.0 s", logg.output)
+        self.assertIn("INFO:akasha-protokoll:win: den forsta kopian svarade efter 8.0 s", logg.output)
+        start.forbered.assert_not_called()  # den andra kopian startar ingenting
 
-    def test_andra_kopian_ger_upp_efter_120_s_med_lugn_text(self):
+    def test_andra_kopian_som_ger_upp_visar_rutan_och_oppnar_ingen_webblasare(self):
         plattform.en_kopia.return_value = False
         klocka, pa = self.fast_klocka()
         with pa, mock.patch.object(start, "lage", return_value="ledig"), \
              self.assertLogs("akasha-protokoll", "INFO") as logg:
             self.assertFalse(self.skal.borja())
-        self.assertGreaterEqual(klocka.nu, 120)
-        self.assertLess(klocka.nu, 121)
-        self.webb.assert_not_called()
+        self.assertGreaterEqual(klocka.nu, 10)
+        self.assertLess(klocka.nu, 11)
+        self.webb.assert_not_called()  # den forsta kopian oppnar sidan sjalv, annars blev det tva flikar
         self.assertEqual(self.fraga.rutor, [(start.STARTAR_REDAN_RUBRIK, start.STARTAR_REDAN_TEXT, OK)])
-        self.assertIn("INFO:akasha-protokoll:win: den andra kopian svarade inte inom 120 s", logg.output)
+        self.assertIn("INFO:akasha-protokoll:win: den forsta kopian svarar inte an (10 s), visar rutan", logg.output)
         self.assertEqual(start.STARTAR_REDAN_RUBRIK, "Akasha Protokoll startar")
 
     def test_installningsproblem_ja_visar_filen(self):

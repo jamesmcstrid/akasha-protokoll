@@ -85,10 +85,11 @@ WIN_AVSLUTA_FRAGA = "Vill du avsluta ändå?"
 WIN_VISA_LOGGEN_FRAGA = "Vill du öppna mappen med loggen?"
 WIN_VISA_FILEN_FRAGA = "Vill du öppna mappen med inställningsfilen?"
 STARTAR_REDAN_RUBRIK = "Akasha Protokoll startar"
-STARTAR_REDAN_TEXT = ("Akasha Protokoll håller på att starta men svarar inte än. Första gången kan det ta någon "
-                      "minut. Vänta en stund och försök igen. Hjälper det inte, avsluta Akasha Protokoll i "
-                      "Aktivitetshanteraren och starta det på nytt.")
-WIN_STARTAR_NOTIS = ("Akasha Protokoll startar. Första gången kan det ta någon minut. Sidan öppnas i "
+STARTAR_REDAN_TEXT = ("Akasha Protokoll håller på att starta. Första gången kan det ta några minuter, eftersom "
+                      "Windows kontrollerar programmets filer. Sidan öppnas i webbläsaren av sig själv när det "
+                      "är klart. Händer inget på tio minuter: avsluta Akasha Protokoll i Aktivitetshanteraren "
+                      "och starta det på nytt.")
+WIN_STARTAR_NOTIS = ("Akasha Protokoll startar. Första gången kan det ta några minuter. Sidan öppnas i "
                      "webbläsaren när det är klart.")
 WIN_IGANG = "Akasha Protokoll är igång. Du hittar det bland ikonerna vid klockan."
 WIN_TIPS_STARTAR = "Akasha Protokoll startar…"
@@ -311,7 +312,7 @@ class Tjanst:
             raise StartFel(UPPTAGEN_TEXT.format(port=self.port, fil=plattform.installningsfil())) from e
         self.trad = threading.Thread(target=self.server.run, name="waitress", daemon=True)
         self.trad.start()
-        log.info("Akasha Protokoll: http://127.0.0.1:%s (motor %s, data i %s)", self.port, motor.AKTIV, app.DATAKATALOG)
+        log.info("Akasha Protokoll: http://127.0.0.1:%s (%s, data i %s)", self.port, motor.motor_text(), app.DATAKATALOG)
         if motor.problem():
             log.warning("motorn ar inte redo: %s", motor.problem())
 

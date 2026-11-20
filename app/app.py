@@ -625,7 +625,7 @@ def main():
         log.warning("installningar: %s", text)
     forbered()
     server = skapa_server()
-    log.info("Akasha Protokoll: http://127.0.0.1:%s (motor %s, data i %s)", PORT, motor.AKTIV, DATAKATALOG)
+    log.info("Akasha Protokoll: http://127.0.0.1:%s (%s, data i %s)", PORT, motor.motor_text(), DATAKATALOG)
     if motor.problem():
         log.warning("motorn ar inte redo: %s", motor.problem())
     server.run()

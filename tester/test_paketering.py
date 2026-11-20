@@ -131,12 +131,12 @@ class Paketering(unittest.TestCase):
         self.assertEqual(start.STARTAR_REDAN_RUBRIK, "Akasha Protokoll startar")
         self.assertEqual(
             start.STARTAR_REDAN_TEXT,
-            "Akasha Protokoll håller på att starta men svarar inte än. Första gången kan det ta någon minut. "
-            "Vänta en stund och försök igen. Hjälper det inte, avsluta Akasha Protokoll i Aktivitetshanteraren "
-            "och starta det på nytt.")
+            "Akasha Protokoll håller på att starta. Första gången kan det ta några minuter, eftersom Windows "
+            "kontrollerar programmets filer. Sidan öppnas i webbläsaren av sig själv när det är klart. Händer "
+            "inget på tio minuter: avsluta Akasha Protokoll i Aktivitetshanteraren och starta det på nytt.")
         self.assertEqual(
             start.WIN_STARTAR_NOTIS,
-            "Akasha Protokoll startar. Första gången kan det ta någon minut. Sidan öppnas i webbläsaren när "
+            "Akasha Protokoll startar. Första gången kan det ta några minuter. Sidan öppnas i webbläsaren när "
             "det är klart.")
         self.assertEqual(start.WIN_IGANG, "Akasha Protokoll är igång. Du hittar det bland ikonerna vid klockan.")
         self.assertEqual(start.WIN_TIPS_STARTAR, "Akasha Protokoll startar\u2026")

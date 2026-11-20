@@ -20,7 +20,8 @@ import start
 log = logging.getLogger("akasha-protokoll")
 
 MUTEX = "Local\\AkashaProtokoll"  # per inloggad anvandare
-VANTA_ANDRA_KOPIAN = 120  # sekunder: forsta starten pa en ny dator kan ta lang tid (Windows granskar filerna)
+VANTA_ANDRA_KOPIAN = 10  # sekunder. En vanlig start tar nagra sekunder; en lang forsta start vantar den inte ut:
+# den forsta kopian oppnar sidan sjalv nar den ar klar
 VANTA_TJANSTEN = 60  # sekunder, raknat fran att tjanst.starta() har returnerat
 NOTIS_EFTER = 5  # sekunder fran att ikonen visas tills notisen "startar" visas om tjansten annu inte svarar
 
@@ -107,7 +108,7 @@ class Skal:
             if time.monotonic() >= slut:
                 break
             time.sleep(0.5)
-        log.info("win: den andra kopian svarade inte inom %d s", VANTA_ANDRA_KOPIAN)
+        log.info("win: den forsta kopian svarar inte an (%d s), visar rutan", VANTA_ANDRA_KOPIAN)
         fraga(start.STARTAR_REDAN_RUBRIK, start.STARTAR_REDAN_TEXT, OK)
 
     def starta_i_bakgrunden(self):

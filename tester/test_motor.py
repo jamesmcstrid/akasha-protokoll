@@ -537,6 +537,34 @@ class TestStadaKvarglomda(unittest.TestCase):
         stada.assert_called_once_with()
 
 
+class TestMotorText(unittest.TestCase):
+    """Motorn i startraden i loggen: malmotorn och "modellen saknas" nar den inte ar hamtad."""
+
+    def text(self, aktiv, mal, saknas):
+        with mock.patch.object(motor, "AKTIV", aktiv), mock.patch.object(motor, "mal_motor", lambda *a: mal), \
+             mock.patch.object(modeller, "saknade", lambda *a: ["x"] if saknas else []):
+            return motor.motor_text()
+
+    def test_paketerat_program_utan_modell(self):
+        self.assertEqual(self.text("faster", "whispercpp", True), "motor whispercpp, modellen saknas")
+
+    def test_med_modell_som_forut(self):
+        self.assertEqual(self.text("whispercpp", "whispercpp", False), "motor whispercpp")
+        self.assertEqual(self.text("faster", "faster", False), "motor faster")
+
+    def test_faster_utan_modell(self):
+        self.assertEqual(self.text("faster", "faster", True), "motor faster, modellen saknas")
+
+    def test_okand_modell_ger_ingen_krasch(self):
+        with mock.patch.object(motor, "AKTIV", "faster"), mock.patch.object(modeller, "saknade", side_effect=KeyError("x")):
+            self.assertEqual(motor.motor_text(), "motor faster")
+
+    def test_startraden_i_loggen_har_prefixet_som_kontrollen_letar_efter(self):
+        import start
+        with open(start.__file__, encoding="utf-8") as f:
+            self.assertIn('"Akasha Protokoll: http://127.0.0.1:%s (%s, data i %s)"', f.read())
+
+
 class TestModellnamn(unittest.TestCase):
     def test_metal_bara_pa_mac(self):
         with mock.patch.object(motor, "AKTIV", "whispercpp"):
