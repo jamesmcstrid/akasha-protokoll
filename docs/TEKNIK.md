@@ -72,7 +72,7 @@ Sidan i korthet:
   webbläsare som inte kan dela flikljud (allt utom Chrome och andra Chromium-webbläsare). Under inspelningen visar en
   nivåmätare ljudet, och en varning visas om nivån har legat under −80 dBFS i tio sekunder.
   Flikens titel visar ● och tiden.
-- **En sak i taget:** högra ytan visar formuläret eller den öppna inspelningen, aldrig båda, med knappen "Ny transkribering" för att komma tillbaka till formuläret. Det som pågår i formuläret (inspelning, kön för ljud som väntar, uppladdning) döljs aldrig: öppnar man då en inspelning står den under formuläret. All visning och döljning sker i `visaYta()` i `app.js`.
+- **En sak i taget:** högra ytan visar formuläret eller den öppna inspelningen, aldrig båda, med knappen "Ny transkribering" för att komma tillbaka till formuläret. Det som pågår i formuläret (inspelning, kön för ljud som väntar, uppladdning) döljs aldrig, inte ens när modellkortet står ensamt vid första start (då ligger kortet över formuläret): öppnar man då en inspelning står den under formuläret. All visning och döljning sker i `visaYta()` i `app.js`.
 - **Ljud som väntar:** Under inspelningen behåller sidan alla delar i minnet (cirka 27 MB per timme med mikrofonen och 40 MB digitalt, uppmätt med låtsasmikrofon) och skickar dem i ordning. Svarar inte tjänsten försöker sidan igen utan slut, och efter Stoppa startar transkriberingen när allt har kommit fram. Vid ett serverfel slutar sidan skicka och erbjuder "Spara ljudet som fil". Inspelningen släpps först när allt är sparat eller filen är sparad.
 - **Listan:** byggs om varannan sekund medan något pågår. "Transkribera igen" öppnar en dialog
   som fylls i från inspelningens egna inställningar, inte från formuläret högst upp.

@@ -327,14 +327,15 @@ async function kollaModeller() {
 }
 
 // Hogra ytan visar en sak: formularet eller den oppna inspelningen. Det som pagar i formularet
-// (inspelning, kon, uppladdning) och modellkortet nar det behovs doljs aldrig.
+// (inspelning, kon, uppladdning) doljs aldrig, inte heller nar modellkortet star i fullt lage:
+// da visas kortet over formularet. Modellkortet nar det behovs doljs inte heller.
 function visaYta() {
   const fokus = document.activeElement;
   const oppen = visadId !== null;
   const pagarINy = !!inspelning || !$("ko").hidden || laddarUpp;
   const hamtar = HAMTAR.has(senastTillstand);
   $("modeller").hidden = !(modellLage === "fullt" || (modellLage === "talare" && (!oppen || hamtar)));
-  $("ny").hidden = modellLage === "fullt" || (oppen && !pagarINy);
+  $("ny").hidden = !pagarINy && (modellLage === "fullt" || oppen);
   $("visning").hidden = !oppen;
   const knapp = $("till-ny");
   knapp.hidden = modellLage === "fullt";
