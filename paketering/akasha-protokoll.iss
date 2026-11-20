@@ -28,7 +28,6 @@
 AppId={{9E5B73C9-B94B-4979-B5DF-00C834E09C1E}
 AppName={#Namn}
 AppVersion={#Version}
-AppPublisher=Dennis Fredin
 AppCopyright=© 2026 Dennis Fredin. Apache-2.0.
 VersionInfoVersion={#Version}
 VersionInfoDescription={#Namn}
@@ -37,7 +36,9 @@ VersionInfoCopyright=© 2026 Dennis Fredin. Apache-2.0.
 PrivilegesRequired=lowest
 DefaultDirName={localappdata}\Programs\{#Namn}
 DisableProgramGroupPage=yes
-DisableDirPage=auto
+; Alltid %LOCALAPPDATA%\Programs\Akasha Protokoll: ingen katalogsida, sa att ingen valjer en katalog med annat i.
+; /DIR= pa kommandoraden galler anda (kontrollen i Actions anvander det).
+DisableDirPage=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
@@ -76,11 +77,12 @@ Name: "{autodesktop}\{#Namn}"; Filename: "{app}\{#Exe}"; Tasks: desktopicon
 [Run]
 Filename: "{app}\{#Exe}"; Description: "Starta Akasha Protokoll"; Flags: nowait postinstall skipifsilent
 
-; Avinstallationen tar bara bort det som installationen lade dit: programmappen (%LOCALAPPDATA%\Programs\Akasha Protokoll)
-; och genvagarna. Inspelningarna (AkashaProtokoll i hemkatalogen) och modellerna och installningarna
-; (%LOCALAPPDATA%\Akasha Protokoll) ligger i andra kataloger och rors aldrig.
+; Inno Setup tar bort sina egna filer och tomma kataloger. Hit hor bara det som PyInstaller kan ha skapat efter
+; installationen (__pycache__ i _internal). {app} i sig tas aldrig bort med allt innehall: en katalog med andras filer
+; (eller anvandarens data) ska klara en avinstallation. Inspelningarna (AkashaProtokoll i hemkatalogen) och modellerna och
+; installningarna (%LOCALAPPDATA%\Akasha Protokoll) ligger i andra kataloger och rors aldrig.
 [UninstallDelete]
-Type: filesandordirs; Name: "{app}"
+Type: filesandordirs; Name: "{app}\_internal"
 
 [Code]
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

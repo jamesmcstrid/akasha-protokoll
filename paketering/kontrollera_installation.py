@@ -1,6 +1,9 @@
 """Provar installationsfilen pa riktigt (bara Windows): tyst installation till en katalog med a-ring, a-prickar och o-prickar
 och mellanslag i namnet, genvag och avinstallationspost, om installationsfilen ser programmets mutex, kontrollera.py mot det
-installerade programmet, tyst avinstallation, och att programkatalogen ar borta medan anvandarens data ligger kvar.
+installerade programmet, tyst avinstallation, och att programmets filer ar borta medan en framand fil i katalogen och
+anvandarens data ligger kvar. Kors bara i GitHub Actions (GITHUB_ACTIONS=true): skriptet installerar och avinstallerar for den
+inloggade anvandaren med samma AppId som en riktig installation, och skriver i de riktiga mapparna AkashaProtokoll (i hemkatalogen)
+och Akasha Protokoll under %LOCALAPPDATA%.
 
     python paketering/kontrollera_installation.py --installation dist/Akasha-Protokoll-installation.exe
            --katalog "RUNNER_TEMP/Installerat Åäö/Akasha Protokoll" --hem "RUNNER_TEMP/Hem för installationen Åäö"
@@ -28,6 +31,10 @@ def kommandorad(program, flaggor, **namngivna):
     """Kommandoraden som en sträng (Windows skickar den ordagrant): Inno Setup vill ha /DIR="sokvag med mellanslag"."""
     delar = [f'"{program}"'] + list(flaggor) + [f'/{k}="{v}"' for k, v in namngivna.items()]
     return " ".join(delar)
+
+
+def ar_actions(miljo):
+    return miljo.get("GITHUB_ACTIONS", "").lower() == "true"
 
 
 def startmeny():
@@ -147,6 +154,12 @@ def main(argv=None):
     ap.add_argument("--logg-katalog", default="build/loggar")
     args = ap.parse_args(argv)
     res = kontroll_hjalp.Resultat("KONTROLL AV INSTALLATIONSFILEN")
+    if not ar_actions(os.environ):
+        res.fel("kontrollen kor bara i GitHub Actions (GITHUB_ACTIONS=true) och stannar har: den installerar och avinstallerar "
+                "for den inloggade anvandaren, med samma AppId som en riktig installation (en riktig installation skulle "
+                "avinstalleras), och skriver i de riktiga mapparna AkashaProtokoll och %LOCALAPPDATA%\\Akasha Protokoll. "
+                "Det finns ingen flagga for att tvinga den.")
+        return res.sammanfatta()
     if os.name != "nt":
         res.fel("kontrollen kan bara goras pa Windows")
         return res.sammanfatta()
@@ -185,7 +198,8 @@ def main(argv=None):
         res.fel(f"avinstallationsposten HKCU\\...\\Uninstall\\{APPID}_is1 saknas")
     else:
         print("INFO: avinstallationsposten: " + "; ".join(f"{k}={post.get(k)}" for k in
-              ("DisplayName", "DisplayVersion", "Publisher", "InstallLocation", "UninstallString") if k in post))
+              ("DisplayName", "DisplayVersion", "Publisher", "InstallLocation", "UninstallString"))
+              + " (Publisher kan vara tom: ingen utgivare ar satt)")
         res.kontrollera(post.get("DisplayVersion") == args.version and post.get("DisplayName") == NAMN,
                         f"avinstallationsposten har namnet {NAMN} och versionen {args.version}",
                         f"avinstallationsposten har namn {post.get('DisplayName')!r} och version {post.get('DisplayVersion')!r}")
@@ -210,7 +224,11 @@ def main(argv=None):
     else:
         res.fel("det installerade programmet saknas: kontrollera.py kordes inte")
 
-    res.steg("4. tyst avinstallation: bara programkatalogen och genvagarna, aldrig anvandarens data")
+    res.steg("4. tyst avinstallation: bara programmets filer och genvagarna, aldrig andras filer eller anvandarens data")
+    framand = os.path.join(katalog, "inte-var-fil.txt")  # en fil som inte ar var egen: den ska klara avinstallationen
+    if os.path.isdir(katalog):
+        with open(framand, "w", encoding="utf-8") as f:
+            f.write("en annan fil i installationskatalogen\n")
     for d, m in markorer.items():
         os.makedirs(d, exist_ok=True)
         with open(m, "w", encoding="utf-8") as f:
@@ -220,18 +238,25 @@ def main(argv=None):
     if os.path.isfile(avinstallerare):
         kod = kor(kommandorad(avinstallerare, TYSTA, LOG=ulogg), 300)
         print(f"INFO: avinstallationen gav kod {kod!r}")
-        borta = vanta_tills_borta(katalog)
+        borta = vanta_tills_borta(exe) and vanta_tills_borta(os.path.join(katalog, "_internal"))
         visa_slut(ulogg, 40)
-        res.kontrollera(borta, "programkatalogen ar borta efter avinstallationen", f"programkatalogen finns kvar: {katalog}")
-        if not borta:
-            print("Kvar i katalogen:", sorted(os.listdir(katalog))[:20])
+        res.kontrollera(borta, f"{EXE} och _internal ar borta efter avinstallationen",
+                        f"{EXE} eller _internal finns kvar i {katalog}")
+        print("Kvar i katalogen:", sorted(os.listdir(katalog)) if os.path.isdir(katalog) else "(katalogen ar borta)")
     else:
         res.fel(f"{avinstallerare} saknas: avinstallationen kordes inte")
     res.kontrollera(not os.path.exists(startmeny()), "genvagen i Start-menyn ar borta", f"genvagen finns kvar: {startmeny()}")
     res.kontrollera(avinstallationspost() is None, "avinstallationsposten ar borta", "avinstallationsposten finns kvar")
+    res.kontrollera(os.path.isfile(framand), "den framande filen inte-var-fil.txt ligger kvar (avinstallationen tog inte bort andras filer)",
+                    f"avinstallationen tog bort {framand}, en fil som inte ar vår")
     for d, m in markorer.items():
         res.kontrollera(os.path.isfile(m), f"{d} ligger kvar (markoren finns)", f"avinstallationen tog bort {m}")
-    # Stada: markorerna, och katalogerna om det var vi som skapade dem
+    # Stada: den framande filen och installationskatalogen (om den ar tom), markorerna, och katalogerna om det var vi som skapade dem
+    try:
+        os.remove(framand)
+        os.rmdir(katalog)
+    except OSError:
+        pass
     for d, m in markorer.items():
         try:
             os.remove(m)

@@ -441,7 +441,10 @@ class Installationsfilen(unittest.TestCase):
     def test_avinstallationen_ror_inte_anvandarens_data(self):
         borta = self.sektion("UninstallDelete").strip().splitlines()
         poster = [r for r in borta if r.strip() and not r.startswith(";")]
-        self.assertEqual(poster, ['Type: filesandordirs; Name: "{app}"'])  # bara programkatalogen under Programs
+        # bara PyInstallers eget (_internal): {app} ensam far aldrig tas bort med allt innehall (en katalog med andras filer)
+        self.assertEqual(poster, ['Type: filesandordirs; Name: "{app}\\_internal"'])
+        self.assertIsNone(re.search(r"\{app\}(?!\\_internal)", "\n".join(poster)))  # aldrig {app} ensam
+        self.assertIn("DisableDirPage=yes", self.iss())  # ingen katalogsida: alltid Programs\\Akasha Protokoll
         text = self.iss()
         self.assertNotIn("{userdocs}", text)
         self.assertNotIn("{%USERPROFILE}", text)
@@ -456,7 +459,7 @@ class Installationsfilen(unittest.TestCase):
         text = self.iss()
         self.assertIn(f"AppCopyright={v.UPPHOVSRATT}", text)
         self.assertIn(f"VersionInfoCopyright={v.UPPHOVSRATT}", text)
-        self.assertIn("AppPublisher=Dennis Fredin", text)
+        self.assertNotIn("AppPublisher", text)  # utgivare i applistan ar inte godkand av agaren
         self.assertIn("OutputBaseFilename=Akasha-Protokoll-installation", text)
         self.assertIn("{#Namn}", text)
         self.assertEqual(v.NAMN, "Akasha Protokoll")
@@ -467,6 +470,22 @@ class Installationsfilen(unittest.TestCase):
         for rad in self.iss().splitlines():
             if rad.startswith(";"):
                 self.assertIsNone(re.search("[åäöÅÄÖ]", rad), rad)
+
+    def test_kontrollen_av_installationen_kor_bara_i_actions_och_provar_framand_fil(self):
+        import kontrollera_installation as k
+        self.assertTrue(k.ar_actions({"GITHUB_ACTIONS": "true"}))
+        for miljo in ({}, {"GITHUB_ACTIONS": "false"}, {"GITHUB_ACTIONS": ""}):
+            self.assertFalse(k.ar_actions(miljo))
+        miljo = {n: v for n, v in os.environ.items() if n != "GITHUB_ACTIONS"}
+        with mock.patch.dict(os.environ, miljo, clear=True), mock.patch("builtins.print") as skriv:
+            self.assertEqual(k.main(["--installation", "x.exe", "--katalog", "k", "--hem", "h", "--version", "0.2.0.1"]), 1)
+        text = " ".join(str(a[0][0]) for a in skriv.call_args_list)
+        self.assertIn("bara i GitHub Actions", text)
+        self.assertIn("ingen flagga", text)
+        kallkod = las("paketering", "kontrollera_installation.py")
+        self.assertNotIn("--tvinga", kallkod)
+        for stycke in ("inte-var-fil.txt", "den framande filen", "_internal ar borta"):
+            self.assertIn(stycke, kallkod)
 
     def test_bygget_hittar_iscc_och_skriver_versionen(self):
         import bygg_installation as b
