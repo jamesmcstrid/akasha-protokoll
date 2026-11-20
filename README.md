@@ -133,7 +133,7 @@ ikonen för att öppna sidan igen. Avsluta med **⌘Q** eller genom att högerkl
 **Har du installerat från Terminal tidigare** frågar programmet om det ska ta över. Då stängs den
 gamla installationen av och startar inte längre när du loggar in. Inspelningarna i `~/AkashaMeet`
 och modellerna du redan har används av programmet, så ingenting hämtas igen. Vill du ha tillbaka den
-gamla kör du `bash mac/installera.sh` igen.
+gamla kör du `bash mac/installera.sh` igen. Ligger den gamla mappen i Hämtade filer, Dokument eller Skrivbord letar programmet inte efter modeller där (macOS skulle annars fråga om lov), utan erbjuder att hämta dem. Flytta mappen till hemkatalogen först om du vill slippa hämta igen.
 
 ### Från Terminal
 
@@ -147,6 +147,8 @@ git clone git@github.com:jamesmcstrid/Akasha-Meet.git ~/akasha-meet
 cd ~/akasha-meet
 bash mac/installera.sh
 ```
+
+Mappen ska ligga direkt i din hemkatalog, som `~/akasha-meet` ovan, och inte i Hämtade filer, Dokument, Skrivbord eller iCloud Drive. Där låter macOS inte bakgrundstjänster läsa, och installationen säger ifrån. Har du laddat ned repot som zip-fil, flytta den uppackade mappen till hemkatalogen innan du kör installationen.
 
 Installationen skapar en Python-miljö och laddar ner modellerna (cirka 1,6 GB, bara första gången).
 På Apple Silicon installerar den också `whisper-cpp` via Homebrew, så att grafikprocessorn används.
@@ -222,6 +224,7 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 | Problem | Gör så här |
 |---|---|
 | Sidan öppnas inte | Programmet: avsluta och öppna Akasha Meet igen. Loggen finns i `~/Library/Logs/Akasha Meet/akasha-meet.log` (öppnas med appen Konsol). Från Terminal: `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`, och loggen `~/AkashaMeet/akasha-meet.log` |
+| "Operation not permitted" i loggen, eller installationen säger att mappen ligger fel | Mappen med Akasha Meet ligger där macOS inte låter bakgrundstjänster läsa (Hämtade filer, Dokument, Skrivbord, iCloud Drive). Flytta den till hemkatalogen, ta bort mappen `venv` i den, och kör `bash mac/installera.sh` igen. Modellerna och .env följer med. |
 | "Akasha Meet svarar inte" | Programmet har avslutats eller stannat. Öppna Akasha Meet igen. Från Terminal: tjänsten startar av sig själv när du loggar in, så logga ut och in igen, eller kör `launchctl kickstart -k gui/$(id -u)/local.akasha-meet` i Terminal. Det du redan spelat in ligger kvar. Sidan märker själv när Akasha Meet är igång igen. |
 | macOS varnar och Akasha Meet öppnas inte, eller "är skadat" | Se steg 3 och 4 under Som program. Hjälper inte det, kör `xattr -dr com.apple.quarantine "/Applications/Akasha Meet.app"` i Terminal. |
 | "Akasha Meet kan inte starta" (port 8611) | Ett annat program använder porten. Avsluta det, eller ange en annan port med `PORT=` i inställningarna. |
