@@ -1,5 +1,6 @@
 import io
 import os
+import threading
 import unittest
 from unittest import mock
 
@@ -104,7 +105,73 @@ class TestLagring(unittest.TestCase):
                 mock.patch("lagring.os.replace", side_effect=PermissionError("last")) as ers:
             with self.assertRaises(PermissionError):
                 lagring.uppdatera(m["id"], titel="X")
-        self.assertEqual(ers.call_count, 5)
+        self.assertEqual(ers.call_count, lagring.OMFORSOK)
+
+    def test_las_forsoker_igen_vid_permissionerror(self):
+        m = lagring.ny_inspelning(".webm", "Titel", INST)
+        riktig = open
+        anrop = []
+
+        def last_tva_ganger(*a, **k):
+            anrop.append(a)
+            if len(anrop) <= 2:
+                raise PermissionError("last")
+            return riktig(*a, **k)
+
+        with mock.patch("lagring.time.sleep"), mock.patch("builtins.open", last_tva_ganger):
+            meta = lagring.las(m["id"])
+        self.assertEqual(meta["titel"], "Titel")
+        self.assertEqual(len(anrop), 3)
+
+    def test_las_ger_upp_efter_alla_forsok(self):
+        m = lagring.ny_inspelning(".webm", "", INST)
+        with mock.patch("lagring.time.sleep") as sov, \
+                mock.patch("builtins.open", side_effect=PermissionError("last")) as oppna:
+            with self.assertRaises(PermissionError):
+                lagring.las(m["id"])
+        self.assertEqual(oppna.call_count, lagring.OMFORSOK)
+        self.assertEqual(sov.call_count, lagring.OMFORSOK - 1)
+
+    def test_lista_hoppar_over_last_fil(self):
+        a = lagring.ny_inspelning(".webm", "A", INST)
+        b = lagring.ny_inspelning(".webm", "B", INST)
+        riktig = lagring.las
+
+        def las_med_last_fil(id_):
+            if id_ == a["id"]:
+                raise PermissionError("last")
+            return riktig(id_)
+
+        with mock.patch("lagring.las", las_med_last_fil), self.assertLogs("lagring", "WARNING") as logg:
+            ut = lagring.lista()
+        self.assertEqual([m["id"] for m in ut], [b["id"]])
+        self.assertIn(a["id"], logg.output[0])
+
+    def test_las_vantar_pa_laset(self):
+        m = lagring.ny_inspelning(".webm", "", INST)
+        har_laset = threading.Event()
+        slapp = threading.Event()
+        klar = threading.Event()
+
+        def hall_laset():
+            with lagring._las:
+                har_laset.set()
+                slapp.wait(5)
+
+        def lasare():
+            lagring.las(m["id"])
+            klar.set()
+
+        h = threading.Thread(target=hall_laset)
+        h.start()
+        self.assertTrue(har_laset.wait(5))
+        t = threading.Thread(target=lasare)
+        t.start()
+        self.assertFalse(klar.wait(0.2))  # las() ska stanna kvar tills laset slapps
+        slapp.set()
+        self.assertTrue(klar.wait(5))
+        h.join(5)
+        t.join(5)
 
 
 if __name__ == "__main__":

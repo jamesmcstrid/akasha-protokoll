@@ -156,6 +156,15 @@ class TestWhispercpp(unittest.TestCase):
                 motor._whispercpp(np_tyst(), False, "", None)
         self.assertEqual(starta.call_args[0][0][0], "/x/whisper-cli")
 
+    def test_stderr_lases_som_utf8(self):
+        # Windows: utan encoding blir det cp1252 och a/a/o i sokvagar blir "Ã…sa" i loggen.
+        with mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
+             mock.patch.object(motor.subprocess, "Popen", return_value=FalskProcess()) as popen:
+            with self.assertRaises(motor.MotorFel):
+                motor._whispercpp(np_tyst(), False, "", None)
+        self.assertEqual(popen.call_args[1]["encoding"], "utf-8")
+        self.assertEqual(popen.call_args[1]["errors"], "replace")
+
     def test_loggar_tiden_till_forsta_framsteg_och_total_tid(self):
         class MedFramsteg(FalskProcess):
             stderr = ["whisper_print_progress_callback: progress =  10%\n",

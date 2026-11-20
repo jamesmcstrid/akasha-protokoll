@@ -379,7 +379,8 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
 
         t0 = time.monotonic()
         p = plattform.starta_barn(
-            cmd, cwd=bas, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, errors="replace"
+            cmd, cwd=bas, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+            errors="replace",
         )
         _process = p
         try:

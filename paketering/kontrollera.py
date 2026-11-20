@@ -324,7 +324,14 @@ def main():
         id_ = r.json()["id"]
         t0 = time.monotonic()
         while True:
-            i = hamta(f"/api/inspelningar/{id_}").json()
+            svar = hamta(f"/api/inspelningar/{id_}")
+            try:
+                i = svar.json() if svar.status_code == 200 else None
+            except ValueError:
+                i = None
+            if not isinstance(i, dict) or "status" not in i:
+                slut(f"inspelningen {id_} kunde inte läsas under väntan på jobbet: "
+                     f"statuskod {svar.status_code}, svar {svar.text[:300]!r}")
             if i["status"] in ("klar", "fel"):
                 break
             if time.monotonic() - t0 > 120:

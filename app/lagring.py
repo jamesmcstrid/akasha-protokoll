@@ -8,6 +8,7 @@ id ar tidpunkten, t.ex. 20261117-140312 (med -2, -3 ... om tva startar samma sek
 Status: spelar_in, sparad, koar, transkriberar, talare, klar, fel, avbruten.
 """
 import json
+import logging
 import os
 import re
 import threading
@@ -22,6 +23,12 @@ PAGAENDE = {"koar", "transkriberar", "talare"}
 AVBRUTEN = "Transkriberingen avbröts eftersom Akasha Protokoll avslutades. Tryck Försök igen för att göra om den."
 
 _las = threading.RLock()
+log = logging.getLogger(__name__)
+
+# Windows: den som oppnar .json-filen precis nar den byts ut (eller nar utomstaende program som
+# Defender eller sokindexering haller den) far PermissionError nagra millisekunder.
+OMFORSOK = 10
+OMFORSOK_PAUS = 0.05
 
 
 class Fel(Exception):
@@ -47,29 +54,42 @@ def textfil(id_):
 
 
 def las(id_):
-    try:
-        with open(_sokvag(id_, ".json"), encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        raise Fel("inspelningen finns inte", 404)
+    sokvag = _sokvag(id_, ".json")
+    # Laset gor att ingen lasning i programmet kan krocka med ett utbyte i spara(). Det halls ocksa
+    # under de korta omforsoken nedan (hogst OMFORSOK * OMFORSOK_PAUS = 0,5 s): ett utomstaende
+    # program haller filen bara en kort stund, och annars kunde en skrivare hinna byta ut filen
+    # mitt i omforsoken.
+    with _las:
+        for forsok in range(OMFORSOK):
+            try:
+                with open(sokvag, encoding="utf-8") as f:
+                    return json.load(f)
+            except FileNotFoundError:
+                raise Fel("inspelningen finns inte", 404)
+            except PermissionError:
+                if forsok == OMFORSOK - 1:
+                    raise
+                time.sleep(OMFORSOK_PAUS)
 
 
 def spara(meta):
     """Skriv atomiskt: en halvskriven fil ska aldrig kunna ersatta en hel."""
     sokvag = _sokvag(meta["id"], ".json")
     tmp = sokvag + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(meta, f, ensure_ascii=False, indent=1)
-    # Pa Windows ger os.replace PermissionError om en annan trad just laser .json-filen (listan
-    # lases varannan sekund medan ett jobb skriver). Det gar over efter nagra millisekunder.
-    for forsok in range(5):
-        try:
-            os.replace(tmp, sokvag)
-            return
-        except PermissionError:
-            if forsok == 4:
-                raise
-            time.sleep(0.05)
+    with _las:  # se las(): lasare och skrivare i programmet tar turas
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=1)
+        # Pa Windows ger os.replace PermissionError om nagon just har .json-filen oppen (listan
+        # lases varannan sekund medan ett jobb skriver, eller ett utomstaende program). Det gar
+        # over efter nagra millisekunder.
+        for forsok in range(OMFORSOK):
+            try:
+                os.replace(tmp, sokvag)
+                return
+            except PermissionError:
+                if forsok == OMFORSOK - 1:
+                    raise
+                time.sleep(OMFORSOK_PAUS)
 
 
 def uppdatera(id_, **falt):
@@ -183,6 +203,9 @@ def lista():
             try:
                 ut.append(las(id_))
             except (Fel, ValueError):
+                continue
+            except PermissionError:
+                log.warning("hoppar over %s i listan: filen gar inte att lasa", id_)
                 continue
     return sorted(ut, key=lambda m: m["id"], reverse=True)
 
