@@ -1,6 +1,6 @@
 # <img src="app/static/elefant.svg" alt="" width="44" align="top"> Akasha Meet
 
-Transkribera möten på din egen Mac. Spela in direkt i webbläsaren, eller ladda upp en ljudfil.
+Transkribera möten lokalt på din egen dator. Spela in direkt i webbläsaren, eller ladda upp en ljudfil.
 Du får texten uppdelad per talare och kan byta "Talare 1" och "Talare 2" mot riktiga namn.
 
 - **Allt stannar på datorn.** Tal till text och talaruppdelning görs lokalt. Inget skickas till

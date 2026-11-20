@@ -1051,7 +1051,7 @@ function rendera(lista) {
         onclick: () => avsluta(m.id) }, "Avsluta och transkribera"));
     }
     if (["sparad", "fel", "avbruten", "klar"].includes(m.status)) {
-      atgarder.append(el("button", { type: "button", class: "knapp liten-knapp", "data-roll": "transkribera",
+      atgarder.append(el("button", { type: "button", class: m.status === "klar" ? "knapp liten-knapp dov" : "knapp liten-knapp", "data-roll": "transkribera",
         "aria-haspopup": "dialog", onclick: () => transkriberaIgen(m) },
       m.status === "klar" ? "Transkribera igen" : "Transkribera"));
     }

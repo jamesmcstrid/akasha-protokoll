@@ -360,14 +360,23 @@ code { font-size: 13px; background: var(--yta2); padding: 1px 6px; border-radius
 .lista { list-style: none; margin: 0; padding: 0; }
 .lista li {
   --li-text: var(--text); --li-dampad: var(--dampad); --li-fel: var(--fel); --li-kant: var(--knapp-kant);
-  --li-hover: var(--yta2);
-  display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-bottom: 1px solid var(--linje);
+  --li-hover: var(--yta2); --li-linje: var(--linje);
+  position: relative; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-bottom: 1px solid var(--linje);
   color: var(--li-text);
 }
-.lista li:hover { background: var(--yta); border-radius: var(--radie-vald); border-bottom-color: transparent; }
+/* Hela raden markeras nar pekaren ar over den eller oppna-knappen har fokus; den valda raden behaller sin grona fyllning. */
+.lista li:not(.visad):hover, .lista li:not(.visad):has(.post:focus-visible) {
+  background: var(--rad-hover); border-radius: var(--radie-vald); border-bottom-color: transparent;
+}
+/* Ljust ar --yta2 lika med sidans bakgrund och syns inte; da markeras raden vit. Morkt ar --yta2 tydligare an --yta. */
+.lista { --rad-hover: var(--yta); }
+@media (prefers-color-scheme: dark) { .lista { --rad-hover: var(--yta2); } }
+.lista li:hover .post-rubrik, .lista li:has(.post:focus-visible) .post-rubrik {
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1.5px;
+}
 .lista li.visad {
   --li-text: var(--vit); --li-dampad: var(--pa-gront); --li-fel: var(--fel-pa-gront); --li-kant: var(--pa-gront);
-  --li-hover: rgba(255, 255, 255, 0.12);
+  --li-hover: rgba(255, 255, 255, 0.12); --li-linje: rgba(213, 230, 220, 0.4);
   --spar: var(--spelare-spar); --spar-fyllt: var(--lime); --vandrare: var(--lime);
   --vandrare-mork: var(--lime-mork); --vandrare-ora: var(--hero); --fokus: var(--fokus-pa-gront);
   background: var(--vald-bg); border-radius: var(--radie-vald); border-bottom-color: transparent;
@@ -376,7 +385,20 @@ code { font-size: 13px; background: var(--yta2); padding: 1px 6px; border-radius
   display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; background: none; border: 0;
   padding: 0; font: inherit; color: inherit; cursor: pointer; border-radius: 8px;
 }
-.post-rubrik { font-weight: 700; font-size: 17px; line-height: 1.35; overflow-wrap: anywhere; }
+/* Knappens yta tacker hela raden (utom atgardsknapparna, som ligger ovanpa), sa att hela raden gar att klicka. */
+.post::before { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.lista .knappar { position: relative; z-index: 1; }
+/* Pilen visar att raden gar att oppna. Den ar en maskerad ruta, sa att fargen foljer texten i alla lagen. */
+.post::after {
+  content: ""; position: absolute; top: 18px; right: 16px; width: 10px; height: 16px;
+  background: var(--li-dampad);
+  -webkit-mask: var(--post-pil) center / contain no-repeat; mask: var(--post-pil) center / contain no-repeat;
+  --post-pil: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 14'%3E%3Cpath d='M1.5 1.5l5.5 5.5-5.5 5.5' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.lista li:hover .post::after, .lista li:has(.post:focus-visible) .post::after { background: var(--li-text); }
+.post:focus-visible { outline: none; }
+.post:focus-visible::before { outline: 2px solid var(--fokus); outline-offset: -2px; }
+.post-rubrik { font-weight: 700; font-size: 17px; line-height: 1.35; overflow-wrap: anywhere; padding-right: 28px; }
 .post-info { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 14px; color: var(--li-dampad); }
 .post-info:empty { display: none; }
 .post-status { font-size: 14px; }
@@ -401,7 +423,13 @@ code { font-size: 13px; background: var(--yta2); padding: 1px 6px; border-radius
   color: var(--li-text); border: 1.5px solid var(--li-kant);
 }
 .lista .knapp:hover { background: var(--li-hover); }
-.lista .fara { color: var(--li-fel); }
+/* Rang: "Transkribera igen" pa en klar rad och "Radera" ar nedtonade; de far sin vanliga kant vid hovring och fokus.
+   Pa rader dar transkribering ar nasta steg behaller knappen sin tydliga kant. */
+.lista .knapp.dov, .lista .fara { color: var(--li-dampad); border-color: var(--li-linje); }
+.lista .knapp.dov:hover, .lista .knapp.dov:focus-visible, .lista .fara:hover, .lista .fara:focus-visible {
+  border-color: var(--li-kant);
+}
+.lista .fara:hover, .lista .fara:focus-visible { color: var(--li-fel); }
 #tom { margin: 8px 16px; font-size: 15px; }
 progress { width: 120px; vertical-align: middle; accent-color: var(--spar-fyllt); }
 
