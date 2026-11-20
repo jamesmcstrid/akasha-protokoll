@@ -303,7 +303,8 @@ class TestInstallningsfil(Tillfallig):
 
     def test_latin1_ger_kodningsproblem(self):
         fil = self.skriv("ORDLISTA=Västerås\n".encode("latin-1"))
-        self.assertEqual(plattform.las_installningsfil(fil), ({}, [plattform.FIL_KODNING]))
+        with system("Linux"):  # Windows-texten provas i TestFilKodning
+            self.assertEqual(plattform.las_installningsfil(fil), ({}, [plattform.FIL_KODNING]))
 
     def test_katalog_med_filens_namn(self):
         fil = os.path.join(self.katalog, "installningar.env")
@@ -431,7 +432,8 @@ class TestWhisperCli(Tillfallig):
         with mock.patch.object(sys, "frozen", True, create=True), \
              mock.patch.object(sys, "_MEIPASS", self.katalog, create=True), \
              mock.patch.object(installningar, "WHISPERCPP_BIN", "whisper-cli"), \
-             mock.patch.object(shutil, "which", side_effect=AssertionError("which ska inte anropas")):
+             mock.patch.object(shutil, "which", side_effect=AssertionError("which ska inte anropas")), \
+             system("Linux"):  # Windows-grenen (whisper\\whisper-cli.exe) provas i TestWhisperCliWindows
             if os.name == "nt":
                 self.skipTest("Windows har ingen korbarhetsbit")
             self.assertEqual(plattform.whisper_cli(), fil)
@@ -446,7 +448,8 @@ class TestWhisperCli(Tillfallig):
     def test_inte_paketerad(self):
         with mock.patch.object(plattform, "ar_paketerad", return_value=False), \
              mock.patch.object(shutil, "which", return_value="/valfri/whisper-cli") as which:
-            self.assertEqual(plattform.whisper_cli(), "/valfri/whisper-cli")
+            # absolut pa det system som provet kors pa (pa Windows blir "/valfri/..." "D:\\valfri\\...")
+            self.assertEqual(plattform.whisper_cli(), os.path.abspath("/valfri/whisper-cli"))
         which.assert_called_once_with(installningar.WHISPERCPP_BIN)
 
 
