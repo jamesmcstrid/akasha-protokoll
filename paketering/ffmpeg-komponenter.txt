@@ -1,0 +1,28 @@
+# Configure-flaggorna for FFmpeg 6.1.6 som ar lika pa alla system, en per rad (# ar kommentar).
+# Lasas av bygg-ffmpeg.sh (bygger med dem) och av kontrollera_ffmpeg.py (kontrollerar att varje rad star i configure-raden
+# som finns inbyggd i biblioteken). Systemets tillagg (trad, arkitektur) star i bygg-ffmpeg.sh.
+#
+# Bara LGPL-delar, inga externa bibliotek: ingen --enable-gpl, --enable-version3, --enable-nonfree eller --enable-lib*.
+--disable-autodetect
+--disable-everything
+--disable-doc
+--disable-debug
+--disable-network
+--disable-iconv
+--disable-zlib
+--disable-bzlib
+--disable-lzma
+# Filer (inte nat)
+--enable-protocol=file
+# Behallare: mov (mov, mp4, m4a, 3gp), matroska (mkv, webm), ogg, wav, mp3, flac, aac (ADTS), caf, aiff
+--enable-demuxer=mov,matroska,ogg,wav,mp3,flac,aac,caf,aiff
+# Avkodare: mp3float, mp2 och mp1 (fast punkt) valjs av FFmpeg fore andra, och ger da samma sampel som dagens bygge
+--enable-decoder=aac,aac_latm,opus,vorbis,mp3float,mp2,mp1,flac,alac,adpcm_ima_wav,adpcm_ms,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_s32be,pcm_f32le,pcm_f32be,pcm_f64le,pcm_u8,pcm_mulaw,pcm_alaw
+--enable-parser=aac,aac_latm,opus,vorbis,mpegaudio,flac
+# aformat och aresample kravs av PyAV:s AudioResampler (FFmpeg lagger in aresample sjalv for formatbytet)
+--enable-filter=aformat,aresample
+--enable-swresample
+# Delade bibliotek, inga program
+--enable-shared
+--disable-static
+--disable-programs

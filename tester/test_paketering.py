@@ -757,5 +757,221 @@ class WindowsFlodet(unittest.TestCase):
             self.assertIsNone(re.search("[åäöÅÄÖ]", kommentar), kommentar)
 
 
+# --- eget FFmpeg utan GPL-delar (L2) ---------------------------------------------------------------------------------
+
+def _kontrollera_ffmpeg():
+    if PAKETERING not in sys.path:
+        sys.path.insert(0, PAKETERING)
+    import kontrollera_ffmpeg
+    return kontrollera_ffmpeg
+
+
+KONFIGURERING = ("--prefix=/x/prefix --disable-autodetect --disable-everything --disable-doc --disable-debug --disable-network "
+                 "--disable-iconv --disable-zlib --disable-bzlib --disable-lzma --enable-protocol=file "
+                 "--enable-demuxer='mov,matroska' --enable-shared --enable-pthreads")
+
+
+class FfmpegKomponenter(unittest.TestCase):
+    def test_komponentfilen_har_listan_och_inga_gpl_flaggor(self):
+        text = las("paketering", "ffmpeg-komponenter.txt")
+        rader = [r for r in text.splitlines() if r.strip() and not r.startswith("#")]
+        for flagga in ("--disable-autodetect", "--disable-everything", "--disable-network", "--enable-protocol=file",
+                       "--enable-demuxer=mov,matroska,ogg,wav,mp3,flac,aac,caf,aiff", "--enable-filter=aformat,aresample",
+                       "--enable-swresample", "--enable-shared", "--disable-static", "--disable-programs"):
+            self.assertIn(flagga, rader)
+        decoder = next(r for r in rader if r.startswith("--enable-decoder="))[len("--enable-decoder="):].split(",")
+        self.assertEqual(len(decoder), 23)
+        for namn in ("aac", "opus", "vorbis", "mp3float", "mp2", "mp1", "flac", "alac", "adpcm_ima_wav", "pcm_s16le", "pcm_alaw"):
+            self.assertIn(namn, decoder)
+        self.assertEqual(next(r for r in rader if r.startswith("--enable-parser=")),
+                         "--enable-parser=aac,aac_latm,opus,vorbis,mpegaudio,flac")
+        for forbjudet in ("--enable-gpl", "--enable-version3", "--enable-nonfree", "--enable-lib", "--enable-postproc"):
+            self.assertNotIn(forbjudet, text.replace("# ", "").replace("ingen --enable-gpl, --enable-version3, --enable-nonfree "
+                                                                         "eller --enable-lib*", ""))
+        for r in rader:
+            self.assertTrue(r.startswith("--"), r)
+
+    def test_bygg_ffmpeg_har_taggen_hashen_och_tillaggen(self):
+        text = las("paketering", "bygg-ffmpeg.sh")
+        self.assertIn("TAGG=n6.1.6", text)
+        self.assertIn("VANTAD=f1e3a2bf7a2f2cde936d1ed97f09a26853d20125", text)
+        self.assertIn("https://github.com/FFmpeg/FFmpeg.git", text)
+        self.assertIn("--depth 1", text)
+        self.assertIn("ffmpeg-komponenter.txt", text)
+        for tillagg in ("--enable-pthreads", "--arch=arm64", "-mmacosx-version-min=14.0", "-headerpad_max_install_names",
+                        "MACOSX_DEPLOYMENT_TARGET=14.0", "--enable-w32threads", "--extra-ldflags=-static-libgcc"):
+            self.assertIn(tillagg, text)
+        self.assertIn('cp "$PREFIX"/bin/*.lib "$PREFIX/lib/"', text)  # dlltool-importbiblioteken, bara Windows
+        self.assertIn("sju", text)
+        for fil in ("COPYING.LGPLv2.1", "LICENSE.md", "CREDITS", "configure.txt", "KALLA.txt", "ffmpeg-6.1.6-kallkod.tar.xz"):
+            self.assertIn(fil, text)
+        for forbjudet in ("--enable-gpl", "--enable-version3", "--enable-nonfree", "--enable-lib"):
+            self.assertNotIn(forbjudet, text.replace("ingen --enable-gpl", ""))
+
+    def test_skripten_gar_att_tolka(self):
+        compile(las("paketering", "kontrollera_ffmpeg.py"), "kontrollera_ffmpeg.py", "exec")
+        if os.name != "nt" and shutil.which("bash"):
+            p = subprocess.run(["bash", "-n", os.path.join(PAKETERING, "bygg-ffmpeg.sh")], capture_output=True, text=True)
+            self.assertEqual(p.returncode, 0, p.stderr)
+
+    def test_kommentarerna_har_inga_aao(self):
+        for delar in (("paketering", "kontrollera_ffmpeg.py"), ("paketering", "bygg-ffmpeg.sh"),
+                      ("paketering", "ffmpeg-komponenter.txt")):
+            text = las(*delar)
+            kommentarer_ = ([t.string for t in tokenize.generate_tokens(io.StringIO(text).readline) if t.type == tokenize.COMMENT]
+                            if delar[-1].endswith(".py") else re.findall(r"(?:^|\s)#(?!!).*", text, re.M))
+            for k in kommentarer_:
+                self.assertIsNone(re.search("[åäöÅÄÖ]", k), f"{delar[-1]}: {k}")
+
+
+class KontrolleraFfmpeg(unittest.TestCase):
+    """kontrollera_ffmpeg.py med pahittade filer: sju bibliotek med ratt strang ger OK, varje fel for sig ger FEL."""
+
+    NAMN = ("avutil", "avcodec", "avformat", "avfilter", "avdevice", "swresample", "swscale")
+
+    def setUp(self):
+        self.k = _kontrollera_ffmpeg()
+        self.komponenter = ["--disable-autodetect", "--enable-demuxer=mov,matroska", "--enable-shared"]
+        self.katalog = tempfile.mkdtemp(prefix="akasha-ffmpeg-")
+        self.addCleanup(shutil.rmtree, self.katalog, True)
+
+    def lib(self, namn, licens="LGPL version 2.1 or later", konfig=KONFIGURERING):
+        return (b"\x00\x01libra " + f"lib{namn} license: {licens}".encode() + b"\x00junk\x00" + konfig.encode() + b"\x00end")
+
+    def bygg(self, mapp="av.libs", suffix=".so.60", prefix="lib", andra=None, byt=None):
+        """Skriver sju bibliotek (och eventuellt fler filer) i katalogen -> katalogens sokvag."""
+        byt = byt or {}
+        for n in self.NAMN:
+            fil = os.path.join(self.katalog, mapp, f"{prefix}{n}-abc123{suffix}")
+            os.makedirs(os.path.dirname(fil), exist_ok=True)
+            with open(fil, "wb") as f:
+                f.write(byt.get(n, self.lib(n)))
+        for namn, data in (andra or {}).items():
+            fil = os.path.join(self.katalog, namn)
+            os.makedirs(os.path.dirname(fil), exist_ok=True)
+            with open(fil, "wb") as f:
+                f.write(data)
+        return self.katalog
+
+    def kor(self, katalog=None):
+        res = self.k.kontroll_hjalp.Resultat("prov")
+        with mock.patch("builtins.print"):
+            self.k.kontrollera(self.k.poster_ur_katalog(katalog or self.katalog), self.komponenter, res)
+        return res
+
+    def test_sju_ratta_bibliotek_ar_ok(self):
+        res = self.kor(self.bygg())
+        self.assertEqual(res.fel_rader, [])
+        self.assertTrue(any("exakt sju" in r for r in res.ok_rader))
+
+    def test_namnen_pa_alla_tre_system(self):
+        for mapp, suffix, prefix in (("av.libs", ".so.60.31.102", "lib"), ("av/.dylibs", ".60.dylib", "lib"),
+                                      ("av.libs", ".dll", "")):
+            with self.subTest(suffix=suffix):
+                shutil.rmtree(self.katalog)
+                os.makedirs(self.katalog)
+                res = self.kor(self.bygg(mapp, suffix, prefix))
+                self.assertEqual(res.fel_rader, [], res.fel_rader)
+
+    def test_gpl_strang_ger_fel(self):
+        res = self.kor(self.bygg(byt={"avcodec": self.lib("avcodec", "GPL version 3 or later")}))
+        self.assertTrue(any("licensen är inte LGPL" in f and "GPL version 3" in f for f in res.fel_rader), res.fel_rader)
+        self.assertTrue(any("innehåller 'license: GPL'" in f for f in res.fel_rader))
+
+    def test_lgpl3_och_nonfree_ger_fel(self):
+        res = self.kor(self.bygg(byt={"avutil": self.lib("avutil", "LGPL version 3 or later")}))
+        self.assertTrue(res.fel_rader)
+        res = self.kor(self.bygg(byt={"avutil": self.lib("avutil") + b" nonfree"}))
+        self.assertTrue(any("nonfree" in f for f in res.fel_rader))
+
+    def test_enable_gpl_i_configure_raden_ger_fel(self):
+        for flagga in ("--enable-gpl", "--enable-version3", "--enable-nonfree", "--enable-libx264"):
+            with self.subTest(flagga):
+                res = self.kor(self.bygg(byt={"avformat": self.lib("avformat", konfig=KONFIGURERING + " " + flagga)}))
+                self.assertTrue(any(f"configure-raden har" in f and flagga.split("lib")[0] in f for f in res.fel_rader), res.fel_rader)
+
+    def test_saknad_komponent_ger_fel(self):
+        self.komponenter.append("--enable-decoder=hevc")
+        res = self.kor(self.bygg())
+        self.assertTrue(any("saknar --enable-decoder=hevc" in f for f in res.fel_rader), res.fel_rader)
+
+    def test_forbjuden_fil_ger_fel(self):
+        res = self.kor(self.bygg(andra={"av.libs/libx264-164.dll": b"x"}))
+        self.assertTrue(any("förbjuden fil" in f and "libx264-164.dll" in f for f in res.fel_rader), res.fel_rader)
+
+    def test_en_attonde_fil_i_av_libs_ger_fel(self):
+        res = self.kor(self.bygg(andra={"av.libs/zlib1-123.dll": b"x"}))
+        self.assertTrue(any("en annan fil än de sju" in f and "zlib1-123.dll" in f for f in res.fel_rader), res.fel_rader)
+        res = self.kor(self.bygg(mapp="av/__dot__dylibs", suffix=".60.dylib", andra={"av/__dot__dylibs/libz.1.dylib": b"x"}))
+        self.assertTrue(any("libz.1.dylib" in f for f in res.fel_rader))
+
+    def test_for_fa_eller_dubbla_bibliotek_ger_fel(self):
+        katalog = self.bygg()
+        os.remove(os.path.join(katalog, "av.libs", "libswscale-abc123.so.60"))
+        res = self.kor(katalog)
+        self.assertTrue(any("saknade FFmpeg-bibliotek: swscale" in f for f in res.fel_rader), res.fel_rader)
+        shutil.rmtree(self.katalog)
+        os.makedirs(self.katalog)
+        self.bygg()
+        with open(os.path.join(self.katalog, "libavcodec.so.60"), "wb") as f:
+            f.write(self.lib("avcodec"))
+        res = self.kor()
+        self.assertTrue(any("mer än en gång" in f and "avcodec" in f for f in res.fel_rader), res.fel_rader)
+
+    def test_symboliska_lankar_raknas_inte(self):
+        katalog = self.bygg()
+        os.symlink(os.path.join(katalog, "av.libs", "libavcodec-abc123.so.60"), os.path.join(katalog, "libavcodec-abc123.so.60"))
+        self.assertEqual(self.kor(katalog).fel_rader, [])
+
+    def test_hjul_som_zip(self):
+        import zipfile
+        hjul = os.path.join(self.katalog, "av-12.3.0-cp312-x.whl")
+        komp = os.path.join(self.katalog, "komp.txt")
+        with open(komp, "w", encoding="utf-8") as f:
+            f.write("\n".join(self.komponenter) + "\n")
+        with zipfile.ZipFile(hjul, "w") as z:
+            for n in self.NAMN:
+                z.writestr(f"av.libs/lib{n}-abc.so.60", self.lib(n))
+            z.writestr("av/__init__.py", "")
+        with mock.patch("builtins.print"):
+            self.assertEqual(self.k.main(["--hjul", hjul, "--komponenter", komp]), 0)
+        with zipfile.ZipFile(hjul, "a") as z:
+            z.writestr("av.libs/libx265-199.so", b"x")
+        with mock.patch("builtins.print"):
+            self.assertEqual(self.k.main(["--hjul", hjul, "--komponenter", komp]), 1)
+
+    def test_importer_pa_windows(self):
+        ok = ["KERNEL32.dll", "bcrypt.dll", "api-ms-win-crt-runtime-l1-1-0.dll", "avutil-58-abc.dll", "USER32.dll"]
+        self.assertEqual(self.k.bedom_importer(ok), [])
+        for fel in ("msvcrt.dll", "libgcc_s_seh-1.dll", "libwinpthread-1.dll", "libstdc++-6.dll", "libx264-164.dll"):
+            self.assertEqual(len(self.k.bedom_importer(ok + [fel])), 1, fel)
+
+    def test_kommandoradens_utgang(self):
+        self.assertEqual(self.k.main(["--katalog", os.path.join(self.katalog, "finns-inte")]), 1)
+
+
+class FfmpegKontrollSomPaIPyPi(unittest.TestCase):
+    """Dagens PyPI-hjul (GPL, x264 och x265 inlankade) ska ge FEL: kontrollen hindrar att det slinker med."""
+
+    def test_pypi_hjulets_installation_ger_fel(self):
+        import av
+        site = os.path.dirname(os.path.dirname(av.__file__))
+        libs = os.path.join(site, "av.libs")
+        if not os.path.isdir(libs):
+            self.skipTest("PyPI-hjulets av.libs finns inte (ett eget bygge eller en annan plattform)")
+        k = _kontrollera_ffmpeg()
+        kopia = tempfile.mkdtemp(prefix="akasha-pypi-")
+        self.addCleanup(shutil.rmtree, kopia, True)
+        shutil.copytree(libs, os.path.join(kopia, "av.libs"), symlinks=True)
+        res = k.kontroll_hjalp.Resultat("prov")
+        with mock.patch("builtins.print"):
+            k.kontrollera(k.poster_ur_katalog(kopia), k.las_komponenter(os.path.join(PAKETERING, "ffmpeg-komponenter.txt")), res)
+        text = "\n".join(res.fel_rader)
+        if "LGPL version 2.1" in text or not res.fel_rader:
+            self.skipTest("av.libs ar ett eget LGPL-bygge")
+        self.assertIn("GPL version 3", text)
+        self.assertIn("förbjuden fil", text)
+
+
 if __name__ == "__main__":
     unittest.main()
