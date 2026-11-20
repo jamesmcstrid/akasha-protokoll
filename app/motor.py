@@ -10,12 +10,12 @@ annars faster-whisper):
 Ingen sprakmodell rattar eller sammanfattar texten. Det som whisper hor ar det som skrivs.
 """
 import collections
+import importlib.util
 import io
 import json
 import logging
 import os
 import re
-import shutil
 import subprocess
 import tempfile
 import threading
@@ -82,14 +82,24 @@ class MotorFel(Exception):
     """Motorn saknas, kraschar eller svarar fel."""
 
 
+def _cli_saknas():
+    if plattform.ar_paketerad():
+        return "whisper-cli saknas i programmet. Ladda ned Akasha Meet på nytt."
+    return f"{WHISPERCPP_BIN} saknas. Kör: brew install whisper-cpp"
+
+
 def hinder():
     """Det en hamtning inte kan ratta: None, eller vad som ar fel med installningarna."""
     if MODELL not in STORLEKAR:
         return f"okand MODELL={MODELL!r}, anvand medium eller large"
     if MOTOR not in ("auto", "faster", "whispercpp"):
         return f"okand MOTOR={MOTOR!r}, anvand auto, faster eller whispercpp"
+    if (plattform.ar_paketerad() and MOTOR == "faster"
+            and importlib.util.find_spec("faster_whisper") is None):
+        return ("MOTOR=faster går inte i programmet, eftersom faster-whisper inte följer med. "
+                "Ta bort raden MOTOR i installningar.env.")
     if mal_motor(MOTOR) == "whispercpp" and plattform.whisper_cli() is None:  # MOTOR lases nu, inte vid def
-        return f"{WHISPERCPP_BIN} saknas. Kör: brew install whisper-cpp"
+        return _cli_saknas()
     return None
 
 
@@ -99,7 +109,7 @@ def problem():
     if fel:
         return fel
     if AKTIV == "whispercpp" and plattform.whisper_cli() is None:
-        return f"{WHISPERCPP_BIN} saknas. Kör: brew install whisper-cpp"
+        return _cli_saknas()
     if modeller.saknade(AKTIV, MODELL):
         return "KB-Whisper (GGML) saknas. Hämta den på sidan." if AKTIV == "whispercpp" \
             else "KB-Whisper saknas. Hämta den på sidan."
@@ -201,14 +211,33 @@ def wav_16k_mono(samples):
     return buf.getvalue()
 
 
+# Pagaende whisper-cli. start.Tjanst.stang() anropar stoppa() nar programmet avslutas, annars
+# fortsatter whisper-cli efter att programmet har stangts.
+_process = None
+
+
+def stoppa():
+    p = _process
+    if p is not None and p.poll() is None:
+        p.terminate()
+        try:
+            p.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            p.kill()
+
+
 def _whispercpp(samples, per_ord, prompt, framsteg):
+    global _process
+    cli = plattform.whisper_cli()
+    if cli is None:
+        raise MotorFel(_cli_saknas())
     with tempfile.TemporaryDirectory(prefix="akasha-meet-") as katalog:
         wav = os.path.join(katalog, "ljud.wav")
         with open(wav, "wb") as f:
             f.write(wav_16k_mono(samples))
         ut = os.path.join(katalog, "ut")  # whisper-cli lagger till .json
         cmd = [
-            shutil.which(WHISPERCPP_BIN),
+            cli,
             "-m", GGML_MODELL,
             "-f", wav,
             "-l", SPRAK,
@@ -229,13 +258,18 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
         p = subprocess.Popen(
             cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, errors="replace"
         )
-        sista = collections.deque(maxlen=15)
-        for rad in p.stderr:
-            sista.append(rad.rstrip())
-            m = PROGRESS_RE.search(rad)
-            if m and framsteg:
-                framsteg(int(m.group(1)) / 100)
-        if p.wait() != 0:
+        _process = p
+        try:
+            sista = collections.deque(maxlen=15)
+            for rad in p.stderr:
+                sista.append(rad.rstrip())
+                m = PROGRESS_RE.search(rad)
+                if m and framsteg:
+                    framsteg(int(m.group(1)) / 100)
+            kod = p.wait()
+        finally:
+            _process = None
+        if kod != 0:
             raise MotorFel(f"whisper-cli avslutades med kod {p.returncode}: " + " | ".join(sista))
         try:
             with open(ut + ".json", "rb") as f:

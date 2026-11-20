@@ -5,14 +5,15 @@ Hamtningen gors med requests: den kan fortsatta en avbruten fil (Range), foljer 
 for hand (bara till Hugging Face) och kontrollerar sha256 innan filen far sitt riktiga namn.
 
 Skriptlaget (python app/modeller.py [faster] [ggml] [talare]) anvands av mac/hamta-modeller.sh och
-mac/installera.sh. Modulen importerar bara standardbiblioteket, requests och installningar, sa att
-den gar att kora i en venv med enbart requests.
+mac/installera.sh. Modulen importerar bara standardbiblioteket, requests och installningar (och truststore om det
+finns), sa att den gar att kora i en venv med enbart requests.
 """
 import errno
 import hashlib
 import logging
 import os
 import shutil
+import ssl
 import sys
 import threading
 import time
@@ -177,6 +178,25 @@ def storlek_text(byte):
     return f"{byte / 1e9:.1f}".replace(".", ",") + " GB"
 
 
+def _truststore_kontext():
+    import truststore
+
+    return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
+
+class _Systemcertifikat(requests.adapters.HTTPAdapter):
+    """Litar pa operativsystemets certifikat (nyckelringen pa Mac), via truststore. Da fungerar
+    ett foretagsnat med egen rot-CA utan installningar."""
+
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs["ssl_context"] = _truststore_kontext()
+        return super().init_poolmanager(*args, **kwargs)
+
+    def proxy_manager_for(self, proxy, **kwargs):
+        kwargs["ssl_context"] = _truststore_kontext()
+        return super().proxy_manager_for(proxy, **kwargs)
+
+
 def ny_session():
     session = requests.Session()
     # requests laser REQUESTS_CA_BUNDLE och CURL_CA_BUNDLE men inte SSL_CERT_FILE.
@@ -184,7 +204,48 @@ def ny_session():
     if (cert and os.path.exists(cert) and not os.environ.get("REQUESTS_CA_BUNDLE")
             and not os.environ.get("CURL_CA_BUNDLE")):
         session.verify = cert
+    if not (os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get("CURL_CA_BUNDLE")
+            or os.environ.get("SSL_CERT_FILE")):
+        try:
+            import truststore  # noqa: F401
+        except ImportError:
+            return session  # som tidigare: certifikaten som requests har med sig
+        session.mount("https://", _Systemcertifikat())
     return session
+
+
+def ta_in_gamla(kataloger):
+    """Lankar in modeller som redan finns i gamla modellkataloger (terminalinstallationens
+    modeller/) i den nuvarande. Hard lank: inget extra utrymme, och terminalinstallationen fungerar
+    som forut. Ingen kopiering och ingen sha256: filerna kontrollerades nar de hamtades med samma
+    manifest, och "finns" betyder rimlig storlek (se komplett). -> lista med sokvagar som lankades."""
+    lankade, sedda = [], set()
+    for filer in PAKET.values():
+        for fil in filer:
+            mal = fil.sokvag()
+            if mal in sedda:
+                continue
+            sedda.add(mal)
+            if komplett(fil):
+                continue
+            for katalog in kataloger:
+                kandidat = os.path.join(katalog, fil.katalog, fil.namn)
+                if not (os.path.isfile(kandidat) and os.path.getsize(kandidat) == fil.storlek):
+                    continue
+                if os.path.exists(mal) and os.path.samefile(kandidat, mal):
+                    continue
+                try:
+                    os.makedirs(os.path.dirname(mal), exist_ok=True)
+                    if os.path.lexists(mal):
+                        os.remove(mal)  # en ofullstandig fil med fel storlek ligger i vagen
+                    os.link(kandidat, mal)
+                except OSError as e:
+                    log.info("modeller: tog inte in %s fran %s, hard lank gick inte: %s", fil.namn, katalog, e)
+                    continue
+                lankade.append(mal)
+                log.info("modeller: tog in %s fran %s (hard lank)", fil.namn, katalog)
+                break
+    return lankade
 
 
 def tillaten(url):

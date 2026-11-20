@@ -21,6 +21,7 @@ import threading
 import numpy as np
 
 import modeller
+import plattform
 from installningar import TALARE_TROSKEL
 from modeller import ROSTMODELL
 
@@ -63,6 +64,8 @@ def problem():
     try:
         import sherpa_onnx  # noqa: F401
     except ImportError:
+        if plattform.ar_paketerad():
+            return "sherpa-onnx saknas i programmet. Ladda ned Akasha Meet på nytt."
         return "sherpa-onnx saknas. Kör: bash mac/installera.sh"
     return None
 

@@ -1,4 +1,5 @@
 import os
+import sys
 import unittest
 from unittest import mock
 
@@ -61,6 +62,115 @@ class TestHinder(unittest.TestCase):
         with mock.patch.object(motor, "MOTOR", "whispercpp"), \
              mock.patch.object(plattform, "whisper_cli", lambda: "/usr/bin/whisper-cli"):
             self.assertIsNone(motor.hinder())
+
+
+class TestPaketerad(unittest.TestCase):
+    """Texterna i programmet (paketerat) och i terminalinstallationen."""
+
+    def test_cli_saknas_i_programmet(self):
+        with mock.patch.object(plattform, "ar_paketerad", lambda: True), \
+             mock.patch.object(motor, "MOTOR", "whispercpp"), \
+             mock.patch.object(plattform, "whisper_cli", lambda: None):
+            text = "whisper-cli saknas i programmet. Ladda ned Akasha Meet på nytt."
+            self.assertEqual(motor.hinder(), text)
+            with mock.patch.object(motor, "AKTIV", "whispercpp"):
+                self.assertEqual(motor.problem(), text)
+
+    def test_cli_saknas_i_terminalinstallationen(self):
+        with mock.patch.object(plattform, "ar_paketerad", lambda: False):
+            self.assertEqual(motor._cli_saknas(), f"{installningar.WHISPERCPP_BIN} saknas. Kör: brew install whisper-cpp")
+
+    def test_motor_faster_utan_faster_whisper_i_programmet(self):
+        text = ("MOTOR=faster går inte i programmet, eftersom faster-whisper inte följer med. "
+                "Ta bort raden MOTOR i installningar.env.")
+        with mock.patch.object(motor, "MOTOR", "faster"), \
+             mock.patch.object(motor.importlib.util, "find_spec", lambda namn: None):
+            with mock.patch.object(plattform, "ar_paketerad", lambda: True):
+                self.assertEqual(motor.hinder(), text)
+            with mock.patch.object(plattform, "ar_paketerad", lambda: False):
+                self.assertIsNone(motor.hinder())
+
+    def test_auto_i_programmet_ger_inte_faster_texten(self):
+        with mock.patch.object(motor, "MOTOR", "auto"), \
+             mock.patch.object(plattform, "ar_paketerad", lambda: True), \
+             mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
+             mock.patch.object(motor.importlib.util, "find_spec", lambda namn: None):
+            self.assertIsNone(motor.hinder())
+
+    def test_sherpa_saknas(self):
+        with mock.patch.dict(sys.modules, {"sherpa_onnx": None}), \
+             mock.patch.object(modeller, "saknade", lambda *a, **k: []):
+            with mock.patch.object(plattform, "ar_paketerad", lambda: True):
+                self.assertEqual(talare.problem(), "sherpa-onnx saknas i programmet. Ladda ned Akasha Meet på nytt.")
+            with mock.patch.object(plattform, "ar_paketerad", lambda: False):
+                self.assertEqual(talare.problem(), "sherpa-onnx saknas. Kör: bash mac/installera.sh")
+
+
+class FalskProcess:
+    stderr = []
+    returncode = 1
+
+    def __init__(self):
+        self.stoppad = False
+
+    def wait(self, timeout=None):
+        return 1
+
+    def poll(self):
+        return 1
+
+
+class TestWhispercpp(unittest.TestCase):
+    def test_anvander_plattformens_cli(self):
+        with mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
+             mock.patch.object(motor.subprocess, "Popen", return_value=FalskProcess()) as popen:
+            with self.assertRaises(motor.MotorFel) as e:
+                motor._whispercpp(np_tyst(), False, "", None)
+        self.assertEqual(popen.call_args[0][0][0], "/x/whisper-cli")
+        self.assertIn("kod 1", str(e.exception))
+        self.assertIsNone(motor._process)
+
+    def test_saknad_cli_ger_motorfel(self):
+        with mock.patch.object(plattform, "whisper_cli", lambda: None), \
+             mock.patch.object(plattform, "ar_paketerad", lambda: True):
+            with self.assertRaises(motor.MotorFel) as e:
+                motor._whispercpp(np_tyst(), False, "", None)
+        self.assertEqual(str(e.exception), "whisper-cli saknas i programmet. Ladda ned Akasha Meet på nytt.")
+
+
+class TestStoppa(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(setattr, motor, "_process", None)
+
+    def test_stoppar_pagaende_process(self):
+        p = mock.Mock()
+        p.poll.return_value = None
+        motor._process = p
+        motor.stoppa()
+        p.terminate.assert_called_once()
+        p.kill.assert_not_called()
+
+    def test_dodar_om_den_inte_stannar(self):
+        p = mock.Mock()
+        p.poll.return_value = None
+        p.wait.side_effect = motor.subprocess.TimeoutExpired("x", 5)
+        motor._process = p
+        motor.stoppa()
+        p.kill.assert_called_once()
+
+    def test_inget_att_stoppa(self):
+        motor._process = None
+        motor.stoppa()  # ingen process: inget undantag
+        p = mock.Mock()
+        p.poll.return_value = 0  # redan klar
+        motor._process = p
+        motor.stoppa()
+        p.terminate.assert_not_called()
+
+
+def np_tyst():
+    import numpy as np
+    return np.zeros(1600, dtype=np.float32)
 
 
 class TestProblem(unittest.TestCase):

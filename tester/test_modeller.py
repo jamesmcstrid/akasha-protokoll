@@ -3,6 +3,7 @@ import hashlib
 import io
 import os
 import re
+import shutil
 import threading
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -383,6 +384,89 @@ class TestSession(unittest.TestCase):
             self.assertEqual(modeller.ny_session().verify, fil)
             os.environ["REQUESTS_CA_BUNDLE"] = "/annan/fil.pem"
             self.assertIs(modeller.ny_session().verify, True)
+
+
+class TestSystemcertifikat(unittest.TestCase):
+    def test_truststore_nar_ingen_cert_variabel_ar_satt(self):
+        try:
+            import truststore  # noqa: F401
+        except ImportError:
+            self.skipTest("truststore finns inte i den har miljon")
+        with mock.patch.dict(os.environ):
+            for namn in ("REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "SSL_CERT_FILE"):
+                os.environ.pop(namn, None)
+            s = modeller.ny_session()
+            self.assertIsInstance(s.get_adapter("https://huggingface.co"), modeller._Systemcertifikat)
+            os.environ["REQUESTS_CA_BUNDLE"] = "/annan/fil.pem"
+            adapter = modeller.ny_session().get_adapter("https://huggingface.co")
+            self.assertIs(type(adapter), requests.adapters.HTTPAdapter)
+
+    def test_utan_truststore_som_forut(self):
+        with mock.patch.dict(os.environ), mock.patch.dict("sys.modules", {"truststore": None}):
+            for namn in ("REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "SSL_CERT_FILE"):
+                os.environ.pop(namn, None)
+            adapter = modeller.ny_session().get_adapter("https://huggingface.co")
+            self.assertIs(type(adapter), requests.adapters.HTTPAdapter)
+
+
+class TestTaInGamla(Bas):
+    def setUp(self):
+        super().setUp()
+        self.gammal = os.path.join(hjalp.DATA, "gammal-modeller")
+        self.addCleanup(shutil.rmtree, self.gammal, True)
+        # Hardlankar kan saknas eller nekas pa vissa filsystem: prova en gang och hoppa over med forklaring.
+        prov = os.path.join(hjalp.DATA, "lankprov")
+        with open(prov, "w") as f:
+            f.write("x")
+        try:
+            os.link(prov, prov + "2")
+        except (OSError, AttributeError, NotImplementedError) as e:
+            self.skipTest(f"hardlankar fungerar inte har: {e}")
+        finally:
+            for p in (prov, prov + "2"):
+                if os.path.exists(p):
+                    os.remove(p)
+        self.modell = self.paket[("whispercpp", "medium")][0]
+
+    def lagg(self, fil, storlek=None):
+        sokvag = os.path.join(self.gammal, fil.katalog, fil.namn)
+        os.makedirs(os.path.dirname(sokvag), exist_ok=True)
+        with open(sokvag, "wb") as f:
+            f.write(b"g" * (fil.storlek if storlek is None else storlek))
+        return sokvag
+
+    def test_lankar_fil_med_ratt_storlek(self):
+        kalla = self.lagg(self.modell)
+        lankade = modeller.ta_in_gamla([self.gammal])
+        self.assertEqual(lankade, [self.modell.sokvag()])
+        self.assertTrue(os.path.samefile(kalla, self.modell.sokvag()))
+
+    def test_fel_storlek_lankas_inte(self):
+        self.lagg(self.modell, storlek=self.modell.storlek - 1)
+        self.assertEqual(modeller.ta_in_gamla([self.gammal]), [])
+        self.assertFalse(os.path.exists(self.modell.sokvag()))
+
+    def test_komplett_fil_rors_inte(self):
+        self.lagg(self.modell)
+        mal = self.modell.sokvag()
+        os.makedirs(os.path.dirname(mal), exist_ok=True)
+        with open(mal, "wb") as f:
+            f.write(b"n" * self.modell.storlek)
+        self.assertEqual(modeller.ta_in_gamla([self.gammal]), [])
+        with open(mal, "rb") as f:
+            self.assertEqual(f.read(1), b"n")
+
+    def test_flera_kataloger_och_samma_katalog(self):
+        tom = os.path.join(hjalp.DATA, "tom")
+        self.lagg(self.modell)
+        self.assertEqual(modeller.ta_in_gamla([tom, self.gammal]), [self.modell.sokvag()])
+        self.assertEqual(modeller.ta_in_gamla([self.gammal]), [])  # redan inne
+
+    def test_os_link_som_nekas_ger_inget_undantag(self):
+        self.lagg(self.modell)
+        with mock.patch.object(modeller.os, "link", side_effect=OSError(errno.EXDEV, "annan volym")):
+            self.assertEqual(modeller.ta_in_gamla([self.gammal]), [])
+        self.assertFalse(os.path.exists(self.modell.sokvag()))
 
 
 class TestMain(Bas):
