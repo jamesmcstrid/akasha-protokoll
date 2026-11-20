@@ -1,5 +1,9 @@
+import json
 import os
+import shutil
 import sys
+import tempfile
+import textwrap
 import unittest
 from unittest import mock
 
@@ -23,6 +27,11 @@ class TestValjMotor(unittest.TestCase):
         self.assertEqual(self.val(har_cli=False), "faster")  # whisper-cpp inte installerat
         self.assertEqual(self.val(har_ggml=False), "faster")  # modellen saknas
 
+    def test_auto_pa_windows_kraver_cli_och_modell(self):
+        self.assertEqual(self.val(system="Windows"), "whispercpp")
+        self.assertEqual(self.val(system="Windows", har_cli=False), "faster")  # t.ex. installation fran kallkod
+        self.assertEqual(self.val(system="Windows", har_ggml=False), "faster")
+
     def test_tvingat_val_galler(self):
         self.assertEqual(self.val("faster"), "faster")
         self.assertEqual(self.val("whispercpp", system="Linux"), "whispercpp")
@@ -31,6 +40,9 @@ class TestValjMotor(unittest.TestCase):
 class TestMalMotor(unittest.TestCase):
     def test_mac_med_cli_ger_whispercpp_aven_utan_ggml(self):
         self.assertEqual(motor.mal_motor("auto", "Darwin", True), "whispercpp")
+
+    def test_windows_med_cli_ger_whispercpp(self):
+        self.assertEqual(motor.mal_motor("auto", "Windows", True), "whispercpp")
 
     def test_mac_utan_cli_och_andra_system_ger_faster(self):
         self.assertEqual(motor.mal_motor("auto", "Darwin", False), "faster")
@@ -56,6 +68,7 @@ class TestHinder(unittest.TestCase):
 
     def test_whispercpp_utan_cli(self):
         with mock.patch.object(motor, "MOTOR", "whispercpp"), \
+             mock.patch.object(plattform, "system", lambda: "Darwin"), \
              mock.patch.object(plattform, "whisper_cli", lambda: None):
             self.assertEqual(motor.hinder(), "whisper-cli saknas. Kör: brew install whisper-cpp")
             self.assertEqual(motor.problem(), motor.hinder())
@@ -77,8 +90,14 @@ class TestPaketerad(unittest.TestCase):
                 self.assertEqual(motor.problem(), text)
 
     def test_cli_saknas_i_terminalinstallationen(self):
-        with mock.patch.object(plattform, "ar_paketerad", lambda: False):
+        with mock.patch.object(plattform, "ar_paketerad", lambda: False), \
+             mock.patch.object(plattform, "system", lambda: "Darwin"):
             self.assertEqual(motor._cli_saknas(), f"{installningar.WHISPERCPP_BIN} saknas. Kör: brew install whisper-cpp")
+        with mock.patch.object(plattform, "ar_paketerad", lambda: False), \
+             mock.patch.object(plattform, "system", lambda: "Windows"):
+            text = motor._cli_saknas()
+        self.assertNotIn("brew", text)
+        self.assertIn("whisper-cli.exe", text)
 
     def test_motor_faster_utan_faster_whisper_i_programmet(self):
         text = ("MOTOR=faster går inte i programmet, eftersom faster-whisper inte följer med. "
@@ -147,13 +166,14 @@ class TestWhispercpp(unittest.TestCase):
                 return 0
 
         def popen(cmd, **kw):
-            ut = cmd[cmd.index("-of") + 1]
+            ut = os.path.join(kw["cwd"], cmd[cmd.index("-of") + 1])  # relativ till arbetskatalogen
             with open(ut + ".json", "w", encoding="utf-8") as f:
                 f.write('{"transcription": []}')
             return MedFramsteg()
 
         framsteg = []
         with mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
+             mock.patch.object(plattform, "system", lambda: "Darwin"), \
              mock.patch.object(motor.subprocess, "Popen", popen), \
              self.assertLogs("akasha-protokoll", "INFO") as loggat:
             motor._whispercpp(np_tyst(), False, "", framsteg.append)
@@ -177,6 +197,321 @@ class TestWhispercpp(unittest.TestCase):
             with self.assertRaises(motor.MotorFel) as e:
                 motor._whispercpp(np_tyst(), False, "", None)
         self.assertEqual(str(e.exception), "whisper-cli saknas i programmet. Ladda ned Akasha Protokoll på nytt.")
+
+
+def gammalt_kommando(cli, katalog, per_ord, prompt, tradar):
+    """Kommandot som _whispercpp() byggde fore W2 (absoluta sokvagar), ordagrant."""
+    ut = os.path.join(katalog, "ut")
+    cmd = [
+        cli,
+        "-m", modeller.GGML_MODELL,
+        "-f", os.path.join(katalog, "ljud.wav"),
+        "-l", installningar.SPRAK,
+        "-bs", str(motor.BEAM),
+        "-np", "-pp",
+        "-oj", "-of", ut,
+    ]
+    if prompt:
+        cmd += ["--prompt", prompt]
+    if tradar:
+        cmd += ["-t", str(tradar)]
+    if per_ord:
+        cmd += ["-ml", "1", "-sow", "--dtw", modeller.DTW, "-nfa", "-ojf"]
+    return cmd
+
+
+class TestCliKommando(unittest.TestCase):
+    REL = "tmp-akasha-protokoll-abc123"
+
+    def abs_katalog(self):
+        return os.path.join(modeller.MODELLKATALOG, self.REL)
+
+    def test_mac_ar_som_forut_utom_sokvagarna(self):
+        """Fore/efter: Darwin-kommandot skiljer sig bara i de tre sokvagarna (nu relativa), inget annat."""
+        for per_ord in (False, True):
+            for prompt in ("", "Åsa Öberg, Västerås"):
+                for tradar in (0, 6):
+                    fore = gammalt_kommando("/x/whisper-cli", self.abs_katalog(), per_ord, prompt, tradar)
+                    efter, svarsfil = motor.cli_kommando("/x/whisper-cli", self.REL, per_ord, prompt, tradar, "Darwin")
+                    self.assertIsNone(svarsfil)
+                    self.assertEqual(len(efter), len(fore))
+                    skillnader = [(a, b) for a, b in zip(fore, efter) if a != b]
+                    self.assertEqual(skillnader, [
+                        (modeller.GGML_MODELL, os.path.join("kb-whisper-medium-ggml", "ggml-model.bin")),
+                        (os.path.join(self.abs_katalog(), "ljud.wav"), os.path.join(self.REL, "ljud.wav")),
+                        (os.path.join(self.abs_katalog(), "ut"), os.path.join(self.REL, "ut")),
+                    ])
+
+    def test_mac_kommandot_ordagrant(self):
+        cmd, _ = motor.cli_kommando("/x/whisper-cli", self.REL, True, "Åsa", 4, "Darwin")
+        self.assertEqual(cmd, [
+            "/x/whisper-cli", "-m", os.path.join("kb-whisper-medium-ggml", "ggml-model.bin"),
+            "-f", os.path.join(self.REL, "ljud.wav"), "-l", "sv", "-bs", "5", "-np", "-pp",
+            "-oj", "-of", os.path.join(self.REL, "ut"), "--prompt", "Åsa", "-t", "4",
+            "-ml", "1", "-sow", "--dtw", "medium", "-nfa", "-ojf"])
+
+    def test_linux_som_mac(self):
+        self.assertEqual(motor.cli_kommando("/x/c", self.REL, False, "x", 0, "Linux"),
+                         motor.cli_kommando("/x/c", self.REL, False, "x", 0, "Darwin"))
+
+    def test_sokvagarna_ar_relativa_och_har_inte_modellkatalogen(self):
+        for system in ("Darwin", "Windows"):
+            cmd, svarsfil = motor.cli_kommando("/x/c", self.REL, True, "ord", 2, system)
+            text = " ".join(cmd) + (svarsfil or "")
+            self.assertNotIn(modeller.MODELLKATALOG, text)
+            self.assertNotIn(tempfile.gettempdir(), text)
+            for a in (cmd if svarsfil is None else svarsfil.splitlines()):
+                if a.endswith((".bin", ".wav", "ut")) and not a.startswith(("-", "/")):
+                    self.assertFalse(os.path.isabs(a), a)
+
+    def test_windows_svarsfil(self):
+        cmd, svarsfil = motor.cli_kommando("C:\\p\\whisper-cli.exe", self.REL, True, "Åsa Öberg", 4, "Windows")
+        self.assertEqual(cmd, ["C:\\p\\whisper-cli.exe", "@" + os.path.join(self.REL, "args.txt")])
+        mac, _ = motor.cli_kommando("C:\\p\\whisper-cli.exe", self.REL, True, "Åsa Öberg", 4, "Darwin")
+        self.assertEqual(svarsfil.splitlines(), mac[1:])  # samma argument, en rad var, utan programnamnet
+        self.assertTrue(svarsfil.endswith("\n"))
+        self.assertNotIn("\r", svarsfil)
+        self.assertIn("--prompt\nÅsa Öberg\n", svarsfil)
+        data = svarsfil.encode("utf-8")
+        self.assertIn(b"\xc3\x85sa \xc3\x96berg", data)  # UTF-8-byte for Asa Oberg (med prickarna)
+        self.assertFalse(data.startswith(b"\xef\xbb\xbf"))  # ingen BOM
+
+    def test_windows_radbrytning_i_ett_argument_blir_mellanslag(self):
+        _, svarsfil = motor.cli_kommando("c", self.REL, False, "Åsa\nÖberg\r\nVäg", 0, "Windows")
+        rader = svarsfil.splitlines()
+        self.assertEqual(rader[rader.index("--prompt") + 1], "Åsa Öberg Väg")
+        self.assertEqual(svarsfil.count("\n"), len(rader))
+
+    def test_windows_utan_prompt_och_tradar(self):
+        _, svarsfil = motor.cli_kommando("c", self.REL, False, "", 0, "Windows")
+        self.assertNotIn("--prompt", svarsfil)
+        self.assertNotIn("-t\n", svarsfil)
+
+
+FALSK_CLI = textwrap.dedent("""
+    import json, os, sys
+    args = sys.argv[1:]
+    if len(args) == 1 and args[0].startswith("@"):  # som whisper.cpp: en rad per argument, byte for byte
+        with open(args[0][1:], "rb") as f:
+            args = f.read().decode("utf-8").split("\\n")[:-1]
+    d = dict(zip(args[::2], args[1::2]))  # alla flaggor har ett varde, utom de som ligger sist (-nfa osv.)
+    prompt = args[args.index("--prompt") + 1] if "--prompt" in args else None
+    modell = args[args.index("-m") + 1]
+    with open(os.environ["FALSK_CLI_LOGG"], "w", encoding="utf-8") as f:
+        json.dump({"cwd": os.getcwd(), "args": args, "prompt": prompt, "modell": modell,
+                   "modell_finns": os.path.isfile(modell), "ljud_finns": os.path.isfile(args[args.index("-f") + 1]),
+                   "katalog": os.path.dirname(args[args.index("-of") + 1])}, f)
+    sys.stderr.write("whisper_print_progress_callback: progress =  50%\\n")
+    with open(args[args.index("-of") + 1] + ".json", "w", encoding="utf-8") as f:
+        f.write('{"transcription": [{"text": " Hej Åsa.", "offsets": {"from": 0, "to": 1500}, "tokens": []}]}')
+""")
+
+
+class FalskCliMiljo(unittest.TestCase):
+    """En riktig process (ett Python-skript som liknar whisper-cli) startad via plattform.starta_barn."""
+
+    def kor(self, mapp, system=None, prompt="Åsa Öberg"):
+        bas = tempfile.mkdtemp(prefix="akasha-motor-")
+        self.addCleanup(shutil.rmtree, bas, True)
+        modellkatalog = os.path.join(bas, mapp)
+        modell = os.path.join(modellkatalog, "kb-whisper-medium-ggml", "ggml-model.bin")
+        os.makedirs(os.path.dirname(modell))
+        with open(modell, "wb") as f:
+            f.write(b"x")
+        skript = os.path.join(bas, "falsk_cli.py")
+        with open(skript, "w", encoding="utf-8") as f:
+            f.write(FALSK_CLI)
+        logg = os.path.join(bas, "logg.json")
+        riktig = plattform.starta_barn
+
+        def starta(cmd, cwd=None, **kw):
+            cmd = [sys.executable, skript] + cmd[1:]
+            if os.name != "nt":  # Windows-grenen med falskt system(): Popen utan Windows-flaggor
+                return motor.subprocess.Popen(cmd, cwd=cwd, **kw)
+            return riktig(cmd, cwd=cwd, **kw)  # pa Windows den riktiga: jobbobjekt och inget fonster
+
+        patchar = [mock.patch.object(modeller, "MODELLKATALOG", modellkatalog),
+                   mock.patch.object(motor, "GGML_MODELL", modell),
+                   mock.patch.object(plattform, "whisper_cli", lambda: "falsk-cli"),
+                   mock.patch.object(plattform, "starta_barn", starta),
+                   mock.patch.dict(os.environ, {"FALSK_CLI_LOGG": logg})]
+        if system:
+            patchar.append(mock.patch.object(plattform, "system", lambda: system))
+        for pa in patchar:
+            pa.start()
+            self.addCleanup(pa.stop)
+        framsteg = []
+        resultat = motor._whispercpp(np_tyst(), False, prompt, framsteg.append)
+        with open(logg, encoding="utf-8") as f:
+            return modellkatalog, json.load(f), resultat, framsteg
+
+
+class TestWhispercppKor(FalskCliMiljo):
+    def kontrollera(self, modellkatalog, logg, resultat, framsteg):
+        self.assertEqual(os.path.realpath(logg["cwd"]), os.path.realpath(modellkatalog))
+        self.assertTrue(logg["modell_finns"], "modellens relativa sokvag ska finnas fran arbetskatalogen")
+        self.assertTrue(logg["ljud_finns"])
+        self.assertFalse(os.path.isabs(logg["modell"]))
+        self.assertTrue(logg["katalog"].startswith(motor.TMP_PREFIX), logg["katalog"])
+        self.assertEqual(logg["prompt"], "Åsa Öberg")  # kom fram som UTF-8
+        self.assertEqual(resultat[0], "Hej Åsa.")
+        self.assertEqual(framsteg, [0.5])
+        self.assertEqual([n for n in os.listdir(modellkatalog) if n.startswith(motor.TMP_PREFIX)], [],
+                         "den tillfalliga katalogen ska tas bort")
+
+    def test_mac_arbetskatalog_relativ_modell_och_stadning(self):
+        mk, logg, res, fr = self.kor("modeller", system="Darwin")
+        self.assertNotIn("@", "".join(logg["args"][:1]))
+        self.kontrollera(mk, logg, res, fr)
+
+    def test_windows_med_svarsfil(self):
+        mk, logg, res, fr = self.kor("modeller", system="Windows")
+        self.kontrollera(mk, logg, res, fr)
+
+    def test_katalog_med_aao_i_namnet_via_svarsfil(self):
+        mk, logg, res, fr = self.kor("Åsa Ölund", system="Windows")
+        self.kontrollera(mk, logg, res, fr)
+
+    def test_namnet_pa_den_tillfalliga_katalogen_ar_ascii(self):
+        mk, logg, res, fr = self.kor("Åsa Ölund", system="Windows")
+        logg["katalog"].encode("ascii")
+
+    @unittest.skipUnless(os.name == "nt", "bara pa Windows: riktig svarsfil, riktig arbetskatalog med Åsa Ölund")
+    def test_windows_riktigt_med_modellkatalog_som_heter_asa_olund(self):
+        mk, logg, res, fr = self.kor("Åsa Ölund")  # plattform.system() ar riktigt "Windows"
+        self.kontrollera(mk, logg, res, fr)
+
+
+class TestTillfalligKatalog(unittest.TestCase):
+    def test_skapas_under_modellkatalogen_och_stadningen_ignorerar_fel(self):
+        bas = tempfile.mkdtemp(prefix="akasha-motor-")
+        self.addCleanup(shutil.rmtree, bas, True)
+        anrop = []
+        riktig = tempfile.TemporaryDirectory
+
+        def tmp(*a, **kw):
+            anrop.append(kw)
+            return riktig(*a, **kw)
+
+        with mock.patch.object(modeller, "MODELLKATALOG", bas), \
+             mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
+             mock.patch.object(motor.tempfile, "TemporaryDirectory", tmp), \
+             mock.patch.object(motor.subprocess, "Popen", return_value=FalskProcess()):
+            with self.assertRaises(motor.MotorFel):
+                motor._whispercpp(np_tyst(), False, "", None)
+        self.assertEqual(anrop, [{"prefix": "tmp-akasha-protokoll-", "dir": bas, "ignore_cleanup_errors": True}])
+
+    def test_startas_med_modellkatalogen_som_arbetskatalog(self):
+        bas = tempfile.mkdtemp(prefix="akasha-motor-")
+        self.addCleanup(shutil.rmtree, bas, True)
+        with mock.patch.object(modeller, "MODELLKATALOG", bas), \
+             mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
+             mock.patch.object(plattform, "system", lambda: "Darwin"), \
+             mock.patch.object(motor.subprocess, "Popen", return_value=FalskProcess()) as popen:
+            with self.assertRaises(motor.MotorFel):
+                motor._whispercpp(np_tyst(), False, "", None)
+        self.assertEqual(popen.call_args[1]["cwd"], bas)
+
+    def test_windows_startar_bara_med_svarsfilen(self):
+        bas = tempfile.mkdtemp(prefix="akasha-motor-")
+        self.addCleanup(shutil.rmtree, bas, True)
+        sett = {}
+
+        def popen(cmd, **kw):
+            sett["cmd"] = cmd
+            with open(os.path.join(kw["cwd"], cmd[1][1:]), "rb") as f:
+                sett["fil"] = f.read()
+            return FalskProcess()
+
+        with mock.patch.object(modeller, "MODELLKATALOG", bas), \
+             mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli.exe"), \
+             mock.patch.object(plattform, "system", lambda: "Windows"), \
+             mock.patch.object(plattform, "starta_barn", popen):
+            with self.assertRaises(motor.MotorFel):
+                motor._whispercpp(np_tyst(), False, "Åsa Öberg", None)
+        self.assertEqual(len(sett["cmd"]), 2)
+        self.assertEqual(sett["cmd"][0], "/x/whisper-cli.exe")
+        self.assertTrue(sett["cmd"][1].startswith("@tmp-akasha-protokoll-"))
+        self.assertIn("Åsa Öberg\n".encode("utf-8"), sett["fil"])
+        self.assertNotIn(b"\r", sett["fil"])
+
+
+class TestStadaKvarglomda(unittest.TestCase):
+    def setUp(self):
+        self.bas = tempfile.mkdtemp(prefix="akasha-stada-")
+        self.addCleanup(shutil.rmtree, self.bas, True)
+
+    def mapp(self, namn, *fil):
+        s = os.path.join(self.bas, namn)
+        os.makedirs(s)
+        for f in fil:
+            with open(os.path.join(s, f), "w") as h:
+                h.write("x")
+        return s
+
+    def test_tar_bara_kataloger_med_ratt_prefix(self):
+        a = self.mapp("tmp-akasha-protokoll-aaaa", "ljud.wav", "args.txt")
+        os.makedirs(os.path.join(a, "under"))
+        b = self.mapp("tmp-akasha-protokoll-bbbb")
+        kvar = [self.mapp("kb-whisper-medium-ggml", "ggml-model.bin"), self.mapp("akasha-protokoll-cccc", "x"),
+                self.mapp("Tmp-akasha-protokoll-dddd", "x"), self.mapp("tmp-akasha-protokollx", "x"),
+                self.mapp("annat", "x")]
+        fil = os.path.join(self.bas, "tmp-akasha-protokoll-fil")  # en fil, ingen katalog
+        with open(fil, "w") as h:
+            h.write("x")
+        inre = self.mapp("annat2")
+        djupt = os.path.join(inre, "tmp-akasha-protokoll-djupt")  # bara en niva ner
+        os.makedirs(djupt)
+        with self.assertLogs("akasha-protokoll", "INFO"):
+            self.assertEqual(motor.stada_kvarglomda(self.bas), 2)
+        self.assertFalse(os.path.exists(a) or os.path.exists(b))
+        for k in kvar + [fil, djupt]:
+            self.assertTrue(os.path.exists(k), k)
+
+    def test_foljer_inte_symbolisk_lank_ut_ur_katalogen(self):
+        utanfor = tempfile.mkdtemp(prefix="akasha-utanfor-")
+        self.addCleanup(shutil.rmtree, utanfor, True)
+        with open(os.path.join(utanfor, "viktig.txt"), "w") as h:
+            h.write("x")
+        lank = os.path.join(self.bas, "tmp-akasha-protokoll-lank")
+        try:
+            os.symlink(utanfor, lank, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("kan inte skapa symboliska lankar har")
+        # och en riktig tmp-katalog med en lank inuti som pekar ut
+        riktig = self.mapp("tmp-akasha-protokoll-riktig")
+        os.symlink(utanfor, os.path.join(riktig, "lank-inuti"), target_is_directory=True)
+        self.assertEqual(motor.stada_kvarglomda(self.bas), 1)
+        self.assertTrue(os.path.islink(lank))
+        self.assertFalse(os.path.exists(riktig))
+        self.assertTrue(os.path.exists(os.path.join(utanfor, "viktig.txt")))
+
+    def test_saknad_katalog_och_fel_kastar_inte(self):
+        self.assertEqual(motor.stada_kvarglomda(os.path.join(self.bas, "finns-inte")), 0)
+        self.mapp("tmp-akasha-protokoll-x")
+        with mock.patch.object(motor.shutil, "rmtree", side_effect=PermissionError("last")), \
+             self.assertLogs("akasha-protokoll", "WARNING"):
+            self.assertEqual(motor.stada_kvarglomda(self.bas), 0)
+
+    def test_forbered_stadar_modellkatalogen(self):
+        import app as akasha
+        with mock.patch.object(motor, "stada_kvarglomda") as stada, \
+             mock.patch.object(akasha, "starta_arbetare"), \
+             mock.patch.object(akasha.lagring, "aterstall_avbrutna"):
+            akasha.forbered()
+        stada.assert_called_once_with()
+
+
+class TestModellnamn(unittest.TestCase):
+    def test_metal_bara_pa_mac(self):
+        with mock.patch.object(motor, "AKTIV", "whispercpp"):
+            for system, text in (("Darwin", "KB-Whisper medium (whisper.cpp, Metal)"),
+                                 ("Windows", "KB-Whisper medium (whisper.cpp)"),
+                                 ("Linux", "KB-Whisper medium (whisper.cpp)")):
+                with mock.patch.object(plattform, "system", lambda: system):
+                    self.assertEqual(motor.modellnamn(), text)
+        with mock.patch.object(motor, "AKTIV", "faster"):
+            self.assertEqual(motor.modellnamn(), "KB-Whisper medium")
 
 
 class TestStoppa(unittest.TestCase):

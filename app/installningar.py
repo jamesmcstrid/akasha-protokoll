@@ -38,8 +38,8 @@ def _sokvag(varde):
     return os.path.abspath(os.path.expanduser(varde))
 
 
-# auto = whisper.cpp med Metal (GPU) pa Mac med Apple Silicon om whisper-cli och modellen finns,
-#        annars faster-whisper pa CPU. Gar att tvinga med faster eller whispercpp.
+# auto = whisper.cpp pa Mac (med Metal, GPU, pa Apple Silicon) och pa Windows (CPU) om whisper-cli och
+#        modellen finns, annars faster-whisper pa CPU. Gar att tvinga med faster eller whispercpp.
 MOTOR = _env("MOTOR", "auto").lower()
 PORT = _tal("PORT", 8611, int, 1024, 65535, "ett heltal 1024–65535")
 SPRAK = _env("SPRAK", "sv")

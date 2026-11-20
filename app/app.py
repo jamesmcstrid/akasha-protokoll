@@ -584,6 +584,7 @@ def transkribera_direkt():
 def forbered():
     """Det som maste goras en gang innan tjansten tar emot anrop."""
     os.makedirs(DATAKATALOG, mode=0o700, exist_ok=True)
+    motor.stada_kvarglomda()
     lagring.aterstall_avbrutna()
     starta_arbetare()
 

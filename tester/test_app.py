@@ -547,7 +547,8 @@ class TestModellerApi(unittest.TestCase):
         self.assertEqual({u.split("/")[-1] for u, _ in self.adapter.anrop}, {"nemo_en_titanet_small.onnx"})
 
     def test_8_hinder(self):
-        with mock.patch.object(motor, "MOTOR", "whispercpp"), mock.patch.object(plattform, "whisper_cli", lambda: None):
+        with mock.patch.object(motor, "MOTOR", "whispercpp"), mock.patch.object(plattform, "whisper_cli", lambda: None), \
+             mock.patch.object(plattform, "system", lambda: "Darwin"):
             svar = self.get()
             self.assertEqual(svar["hinder"], "whisper-cli saknas. Kör: brew install whisper-cpp")
             self.assertEqual(svar["saknas"], [])

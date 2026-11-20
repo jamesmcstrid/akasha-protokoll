@@ -1,10 +1,10 @@
 """Taligenkanning med KB-Whisper (KBLab, Kungliga biblioteket), medium eller large (MODELL).
-Tva motorer, valj med MOTOR (standard auto: whisper.cpp pa Mac med Apple Silicon om det gar,
-annars faster-whisper):
+Tva motorer, valj med MOTOR (standard auto: whisper.cpp pa Mac med Apple Silicon och pa Windows
+om whisper-cli och modellen finns, annars faster-whisper):
 
   faster      faster-whisper (CTranslate2) i den har processen, pa CPU. Fungerar overallt.
               Modellen laddas vid forsta transkriberingen och ligger sedan kvar i minnet.
-  whispercpp  whisper.cpp:s whisper-cli (brew install whisper-cpp), som anvander Metal (GPU) pa
+  whispercpp  whisper.cpp:s whisper-cli (brew install whisper-cpp pa Mac), som anvander Metal (GPU) pa
               Apple Silicon. Startas en gang per transkribering och laddar modellen varje gang.
 
 Ingen sprakmodell rattar eller sammanfattar texten. Det som whisper hor ar det som skrivs.
@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -45,7 +46,7 @@ _faster_modell = None
 
 
 def valj_motor(onskad=MOTOR, system=None, har_cli=None, har_ggml=None):
-    """auto -> whispercpp pa Mac om whisper-cli och GGML-modellen finns, annars faster.
+    """auto -> whispercpp pa Mac och Windows om whisper-cli och GGML-modellen finns, annars faster.
 
     mac/installera.sh installerar whisper-cpp och GGML-modellen bara pa Apple Silicon, dar Metal
     gjorde transkriberingen ungefar tre ganger snabbare an CPU (MacBook Air). Valet gors pa vad som
@@ -61,19 +62,19 @@ def valj_motor(onskad=MOTOR, system=None, har_cli=None, har_ggml=None):
             har_ggml = not modeller.saknade("whispercpp", MODELL)
         except KeyError:  # okand MODELL: hinder() sager ifran
             har_ggml = False
-    if system == "Darwin" and har_cli and har_ggml:
+    if system in ("Darwin", "Windows") and har_cli and har_ggml:
         return "whispercpp"
     return "faster"
 
 
 def mal_motor(onskad=MOTOR, system=None, har_cli=None):
-    """Vilken motor modellerna ska hamtas for. Pa en Mac med whisper-cli blir det whisper.cpp aven
-    nar GGML-filen saknas (valj_motor() ger da faster tills den har hamtats)."""
+    """Vilken motor modellerna ska hamtas for. Pa en Mac eller Windows med whisper-cli blir det
+    whisper.cpp aven nar GGML-filen saknas (valj_motor() ger da faster tills den har hamtats)."""
     if onskad != "auto":
         return onskad
     system = system or plattform.system()
     har_cli = plattform.whisper_cli() is not None if har_cli is None else har_cli
-    return "whispercpp" if system == "Darwin" and har_cli else "faster"
+    return "whispercpp" if system in ("Darwin", "Windows") and har_cli else "faster"
 
 
 AKTIV = valj_motor()  # bestams nar tjansten startar, och raknas om av uppdatera()
@@ -90,6 +91,9 @@ class Avbruten(MotorFel):
 def _cli_saknas():
     if plattform.ar_paketerad():
         return "whisper-cli saknas i programmet. Ladda ned Akasha Protokoll på nytt."
+    if plattform.system() == "Windows":
+        return (f"{WHISPERCPP_BIN} saknas. Lägg whisper-cli.exe i en mapp som finns i PATH, "
+                "eller ange MOTOR=faster i installningar.env.")
     return f"{WHISPERCPP_BIN} saknas. Kör: brew install whisper-cpp"
 
 
@@ -145,7 +149,10 @@ def ord_grans():
 
 
 def modellnamn():
-    return f"KB-Whisper {MODELL}" + (" (whisper.cpp, Metal)" if AKTIV == "whispercpp" else "")
+    if AKTIV != "whispercpp":
+        return f"KB-Whisper {MODELL}"
+    return f"KB-Whisper {MODELL} (whisper.cpp, Metal)" if plattform.system() == "Darwin" \
+        else f"KB-Whisper {MODELL} (whisper.cpp)"
 
 
 def avkoda(sokvag):
@@ -239,38 +246,98 @@ def stoppa():
             p.kill()
 
 
+# Katalogerna som whisper-cli arbetar i heter sa har och ligger direkt under MODELLKATALOG, inte i
+# systemets temp-mapp: sokvagen dit har anvandarnamnet i sig, och whisper-cli pa Windows tolkar
+# argumenten i systemets teckentabell medan modellen laddas som UTF-8. Darfor kors whisper-cli
+# med MODELLKATALOG som arbetskatalog och med sokvagar som bara har ASCII och ar relativa.
+TMP_PREFIX = "tmp-akasha-protokoll-"
+
+
+def cli_kommando(cli, katalog_rel, per_ord, prompt, tradar, system):
+    """Kommandot for whisper-cli -> (argv, svarsfil_text eller None).
+
+    katalog_rel: den tillfalliga katalogen (namnet under MODELLKATALOG). Alla sokvagar i argumenten
+    ar relativa till MODELLKATALOG, dar whisper-cli kors. Pa Windows skrivs argumenten i en svarsfil
+    (@args.txt i den tillfalliga katalogen, en rad per argument, UTF-8) som whisper-cli laser byte
+    for byte, sa att prompten kommer fram som UTF-8; argv ar da bara [cli, "@..."] och svarsfil_text
+    ar filens innehall. Pa Mac och Linux skickas argumenten som vanligt och svarsfil_text ar None."""
+    modell = os.path.relpath(GGML_MODELL, modeller.MODELLKATALOG)
+    cmd = [
+        cli,
+        "-m", modell,
+        "-f", os.path.join(katalog_rel, "ljud.wav"),
+        "-l", SPRAK,
+        "-bs", str(BEAM),
+        "-np", "-pp",  # inga utskrifter utom framsteg
+        "-oj", "-of", os.path.join(katalog_rel, "ut"),  # whisper-cli lagger till .json
+    ]
+    if prompt:
+        cmd += ["--prompt", prompt]
+    if tradar:
+        cmd += ["-t", str(tradar)]
+    if per_ord:
+        # Ett segment per ord. whisper.cpp:s vanliga ordtider ar ungefarliga (ett ord kunde
+        # hamna 0,6 s fel, sa att det fick fel talare). DTW ger tider som stammer med
+        # faster-whisper, men fungerar bara utan flash attention. Darfor bara har.
+        cmd += ["-ml", "1", "-sow", "--dtw", DTW, "-nfa", "-ojf"]
+    if system != "Windows":
+        return cmd, None
+    # En rad per argument: en radbrytning i ett argument (ord i installningarna kan ha det)
+    # blir ett mellanslag.
+    rader = [" ".join(a.splitlines()) if ("\n" in a or "\r" in a) else a for a in cmd[1:]]
+    return [cli, "@" + os.path.join(katalog_rel, "args.txt")], "".join(r + "\n" for r in rader)
+
+
+def stada_kvarglomda(katalog=None):
+    """Tar bort kvarglomda tmp-akasha-protokoll-* direkt under MODELLKATALOG (efter en krasch eller
+    ett avbrott mitt i en transkribering). Ror inget annat: bara kataloger med exakt det prefixet,
+    en niva ner, och aldrig en symbolisk lank eller junction (den foljs inte ut ur katalogen).
+    Kastar aldrig. Returnerar antalet borttagna."""
+    katalog = katalog or modeller.MODELLKATALOG
+    try:
+        namn = os.listdir(katalog)
+    except OSError:
+        return 0
+    ar_junction = getattr(os.path, "isjunction", lambda s: False)
+    antal = 0
+    for n in namn:
+        sokvag = os.path.join(katalog, n)
+        if not n.startswith(TMP_PREFIX) or os.path.islink(sokvag) or ar_junction(sokvag) \
+                or not os.path.isdir(sokvag):
+            continue
+        try:
+            shutil.rmtree(sokvag)
+            antal += 1
+        except OSError as e:
+            log.warning("kunde inte ta bort kvarglomd katalog %s: %s", n, e)
+    if antal:
+        log.info("tog bort %d kvarglomda tillfalliga kataloger i %s", antal, katalog)
+    return antal
+
+
 def _whispercpp(samples, per_ord, prompt, framsteg):
     global _process
     cli = plattform.whisper_cli()
     if cli is None:
         raise MotorFel(_cli_saknas())
-    with tempfile.TemporaryDirectory(prefix="akasha-protokoll-") as katalog:
+    bas = modeller.MODELLKATALOG
+    os.makedirs(bas, exist_ok=True)
+    # ignore_cleanup_errors: pa Windows kan whisper-cli annu halla en fil oppen efter terminate(), och
+    # PermissionError i stadningen far inte doldja Avbruten. Resten tas bort vid nasta start.
+    with tempfile.TemporaryDirectory(prefix=TMP_PREFIX, dir=bas, ignore_cleanup_errors=True) as katalog:
         wav = os.path.join(katalog, "ljud.wav")
         with open(wav, "wb") as f:
             f.write(wav_16k_mono(samples))
         ut = os.path.join(katalog, "ut")  # whisper-cli lagger till .json
-        cmd = [
-            cli,
-            "-m", GGML_MODELL,
-            "-f", wav,
-            "-l", SPRAK,
-            "-bs", str(BEAM),
-            "-np", "-pp",  # inga utskrifter utom framsteg
-            "-oj", "-of", ut,
-        ]
-        if prompt:
-            cmd += ["--prompt", prompt]
-        if CPU_TRADAR:
-            cmd += ["-t", str(CPU_TRADAR)]
-        if per_ord:
-            # Ett segment per ord. whisper.cpp:s vanliga ordtider ar ungefarliga (ett ord kunde
-            # hamna 0,6 s fel, sa att det fick fel talare). DTW ger tider som stammer med
-            # faster-whisper, men fungerar bara utan flash attention. Darfor bara har.
-            cmd += ["-ml", "1", "-sow", "--dtw", DTW, "-nfa", "-ojf"]
+        cmd, svarsfil = cli_kommando(cli, os.path.basename(katalog), per_ord, prompt, CPU_TRADAR,
+                                     plattform.system())
+        if svarsfil is not None:
+            with open(os.path.join(katalog, "args.txt"), "w", encoding="utf-8", newline="\n") as f:
+                f.write(svarsfil)
 
         t0 = time.monotonic()
         p = plattform.starta_barn(
-            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, errors="replace"
+            cmd, cwd=bas, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, errors="replace"
         )
         _process = p
         try:
