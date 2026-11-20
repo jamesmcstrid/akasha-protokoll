@@ -2,7 +2,11 @@
 import ast
 import glob
 import os
+import io
 import re
+import shutil
+import subprocess
+import tokenize
 import unittest
 
 import hjalp
@@ -192,6 +196,64 @@ class Paketering(unittest.TestCase):
         for rad in ("mac: startar", "mac: beslut %s", "mac: tjansten svarar, oppnar webblasaren",
                     "mac: tjansten svarade inte inom 30 s", "mac: avslutar", "mac: applicationWillTerminate"):
             self.assertIn(f'"{rad}"', text)
+
+
+WINDOWS_PY = ("kontroll_hjalp.py", "kontrollera_pe.py", "kontrollera_whisper_cli_windows.py", "bygg_windows_verktyg.py")
+WINDOWS_SH = ("bygg-whisper-cli-windows.sh",)
+
+
+def kommentarer(delar):
+    """Kommentartexterna i en fil: tokenize for .py, annars allt efter ett # som borjar ett ord (sh, yml, spec)."""
+    text = las(*delar)
+    if delar[-1].endswith(".py") or delar[-1].endswith(".spec"):
+        return [t.string for t in tokenize.generate_tokens(io.StringIO(text).readline) if t.type == tokenize.COMMENT]
+    return re.findall(r"(?:^|\s)#(?!\{|!).*", text, re.M)
+
+
+class WindowsBygget(unittest.TestCase):
+    def test_skripten_gar_att_tolka(self):
+        for namn in WINDOWS_PY:
+            compile(las("paketering", namn), namn, "exec")
+        if shutil.which("bash"):
+            for namn in WINDOWS_SH:
+                p = subprocess.run(["bash", "-n", os.path.join(PAKETERING, namn)], capture_output=True, text=True)
+                self.assertEqual(p.returncode, 0, f"{namn}: {p.stderr}")
+
+    def test_kommentarerna_i_windows_filerna_har_inga_aao(self):
+        filer = [("paketering", n) for n in WINDOWS_PY + WINDOWS_SH]
+        for delar in filer + [("tester", "falsk_whisper_cli.py"), ("tester", "test_windows_bygg.py")]:
+            for kommentar in kommentarer(delar):
+                self.assertIsNone(re.search("[åäöÅÄÖ]", kommentar), f"{'/'.join(delar)}: {kommentar}")
+
+    def test_commiten_for_whisper_cpp_ar_densamma_for_mac_och_windows(self):
+        mac = re.search(r"v1\.9\.5\) VANTAD=([0-9a-f]{40})", las("paketering", "bygg-whisper-cli.sh"))
+        win = re.search(r"v1\.9\.5\) VANTAD=([0-9a-f]{40})", las("paketering", "bygg-whisper-cli-windows.sh"))
+        self.assertTrue(mac and win)
+        self.assertEqual(mac.group(1), win.group(1))
+        self.assertEqual(win.group(1), "d1be6fde11ac6e0407606b4e42fe72d34add8037")
+
+    def test_bygget_av_whisper_cli_anvander_whisper_cpps_egna_windowsflaggor(self):
+        text = las("paketering", "bygg-whisper-cli-windows.sh")
+        for flagga in ("-A x64", "-DBUILD_SHARED_LIBS=ON", "-DGGML_NATIVE=OFF", "-DGGML_BACKEND_DL=ON",
+                       "-DGGML_CPU_ALL_VARIANTS=ON", "-DWHISPER_SDL2=OFF", "-DWHISPER_BUILD_TESTS=OFF",
+                       "-DWHISPER_BUILD_SERVER=OFF", "-DWHISPER_CURL=OFF"):
+            self.assertIn(flagga, text)
+        bygg = [r for r in text.splitlines() if r.startswith("cmake --build")]
+        self.assertEqual(len(bygg), 1)
+        self.assertNotIn("--target", bygg[0])  # alla standardmal, inga gissade malnamn
+
+    def test_kontrollen_av_whisper_cli_har_samma_testmodell_som_mac(self):
+        mac = las("paketering", "kontrollera-whisper-cli.sh")
+        win = las("paketering", "kontrollera_whisper_cli_windows.py")
+        for rad in ("5359861c739e955e79d9a303bcbc70fb988958b1", "818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7"):
+            self.assertIn(rad, mac)
+            self.assertIn(rad, win)
+
+    def test_kontrollen_hamtar_aldrig_kb_whisper(self):
+        for namn in WINDOWS_PY:
+            text = las("paketering", namn)
+            self.assertNotIn("KBLab", text)
+            self.assertNotIn("kb-whisper-medium/resolve", text)
 
 
 if __name__ == "__main__":

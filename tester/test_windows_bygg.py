@@ -1,0 +1,456 @@
+"""Logiken i Windows-bygget (paketering/): beroendekontrollen, kontrollen av whisper-cli, byggverktygen och
+kontrollen av sokvagar och talare. Allt gar att kora pa Linux utan pefile (de som behover det hoppas over)."""
+import importlib.util
+import os
+import shutil
+import stat
+import struct
+import subprocess
+import sys
+import tempfile
+import textwrap
+import unittest
+from unittest import mock
+
+import hjalp  # noqa: F401  (sokvagar och tillfallig hemkatalog)
+
+ROT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PAKETERING = os.path.join(ROT, "paketering")
+sys.path.insert(0, PAKETERING)
+
+import bygg_windows_verktyg as verktyg  # noqa: E402
+import kontrollera_pe as pe  # noqa: E402
+import kontrollera_whisper_cli_windows as kcli  # noqa: E402
+
+HAR_PEFILE = importlib.util.find_spec("pefile") is not None
+HAR_PIL = importlib.util.find_spec("PIL") is not None
+X64 = pe.MASKINER["x64"]
+
+
+def skriv(sokvag, data):
+    with open(sokvag, "wb") as f:
+        f.write(data)
+
+
+def info(importer=(), fordrojda=(), maskin=X64, magic=pe.PE32_PLUS, fel=None):
+    return pe.PEInfo(maskin, magic, list(importer), list(fordrojda), fel)
+
+
+def trad(filer, ovriga=()):
+    """filer: {"sokvag/fil.dll": PEInfo}; ovriga: filer utan PE-information (till exempel .py)."""
+    per_katalog = {"": set()}
+    for sokvag in list(filer) + list(ovriga):
+        katalog, _, namn = sokvag.rpartition("/")
+        delar = katalog.split("/") if katalog else []
+        for i in range(len(delar) + 1):
+            per_katalog.setdefault("/".join(delar[:i]), set())
+        per_katalog[katalog].add(namn.lower())
+    return pe.Trad(per_katalog, dict(filer))
+
+
+class BeroendeLogik(unittest.TestCase):
+    def test_import_i_samma_katalog_hittas(self):
+        t = trad({"lib/sherpa-onnx-c-api.dll": info(["onnxruntime.dll", "KERNEL32.dll"]),
+                  "lib/onnxruntime.dll": info(["KERNEL32.dll"])})
+        r = pe.kontrollera(t)
+        self.assertEqual(r.fel, [])
+        self.assertEqual(r.vagar["samma katalog"], 1)
+
+    def test_saknad_dll_ger_fel_med_bada_filnamnen(self):
+        t = trad({"lib/sherpa-onnx-c-api.dll": info(["onnxruntime.dll", "KERNEL32.dll"])})
+        r = pe.kontrollera(t)
+        self.assertEqual(len(r.fel), 1)
+        self.assertIn("lib/sherpa-onnx-c-api.dll", r.fel[0])
+        self.assertIn("onnxruntime.dll", r.fel[0])
+        self.assertEqual(list(r.saknas), ["onnxruntime.dll"])
+
+    def test_versaler_spelar_ingen_roll(self):
+        t = trad({"a.dll": info(["VCRUNTIME140.dll"]), "vcruntime140.DLL": info()})
+        self.assertEqual(pe.kontrollera(t).fel, [])
+
+    def test_fordrojd_import_kontrolleras(self):
+        t = trad({"a.dll": info(["KERNEL32.dll"], fordrojda=["finns-inte.dll"])})
+        r = pe.kontrollera(t)
+        self.assertEqual(len(r.fel), 1)
+        self.assertIn("finns-inte.dll (fordrojd)", r.fel[0])
+
+    def test_fel_arkitektur(self):
+        for maskin, namn in ((0x14C, "x86"), (0xAA64, "arm64")):
+            r = pe.kontrollera(trad({"a.dll": info(maskin=maskin)}))
+            self.assertEqual(len(r.fel), 1)
+            self.assertIn(f"fel arkitektur, {namn}", r.fel[0])
+        r = pe.kontrollera(trad({"a.dll": info(magic=0x10B)}))
+        self.assertIn("inte PE32+", r.fel[0])
+        self.assertEqual(pe.kontrollera(trad({"a.dll": info(maskin=0xAA64)}), maskin=0xAA64).fel, [])
+
+    def test_fil_som_inte_ar_pe_ger_fel(self):
+        r = pe.kontrollera(trad({"a.dll": info(fel="inte en giltig PE-fil (x)")}))
+        self.assertEqual(r.fel, ["a.dll: inte en giltig PE-fil (x)"])
+
+    def test_windows_egna_dll_behover_inte_finnas(self):
+        t = trad({"a.dll": info(["KERNEL32.dll", "api-ms-win-crt-runtime-l1-1-0.dll", "ext-ms-win-x.dll", "USER32.dll",
+                                 "ucrtbase.dll", "dxgi.dll"])})
+        r = pe.kontrollera(t)
+        self.assertEqual(r.fel, [])
+        self.assertEqual(len(r.system), 6)
+
+    def test_c_runtimen_ar_aldrig_windows_egen_ens_med_system_katalog(self):
+        t = trad({"a.dll": info(["vcruntime140.dll", "MSVCP140.dll", "vcomp140.dll"])})
+        stammar = {"vcruntime140", "msvcp140", "vcomp140", "kernel32"}
+        r = pe.kontrollera(t, system_stammar=stammar)
+        self.assertEqual(len(r.fel), 3)
+
+    def test_system_katalog_godtar_andra_dll_och_listar_dem(self):
+        t = trad({"a.dll": info(["avicap32x.dll", "kernel32.dll"])})
+        self.assertEqual(len(pe.kontrollera(t).fel), 1)
+        r = pe.kontrollera(t, system_stammar={"avicap32x"})
+        self.assertEqual(r.fel, [])
+        self.assertEqual(list(r.system_utanfor_listan), ["avicap32x"])
+
+    def test_python_delen_hittar_internal_och_roten(self):
+        t = trad({"Prog.exe": info(["python312.dll"]), "_internal/python312.dll": info(),
+                  "_internal/sherpa_onnx/lib/x.pyd": info(["python312.dll", "onnxruntime.dll"]),
+                  "_internal/onnxruntime.dll": info()})
+        self.assertEqual(pe.kontrollera(t).fel, [])
+
+    def test_sjalvstandig_katalog_ser_inte_internal(self):
+        filer = {"_internal/vcruntime140.dll": info(),
+                 "_internal/whisper/whisper-cli.exe": info(["vcruntime140.dll", "whisper.dll"]),
+                 "_internal/whisper/whisper.dll": info()}
+        t = trad(filer)
+        # utan "sjalvstandig" hittas vcruntime140.dll i _internal, med den ska den ligga i whisper/
+        self.assertEqual(pe.kontrollera(t).fel, [])
+        r = pe.kontrollera(t, sjalvstandiga=["_internal/whisper"])
+        self.assertEqual(len(r.fel), 1)
+        self.assertIn("_internal/whisper/whisper-cli.exe", r.fel[0])
+        self.assertIn("vcruntime140.dll", r.fel[0])
+        filer["_internal/whisper/vcruntime140.dll"] = info()
+        self.assertEqual(pe.kontrollera(trad(filer), sjalvstandiga=["_internal/whisper"]).fel, [])
+
+    def test_libs_katalogerna_hittas_av_python_delen(self):
+        t = trad({"_internal/numpy/_core/x.pyd": info(["libscipy_openblas64_-abc.dll"]),
+                  "_internal/numpy.libs/libscipy_openblas64_-abc.dll": info(["KERNEL32.dll"]),
+                  "_internal/python312.dll": info()})
+        r = pe.kontrollera(t)
+        self.assertEqual(r.fel, [])
+        self.assertEqual(r.vagar["numpy.libs"], 1)
+
+    def test_vc_saknas_namnger_det_som_ska_kopieras(self):
+        t = trad({"whisper-cli.exe": info(["whisper.dll", "VCRUNTIME140.dll", "KERNEL32.dll"]),
+                  "ggml-cpu-x64.dll": info(["VCOMP140.DLL", "python312.dll"]),
+                  "whisper.dll": info(["MSVCP140.dll"]), "msvcp140.dll": info()})
+        self.assertEqual(pe.vc_saknas(t), ["VCOMP140.DLL", "VCRUNTIME140.dll"])
+
+    def test_kopiera_runtime_kopierar_transitivt_och_stoppar_vid_saknad(self):
+        mapp = tempfile.mkdtemp(prefix="akasha-pe-")
+        self.addCleanup(shutil.rmtree, mapp, True)
+        kalla = os.path.join(mapp, "kalla")
+        ut = os.path.join(mapp, "ut")
+        os.makedirs(kalla)
+        os.makedirs(ut)
+        for namn in ("whisper-cli.exe", "msvcp140.dll", "vcruntime140.dll"):
+            skriv(os.path.join(ut if namn.endswith(".exe") else kalla, namn), b"x")
+        importer = {"whisper-cli.exe": ["MSVCP140.dll", "VCOMP140X.dll"], "msvcp140.dll": ["VCRUNTIME140.dll"],
+                    "vcruntime140.dll": []}
+
+        def las(sokvag):
+            return info(importer.get(os.path.basename(sokvag).lower(), []))
+
+        def hitta(namn):
+            s = os.path.join(kalla, namn.lower())
+            return (s, None) if os.path.isfile(s) else (None, "sokte i kalla")
+
+        res = verktyg.kontroll_hjalp.Resultat("prov")
+        with mock.patch.object(pe, "las_pe", las), mock.patch.object(verktyg, "hitta_runtime", hitta):
+            with mock.patch("builtins.print"):
+                verktyg.kopiera_runtime(ut, res)
+        self.assertEqual(sorted(n.lower() for n in os.listdir(ut)), ["msvcp140.dll", "vcruntime140.dll", "whisper-cli.exe"])
+        self.assertEqual(len(res.fel_rader), 1)  # VCOMP140X.dll finns inte
+        self.assertIn("VCOMP140X.dll", res.fel_rader[0])
+
+    def test_hitta_runtime_tar_system32_for_visual_studio(self):
+        mapp = tempfile.mkdtemp(prefix="akasha-pe-")
+        self.addCleanup(shutil.rmtree, mapp, True)
+        sys32 = os.path.join(mapp, "Windows", "System32")
+        os.makedirs(sys32)
+        skriv(os.path.join(sys32, "vcruntime140.dll"), b"x")
+        redist = os.path.join(mapp, "VS", "VC", "Redist", "MSVC", "14.44.1", "x64", "Microsoft.VC143.OpenMP")
+        os.makedirs(redist)
+        skriv(os.path.join(redist, "vcomp140.dll"), b"y")
+        with mock.patch.dict(os.environ, {"SystemRoot": os.path.join(mapp, "Windows")}), \
+             mock.patch.object(verktyg, "vs_kataloger", lambda: [os.path.join(mapp, "VS")]):
+            self.assertEqual(verktyg.hitta_runtime("vcruntime140.dll")[0], os.path.join(sys32, "vcruntime140.dll"))
+            self.assertEqual(verktyg.hitta_runtime("vcomp140.dll")[0], os.path.join(redist, "vcomp140.dll"))
+            sokvag, text = verktyg.hitta_runtime("finns-inte.dll")
+            self.assertIsNone(sokvag)
+            self.assertIn("finns-inte.dll", text)
+
+
+def bygg_pe(maskin, importer):
+    """En minimal PE32+-fil med en importtabell (for pefile-provet): varje DLL importerar en funktion."""
+    n = len(importer)
+    beskr = 20 * (n + 1)                      # importbeskrivningarna och en nollpost
+    tradar = 0x1000 + beskr                   # en trad (8 byte + nollpost) per DLL
+    namn_rva = tradar + 16 * n + 8 * n        # sedan hint/namn-poster (8 byte) och sist DLL-namnen
+    delar, trad_data, hint_data, namn_data = bytearray(), bytearray(), bytearray(), bytearray()
+    for i, dll in enumerate(importer):
+        trad_rva = tradar + 16 * i
+        hint_rva = tradar + 16 * n + 8 * i
+        delar += struct.pack("<IIIII", trad_rva, 0, 0, namn_rva + len(namn_data), trad_rva)
+        trad_data += struct.pack("<QQ", hint_rva, 0)
+        hint_data += b"\0\0f\0".ljust(8, b"\0")
+        namn_data += dll.encode("ascii") + b"\0"
+    delar += b"\0" * 20 + trad_data + hint_data + namn_data
+    sektion = bytes(delar).ljust(0x200, b"\0")
+    opt = bytearray(240)
+    struct.pack_into("<H", opt, 0, 0x20B)
+    struct.pack_into("<Q", opt, 24, 0x140000000)
+    struct.pack_into("<II", opt, 32, 0x1000, 0x200)
+    struct.pack_into("<HH", opt, 48, 6, 0)
+    struct.pack_into("<II", opt, 56, 0x2000, 0x200)
+    struct.pack_into("<H", opt, 68, 3)
+    struct.pack_into("<I", opt, 108, 16)
+    struct.pack_into("<II", opt, 120, 0x1000, 20 * (len(importer) + 1))
+    coff = struct.pack("<HHIIIHH", maskin, 1, 0, 0, 0, 240, 0x2022)
+    rubrik = bytearray(b"MZ" + b"\0" * 58 + struct.pack("<I", 0x40)) + b"PE\0\0" + coff + opt
+    rubrik += struct.pack("<8sIIIIIIHHI", b".idata", 0x200, 0x1000, 0x200, 0x200, 0, 0, 0, 0, 0xC0000040)
+    return bytes(rubrik.ljust(0x200, b"\0")) + sektion
+
+
+@unittest.skipUnless(HAR_PEFILE, "pefile saknas (finns i byggets venv, inte i testmiljon)")
+class BeroendeMedPefile(unittest.TestCase):
+    def skriv(self, mapp, namn, maskin, importer):
+        with open(os.path.join(mapp, namn), "wb") as f:
+            f.write(bygg_pe(maskin, importer))
+
+    def test_las_pe_laser_importtabellen_och_arkitekturen(self):
+        mapp = tempfile.mkdtemp(prefix="akasha-pe-")
+        self.addCleanup(shutil.rmtree, mapp, True)
+        self.skriv(mapp, "a.dll", X64, ["b.dll", "KERNEL32.dll"])
+        i = pe.las_pe(os.path.join(mapp, "a.dll"))
+        self.assertIsNone(i.fel)
+        self.assertEqual((i.maskin, i.magic, i.importer), (X64, pe.PE32_PLUS, ["b.dll", "KERNEL32.dll"]))
+
+    def test_hela_kontrollen_pa_riktiga_filer(self):
+        mapp = tempfile.mkdtemp(prefix="akasha-pe-")
+        self.addCleanup(shutil.rmtree, mapp, True)
+        self.skriv(mapp, "a.dll", X64, ["b.dll", "KERNEL32.dll"])
+        self.skriv(mapp, "b.dll", X64, ["KERNEL32.dll"])
+        self.skriv(mapp, "c.dll", 0x14C, ["KERNEL32.dll"])
+        with open(os.path.join(mapp, "d.dll"), "wb") as f:
+            f.write(b"inte en pe-fil")
+        r = pe.kontrollera(pe.las_trad(mapp))
+        self.assertEqual(len(r.fel), 2, r.fel)
+        self.assertTrue(any("c.dll: fel arkitektur, x86" in f for f in r.fel))
+        self.assertTrue(any(f.startswith("d.dll: inte en giltig PE-fil") for f in r.fel))
+        os.remove(os.path.join(mapp, "b.dll"))
+        r = pe.kontrollera(pe.las_trad(mapp))
+        self.assertTrue(any("a.dll: importerar b.dll" in f for f in r.fel), r.fel)
+
+    def test_main_ger_slutkod_och_tabell(self):
+        mapp = tempfile.mkdtemp(prefix="akasha-pe-")
+        self.addCleanup(shutil.rmtree, mapp, True)
+        self.skriv(mapp, "a.dll", X64, ["KERNEL32.dll"])
+        tabell = os.path.join(mapp, "tabell.txt")
+        with mock.patch("builtins.print"):
+            self.assertEqual(pe.main([mapp, "--ut", tabell]), 0)
+            self.skriv(mapp, "b.dll", X64, ["saknas.dll"])
+            self.assertEqual(pe.main([mapp]), 1)
+        with open(tabell, encoding="utf-8") as f:
+            self.assertIn("a.dll  x64", f.read())
+
+
+class DtwAvgorande(unittest.TestCase):
+    OKANT_LADDNING = "error: unknown dtw preset 'finns-inte'\n"
+    LADDNING = ("whisper_init_from_file_with_params_no_state: loading model from 'm.bin'\n"
+                "whisper_model_load: type = 1\nwhisper_print_progress_callback: progress = 100%\n")
+    OKANT_RADER = LADDNING + "whisper_init_state: dtw preset 'finns-inte' is unknown\n"
+
+    def test_satt_laddning_nar_whisper_stoppar_fore_laddningen(self):
+        self.assertEqual(kcli.valj_satt(self.OKANT_LADDNING, 1), ("laddning", None))
+
+    def test_satt_rader_nar_modellen_laddas_och_en_dtw_rad_finns(self):
+        self.assertEqual(kcli.valj_satt(self.OKANT_RADER, 0), ("rader", None))
+
+    def test_ingen_slutsats_nar_det_inte_gar_att_avgora(self):
+        for text, kod in (("", 1), (self.LADDNING, 0), (self.OKANT_LADDNING, None), (self.OKANT_LADDNING, 0),
+                          (self.OKANT_LADDNING, 3221225781), (self.OKANT_LADDNING, -11)):
+            satt, orsak = kcli.valj_satt(text, kod)
+            self.assertIsNone(satt, (text, kod))
+            self.assertIn("dtw-rad", orsak)
+
+    def test_kant_forval_i_satt_laddning(self):
+        ok, text = kcli.avgor_forval("laddning", self.OKANT_LADDNING, self.LADDNING, "medium", 0)
+        self.assertTrue(ok, text)
+
+    def test_okant_forval_i_satt_laddning_ger_fel(self):
+        ok, text = kcli.avgor_forval("laddning", self.OKANT_LADDNING, "error: unknown dtw preset 'medium'\n", "medium", 1)
+        self.assertFalse(ok)
+        self.assertIn("modellen laddades aldrig", text)
+
+    def test_okant_forval_i_satt_rader_ger_fel_men_kant_gar_igenom(self):
+        okant = self.OKANT_RADER
+        ok, _ = kcli.avgor_forval("rader", okant, self.LADDNING, "medium", 0)
+        self.assertTrue(ok)
+        ok, text = kcli.avgor_forval("rader", okant, self.LADDNING + "whisper_init_state: dtw preset 'medium' is unknown\n",
+                                     "medium", 0)
+        self.assertFalse(ok)
+        self.assertIn("pahittat forval", text)
+
+    def test_kodtext_for_windows_koder(self):
+        self.assertIn("STATUS_DLL_NOT_FOUND", kcli.kodtext(3221225781))
+        self.assertIn("0xC0000135", kcli.kodtext(-1073741515))
+        self.assertEqual(kcli.kodtext(1), "kod 1")
+        self.assertEqual(kcli.kodtext(None), "ingen slutkod")
+
+
+def falsk_cli(mapp):
+    """En startbar fil som kor tester/falsk_whisper_cli.py med den Python som kor testerna."""
+    sokvag = os.path.join(mapp, "falsk-cli")
+    with open(sokvag, "w", encoding="utf-8") as f:
+        f.write(f'#!/bin/sh\nexec "{sys.executable}" "{os.path.join(ROT, "tester", "falsk_whisper_cli.py")}" "$@"\n')
+    os.chmod(sokvag, os.stat(sokvag).st_mode | stat.S_IXUSR)
+    modell = os.path.join(mapp, "modell.bin")
+    with open(modell, "wb") as f:
+        f.write(b"inte en riktig modell")
+    return sokvag, modell
+
+
+@unittest.skipIf(os.name == "nt", "den falska whisper-cli ar en sh-fil")
+class KontrollAvWhisperCliMedFalskCli(unittest.TestCase):
+    def kor(self, **miljo):
+        mapp = tempfile.mkdtemp(prefix="akasha-kcli-")
+        self.addCleanup(shutil.rmtree, mapp, True)
+        cli, modell = falsk_cli(mapp)
+        ordtider = os.path.join(mapp, "ordtider.json")
+        env = {**os.environ, "PYTHONIOENCODING": "utf-8", **miljo}
+        p = subprocess.run([sys.executable, os.path.join(PAKETERING, "kontrollera_whisper_cli_windows.py"), "--cli", cli,
+                            "--modell", modell, "--arbetskatalog", os.path.join(mapp, "arb"), "--ordtider-ut", ordtider],
+                           capture_output=True, env=env, timeout=240)
+        return p.returncode, p.stdout.decode("utf-8", "replace"), ordtider
+
+    def test_allt_ok(self):
+        kod, ut, ordtider = self.kor()
+        self.assertEqual(kod, 0, ut)
+        self.assertIn("KONTROLL AV WHISPER-CLI: OK", ut)
+        self.assertIn("OK: alla 15 flaggor finns i --help", ut)
+        self.assertIn("OK: forvalet medium kanns igen", ut)
+        self.assertIn("OK: ordtiderna kommer från DTW", ut)
+        self.assertIn("Åsa Ölund", ut)  # modellkatalogen heter sa
+        self.assertTrue(os.path.isfile(ordtider))
+
+    def test_saknad_flagga_och_saknad_dtw_ger_fel_men_skriptet_fortsatter(self):
+        kod, ut, _ = self.kor(FALSK_CLI_SAKNAR_FLAGGA="-nfa", FALSK_CLI_UTAN_DTW="1")
+        self.assertEqual(kod, 1, ut)
+        self.assertIn("FEL: whisper-cli saknar flaggorna -nfa", ut)
+        self.assertIn("FEL: ordtiderna kommer inte från DTW", ut)
+        self.assertIn("OK: forvalet medium kanns igen", ut)  # senare kontroller kordes anda
+        self.assertIn("KONTROLL AV WHISPER-CLI: FEL", ut)
+
+    def test_whisper_cli_som_avslutas_med_dll_kod_ger_fel_och_forklaring(self):
+        kod, ut, _ = self.kor(FALSK_CLI_KOD="3221225781")
+        self.assertEqual(kod, 1, ut)
+        self.assertIn("FEL: motor._whispercpp() kastade MotorFel", ut)
+
+
+class Byggverktyg(unittest.TestCase):
+    def test_versionstexten_ar_ascii_och_gar_att_tolka_som_pyinstaller_gor(self):
+        text = verktyg.versionstext("0.2.0", "17")
+        text.encode("ascii")
+        funna = {}
+
+        def klass(namn):
+            def skapa(*a, **kw):
+                return (namn, a, kw)
+            return skapa
+
+        miljo = {n: klass(n) for n in ("VSVersionInfo", "FixedFileInfo", "StringFileInfo", "StringTable", "StringStruct",
+                                       "VarFileInfo", "VarStruct")}
+        ver = eval(compile(text, "versionsfil", "eval"), miljo)  # noqa: S307  (egen text, samma sak som PyInstaller gor)
+        ffi = ver[2]["ffi"]
+        self.assertEqual(ffi[2]["filevers"], (0, 2, 0, 17))
+        strangar = {st[1][0]: st[1][1] for st in ver[2]["kids"][0][1][0][0][1][1]}
+        funna.update(strangar)
+        self.assertEqual(funna["LegalCopyright"], "© 2026 Dennis Fredin. Apache-2.0.")
+        self.assertEqual(funna["ProductName"], "Akasha Protokoll")
+        self.assertEqual(funna["OriginalFilename"], "Akasha Protokoll.exe")
+        self.assertEqual(funna["FileVersion"], "0.2.0.17")
+
+    def test_forbjudna_namn(self):
+        for namn, katalog in (("faster_whisper", True), ("ctranslate2", True), ("ctranslate2.dll", False),
+                              ("tokenizers", True), ("huggingface_hub", True), ("hf_xet", True), ("onnxruntime", True),
+                              ("onnxruntime_pybind11_state.pyd", False), ("onnxruntime-1.32.0.dist-info", True),
+                              ("tkinter", True), ("_tkinter.pyd", False), ("tcl86t.dll", False)):
+            self.assertTrue(verktyg.ar_forbjudet(namn, katalog), namn)
+        # sherpa-onnx har en egen onnxruntime.dll som ska vara med
+        for namn in ("onnxruntime.dll", "sherpa_onnx", "av", "numpy", "static"):
+            self.assertFalse(verktyg.ar_forbjudet(namn, False), namn)
+        self.assertFalse(verktyg.ar_forbjudet("onnxruntime.dll", True))
+
+    def test_hitta_forbjudna_i_ett_trad(self):
+        mapp = tempfile.mkdtemp(prefix="akasha-verktyg-")
+        self.addCleanup(shutil.rmtree, mapp, True)
+        for sokvag in ("_internal/sherpa_onnx/lib/onnxruntime.dll", "_internal/ctranslate2/ctranslate2.dll",
+                       "_internal/onnxruntime/capi/onnxruntime.dll", "_internal/numpy/x.pyd"):
+            os.makedirs(os.path.join(mapp, os.path.dirname(sokvag)), exist_ok=True)
+            skriv(os.path.join(mapp, sokvag), b"x")
+        funna = [os.path.relpath(f, mapp).replace(os.sep, "/") for f in verktyg.hitta_forbjudna(mapp)]
+        self.assertEqual(funna, ["_internal/ctranslate2", "_internal/ctranslate2/ctranslate2.dll", "_internal/onnxruntime"])
+
+    def test_zip_har_katalogen_overst_och_uppackningen_kan_ligga_under_asa_olund(self):
+        mapp = tempfile.mkdtemp(prefix="akasha-verktyg-")
+        self.addCleanup(shutil.rmtree, mapp, True)
+        dist = os.path.join(mapp, "dist", "Akasha Protokoll")
+        os.makedirs(os.path.join(dist, "_internal", "whisper"))
+        skriv(os.path.join(dist, "Akasha Protokoll.exe"), b"exe")
+        skriv(os.path.join(dist, "_internal", "whisper", "whisper-cli.exe"), b"cli")
+        zipfil = os.path.join(mapp, "dist", "ut.zip")
+        self.assertEqual(verktyg.packa_zip(dist, zipfil), 2)
+        import zipfile
+        with zipfile.ZipFile(zipfil) as z:
+            self.assertEqual(sorted(z.namelist()), ["Akasha Protokoll/Akasha Protokoll.exe",
+                                                    "Akasha Protokoll/_internal/whisper/whisper-cli.exe"])
+        mal = os.path.join(mapp, "uppackad", "Åsa Ölund")
+        with mock.patch("builtins.print"):
+            self.assertEqual(verktyg.main(["uppacka", zipfil, mal]), 0)
+        with open(os.path.join(mal, "Akasha Protokoll", "_internal", "whisper", "whisper-cli.exe"), "rb") as f:
+            self.assertEqual(f.read(), b"cli")
+
+    def test_storlekar_sorterar_storst_forst(self):
+        mapp = tempfile.mkdtemp(prefix="akasha-verktyg-")
+        self.addCleanup(shutil.rmtree, mapp, True)
+        os.makedirs(os.path.join(mapp, "stor"))
+        skriv(os.path.join(mapp, "stor", "a"), b"x" * 100)
+        skriv(os.path.join(mapp, "liten"), b"x" * 10)
+        self.assertEqual(verktyg.storlekar_i(mapp), [(100, "stor"), (10, "liten")])
+
+    @unittest.skipUnless(HAR_PIL, "Pillow saknas (finns i byggets venv pa Windows)")
+    def test_ikonen_far_alla_sju_storlekarna(self):
+        mapp = tempfile.mkdtemp(prefix="akasha-verktyg-")
+        self.addCleanup(shutil.rmtree, mapp, True)
+        res = verktyg.kontroll_hjalp.Resultat("prov")
+        ico = os.path.join(mapp, "ikon.ico")
+        verktyg.skapa_ikon(os.path.join(PAKETERING, "ikon-1024.png"), ico, res)
+        self.assertEqual(res.fel_rader, [])
+        self.assertTrue(res.ok_rader)
+
+
+class Kontrollskripten(unittest.TestCase):
+    def test_skripten_utan_nagon_utskrift_som_inte_ar_utf8(self):
+        # Actions-maskinens konsol ar inte UTF-8: en utskrift med a-ring och pilar far inte krascha skripten.
+        kod = textwrap.dedent("""
+            import io, sys
+            sys.path.insert(0, sys.argv[1])
+            sys.stdout = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+            import kontroll_hjalp
+            kontroll_hjalp.utf8_utskrift()
+            print("Åsa Ölund → ok")
+            sys.stdout.flush()
+            sys.__stdout__.write("klart\\n")
+        """)
+        p = subprocess.run([sys.executable, "-c", kod, PAKETERING], capture_output=True)
+        self.assertEqual(p.returncode, 0, p.stderr.decode("utf-8", "replace"))
+
+
+if __name__ == "__main__":
+    unittest.main()
