@@ -4,7 +4,7 @@
 #   bash paketering/bygg-whisper-cli-windows.sh VERSION UTKATALOG       (kors fran repots rot, i Git Bash)
 #   PYTHON=build/venv/Scripts/python bash paketering/bygg-whisper-cli-windows.sh v1.9.5 build/whisper
 # Resultat: UTKATALOG/kompilerat/ med bara det som kompilatorn gav: whisper-cli.exe, whisper.dll, ggml.dll, ggml-base.dll och
-# en ggml-cpu-<variant>.dll per processorvariant. Det ar det som cachas i flodet (nyckel: version + hash av det har skriptet).
+# en ggml-cpu-<variant>.dll per processorvariant och ggml-vulkan.dll. Det ar det som cachas i flodet (nyckel: version + hash av det har skriptet).
 # C-runtime-DLL:erna, fillistan och beroendekontrollen gors av samla-whisper-cli-windows.sh, som kors efter varje bygge och
 # varje cachetraff (sa att en rattning i verktygen inte tvingar fram ett nytt kompilerat bygge). Kors i Actions.
 # PYTHON ska ha byggets venv (anvands bara for fillistan).
@@ -48,6 +48,9 @@ fi
 #   GGML_BACKEND_DL=ON och GGML_CPU_ALL_VARIANTS=ON
 #                                   en ggml-cpu-<variant>.dll per processorgeneration; den basta valjs nar
 #                                   programmet startar (ggml letar i whisper-cli.exe:s katalog och i arbetskatalogen)
+#   GGML_VULKAN=ON                  ggml-vulkan.dll (grafikkretsen). Kraver Vulkan SDK pa byggmaskinen (VULKAN_SDK, glslc;
+#                                   flodet installerar den). Med GGML_BACKEND_DL ar det en egen DLL som whisper.cpp laddar
+#                                   bara om den gar att ladda: saknas vulkan-1.dll (grafikdrivrutinen) anvands processorn.
 # Dessutom av: SDL2 (inget mikrofonprogram), tester, server och curl.
 # OpenMP (GGML_OPENMP) ar pa som standard; vcomp140.dll tas med bland C-runtime-filerna nedan om den importeras.
 # C-runtimen lankas dynamiskt (/MD, CMake:s standard): vcruntime140.dll och de andra kopieras in bredvid
@@ -70,11 +73,11 @@ fi
 echo "== CMake: konfigurerar"
 cmake -S "$UT/src" -B "$UT/bygg" -A x64 \
   -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON \
-  -DGGML_NATIVE=OFF -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON \
+  -DGGML_NATIVE=OFF -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DGGML_VULKAN=ON \
   -DWHISPER_SDL2=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DWHISPER_CURL=OFF 2>&1 | tee "$UT/cmake-konfigurera.log"
 
 echo "== CMake: sammanfattning av valen (ur cache-filen)"
-grep -E '^(CMAKE_GENERATOR|CMAKE_GENERATOR_PLATFORM|CMAKE_C_COMPILER|CMAKE_CXX_COMPILER|CMAKE_BUILD_TYPE|CMAKE_MSVC_RUNTIME_LIBRARY|BUILD_SHARED_LIBS|GGML_[A-Z0-9_]+|WHISPER_[A-Z0-9_]+|OpenMP[A-Za-z0-9_]*):' "$UT/bygg/CMakeCache.txt" || true
+grep -E '^(CMAKE_GENERATOR|CMAKE_GENERATOR_PLATFORM|CMAKE_C_COMPILER|CMAKE_CXX_COMPILER|CMAKE_BUILD_TYPE|CMAKE_MSVC_RUNTIME_LIBRARY|BUILD_SHARED_LIBS|GGML_[A-Z0-9_]+|Vulkan[A-Za-z0-9_]*|WHISPER_[A-Z0-9_]+|OpenMP[A-Za-z0-9_]*):' "$UT/bygg/CMakeCache.txt" || true
 echo "-- Kompilatorn (ur konfigureringen):"
 grep -iE 'The (C|CXX) compiler identification|OpenMP|Found OpenMP|ARCH|Adding CPU backend variant' "$UT/cmake-konfigurera.log" | sed -n 1,60p || true
 echo "-- Okanda flaggor (ska vara tomt):"
@@ -131,6 +134,14 @@ if [ -z "$VARIANTER" ]; then
 fi
 echo "$VARIANTER" | sed 's|.*/||'
 echo "OK: $(echo "$VARIANTER" | grep -c .) processorvarianter"
+echo "== Vulkan (ggml-vulkan.dll)"
+if [ ! -f "$UT/kompilerat/ggml-vulkan.dll" ]; then
+  echo "FEL: ggml-vulkan.dll byggdes inte (GGML_VULKAN=ON): Vulkan SDK saknas eller hittades inte av CMake. VULKAN_SDK=${VULKAN_SDK:-(inte satt)}. Vulkan-rader ur konfigureringen:" >&2
+  grep -iE 'vulkan|glslc' "$UT/cmake-konfigurera.log" >&2 || true
+  find "$UT/bygg" -name '*.dll' -not -path '*CMakeFiles*' >&2
+  exit 1
+fi
+echo "OK: ggml-vulkan.dll byggdes ($(wc -c < "$UT/kompilerat/ggml-vulkan.dll" | tr -d ' ') byte)"
 [ -f "$UT/kompilerat/whisper.dll" ] && [ -f "$UT/kompilerat/ggml.dll" ] && [ -f "$UT/kompilerat/ggml-base.dll" ] || {
   echo "FEL: whisper.dll, ggml.dll eller ggml-base.dll saknas i $UT/kompilerat" >&2
   exit 1

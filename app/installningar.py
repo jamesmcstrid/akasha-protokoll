@@ -34,6 +34,17 @@ def _tal(namn, standard, typ, minst, hogst, regel):
     return standard
 
 
+def _val(namn, standard, tillatna):
+    """Textvarde ur en lista med tillatna (gemener). Tomt, eller nagot annat, ger standardvardet och ett problem."""
+    varde = _env(namn, "").lower()
+    if not varde:
+        return standard
+    if varde in tillatna:
+        return varde
+    PROBLEM.append(VARDE_FEL.format(namn=namn, regel=" eller ".join(tillatna), standard=standard))
+    return standard
+
+
 def _sokvag(varde):
     return os.path.abspath(os.path.expanduser(varde))
 
@@ -67,6 +78,9 @@ uppdatera_platser()
 # KB-Whisper medium (standard) eller large. Large gor farre fel men tar langre tid.
 MODELL = _env("MODELL", "medium").lower()
 
+# Grafikkretsen (whisper.cpp med Vulkan, Windows): av = bara processorn (standard), pa = prova grafikkretsen.
+# Ett prov: gar det fel gar motorn tillbaka till processorn (se motor.py, filen grafik-fungerade-inte).
+GRAFIK = _val("GRAFIK", "av", ("av", "pa"))
 CPU_TRADAR = _tal("CPU_TRADAR", 0, int, 0, 256, "ett heltal 0–256")  # 0 = motorn valjer
 WHISPERCPP_BIN = _env("WHISPERCPP_BIN", "whisper-cli")
 # Tva rostgrupper som liknar varandra mer an sa har raknas som samma person. Uppmatt med TitaNet:

@@ -43,13 +43,15 @@ EGNA_PREFIX = ("vcruntime", "msvcp", "vcomp", "concrt", "vccorlib", "python")
 LEVERERAS_SJALV = EGNA_PREFIX + ("onnxruntime", "directml", "libomp", "libiomp", "sherpa", "whisper", "ggml")
 SYSTEM_PREFIX = ("api-ms-win-", "ext-ms-win-")
 # Namn utan .dll, gemener. Windows egna DLL-filer som ingar i Windows 10 och 11.
+# vulkan-1 (Vulkan-laddaren) kommer med grafikdrivrutinen och levereras aldrig av oss: ggml-vulkan.dll importerar den,
+# och saknas den hos anvandaren laddas inte ggml-vulkan.dll och whisper.cpp anvander processorn.
 SYSTEM = frozenset("""
 advapi32 authz avrt bcrypt bcryptprimitives cabinet cfgmgr32 combase comctl32 comdlg32 credui crypt32 cryptsp
 d2d1 d3d9 d3d11 d3d12 dbgcore dbghelp dcomp dnsapi dwmapi dwrite dxcore dxgi gdi32 gdi32full glu32 imagehlp imm32
 iphlpapi kernel32 kernelbase ksuser mf mfplat mfreadwrite mmdevapi mpr msctf msimg32 msvcrt mswsock ncrypt netapi32
 normaliz ntdll ole32 oleacc oleaut32 opengl32 pdh powrprof profapi propsys psapi rpcrt4 rstrtmgr sechost secur32
 setupapi shcore shell32 shlwapi sspicli ucrtbase uiautomationcore user32 userenv usp10 uxtheme version wevtapi avicap32 msacm32 msvfw32 vfw32
-win32u windowscodecs winhttp wininet winmm winspool wintrust wldap32 ws2_32 wsock32 wtsapi32 xinput1_4
+win32u vulkan-1 windowscodecs winhttp wininet winmm winspool wintrust wldap32 ws2_32 wsock32 wtsapi32 xinput1_4
 """.split())
 
 

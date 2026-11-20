@@ -40,6 +40,13 @@ echo "OK: $(echo "$VARIANTER" | grep -c .) processorvarianter"
   exit 1
 }
 echo "OK: whisper-cli.exe, whisper.dll, ggml.dll och ggml-base.dll finns"
+# ggml-vulkan.dll (Vulkan, grafikkretsen) ska med i _internal\whisper\. Den importerar vulkan-1.dll, som kommer med
+# grafikdrivrutinen och inte levereras av oss (kontrollera_pe.py godtar den som system-DLL).
+[ -f "$UT/ggml-vulkan.dll" ] || {
+  echo "FEL: ggml-vulkan.dll saknas i $UT: bygget gjordes utan Vulkan, och GRAFIK=pa skulle inte kunna prova grafikkretsen" >&2
+  exit 1
+}
+echo "OK: ggml-vulkan.dll finns"
 
 echo "== Beroenden (alla importer ska hittas i samma katalog eller bland Windows egna DLL-filer)"
 "$PYTHON" "paketering/kontrollera_pe.py" "$UT" --system-katalog "${SYSTEMROOT:-C:\\Windows}\\System32"

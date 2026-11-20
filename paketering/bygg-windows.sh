@@ -89,6 +89,11 @@ if ls "$DIST/_internal/whisper"/ggml-cpu-*.dll > /dev/null 2>&1; then
 else
   fel "ingen ggml-cpu-*.dll bredvid whisper-cli.exe"
 fi
+if [ -f "$DIST/_internal/whisper/ggml-vulkan.dll" ]; then
+  echo "OK: ggml-vulkan.dll bredvid whisper-cli.exe"
+else
+  fel "ggml-vulkan.dll saknas bredvid whisper-cli.exe"
+fi
 echo "Filerna och katalogerna overst i $DIST och i $DIST/_internal:"
 ls -l "$DIST"
 ls -l "$DIST/_internal" | sed -n 1,80p

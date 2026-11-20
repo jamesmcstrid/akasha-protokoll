@@ -382,6 +382,17 @@ class TestVarden(unittest.TestCase):
         self.assertEqual(len(i.PROBLEM), 1)
         self.assertIn("Standardvärdet 0,6 används.", i.PROBLEM[0])
 
+    def test_grafik_standard_giltiga_och_ogiltigt_varde(self):
+        self.assertEqual(self.ladda().GRAFIK, "av")
+        self.assertEqual(self.ladda(GRAFIK="pa").GRAFIK, "pa")
+        self.assertEqual(self.ladda(GRAFIK=" PA ").GRAFIK, "pa")
+        i = self.ladda(GRAFIK="kanske")
+        self.assertEqual(i.GRAFIK, "av")
+        self.assertEqual(len(i.PROBLEM), 1)
+        self.assertIn("GRAFIK", i.PROBLEM[0])
+        self.assertIn("av eller pa", i.PROBLEM[0])
+        self.assertNotIn("kanske", i.PROBLEM[0])
+
     def test_max_mb_och_cpu_tradar(self):
         i = self.ladda(MAX_MB="0", CPU_TRADAR="300")
         self.assertEqual((i.MAX_MB, i.CPU_TRADAR), (1024, 0))

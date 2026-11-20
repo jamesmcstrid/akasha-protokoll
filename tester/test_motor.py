@@ -259,9 +259,24 @@ class TestCliKommando(unittest.TestCase):
             "-oj", "-of", os.path.join(self.REL, "ut"), "--prompt", "Åsa", "-t", "4",
             "-ml", "1", "-sow", "--dtw", "medium", "-nfa", "-ojf"])
 
-    def test_linux_som_mac(self):
-        self.assertEqual(motor.cli_kommando("/x/c", self.REL, False, "x", 0, "Linux"),
-                         motor.cli_kommando("/x/c", self.REL, False, "x", 0, "Darwin"))
+    def test_linux_som_mac_utom_ng(self):
+        mac = motor.cli_kommando("/x/c", self.REL, False, "x", 0, "Darwin")
+        linux = motor.cli_kommando("/x/c", self.REL, False, "x", 0, "Linux")
+        self.assertNotIn("-ng", mac[0])
+        self.assertEqual([a for a in linux[0] if a != "-ng"], mac[0])
+        self.assertIn("-ng", linux[0])
+
+    def test_ng_pa_windows_och_linux_utan_grafik_men_aldrig_pa_mac(self):
+        for system in ("Windows", "Linux", "Darwin"):
+            for grafik in (False, True):
+                with self.subTest(system=system, grafik=grafik):
+                    cmd, svarsfil = motor.cli_kommando("/x/c", self.REL, True, "x", 2, system, grafik)
+                    args = cmd if svarsfil is None else svarsfil.splitlines()
+                    self.assertEqual("-ng" in args, system != "Darwin" and not grafik)
+
+    def test_ng_ar_standard_utan_grafik_argumentet(self):
+        cmd, _ = motor.cli_kommando("/x/c", self.REL, False, "", 2, "Linux")
+        self.assertIn("-ng", cmd)
 
     def test_sokvagarna_ar_relativa_och_har_inte_modellkatalogen(self):
         for system in ("Darwin", "Windows"):
@@ -277,7 +292,7 @@ class TestCliKommando(unittest.TestCase):
         cmd, svarsfil = motor.cli_kommando("C:\\p\\whisper-cli.exe", self.REL, True, "Åsa Öberg", 4, "Windows")
         self.assertEqual(cmd, ["C:\\p\\whisper-cli.exe", "@" + os.path.join(self.REL, "args.txt")])
         mac, _ = motor.cli_kommando("C:\\p\\whisper-cli.exe", self.REL, True, "Åsa Öberg", 4, "Darwin")
-        self.assertEqual(svarsfil.splitlines(), mac[1:])  # samma argument, en rad var, utan programnamnet
+        self.assertEqual([a for a in svarsfil.splitlines() if a != "-ng"], mac[1:])  # samma argument, en rad var
         self.assertTrue(svarsfil.endswith("\n"))
         self.assertNotIn("\r", svarsfil)
         self.assertIn("--prompt\nÅsa Öberg\n", svarsfil)
@@ -428,6 +443,9 @@ class StderrProcess(FalskProcess):
 
     def wait(self, timeout=None):
         return self._kod
+
+    def terminate(self):
+        pass
 
 
 DIAGNOS = [
@@ -796,6 +814,137 @@ class TestAvbruten(unittest.TestCase):
 def np_tyst():
     import numpy as np
     return np.zeros(1600, dtype=np.float32)
+
+
+class GrafikFalskCli:
+    """En falsk whisper-cli via plattform.starta_barn: kor 1 (utan -ng) ger fel, kor med -ng lyckas. Skriver
+    JSON-filen som whisper-cli skulle skriva."""
+
+    def __init__(self, test, forsta_kod=3, ord_=("hej",), kod_med_ng=0):
+        self.test, self.forsta_kod, self.ord_, self.kod_med_ng = test, forsta_kod, ord_, kod_med_ng
+        self.kommandon = []
+
+    def __call__(self, cmd, cwd=None, **kw):
+        self.kommandon.append(cmd)
+        ng = "-ng" in cmd
+        kod = self.kod_med_ng if ng else self.forsta_kod
+        if kod == 0:
+            ut = cmd[cmd.index("-of") + 1]
+            seg = [{"text": " " + o, "offsets": {"from": 0, "to": 500}, "tokens": []} for o in self.ord_]
+            with open(os.path.join(cwd, ut + ".json"), "w", encoding="utf-8") as f:
+                json.dump({"transcription": seg}, f)
+        rader = ["whisper_model_load: type = 4 (medium)", "ggml_vulkan: fel i Vulkan (Åsa Öberg)"] if not ng else \
+            ["whisper_model_load: type = 4 (medium)"]
+        return StderrProcess(rader if kod != 0 else ["whisper_print_timings: klar"], kod)
+
+
+class TestGrafikAterfall(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.prog = os.path.join(self.tmp, "prog")
+        os.makedirs(self.prog)
+        for mal, varde in ((plattform, ("whisper_cli", lambda: "/x/whisper-cli")),
+                           (plattform, ("system", lambda: "Windows")),
+                           (plattform, ("programkatalog", lambda: self.prog)),
+                           (modeller, ("MODELLKATALOG", os.path.join(self.tmp, "modeller"))),
+                           (motor, ("GRAFIK", "pa"))):
+            p = mock.patch.object(mal, *varde)
+            p.start()
+            self.addCleanup(p.stop)
+        self.fil = os.path.join(self.prog, "grafik-fungerade-inte")
+
+    def kor(self, falsk, sekunder=8, prompt="Åsa Öberg"):
+        import numpy as np
+        # Windows ger en svarsfil; fran den lasas flaggorna, sa att den falska cli:n ser samma argument som cli_kommando.
+        def starta(cmd, cwd=None, **kw):
+            args_fil = os.path.join(cwd, cmd[1][1:])
+            with open(args_fil, encoding="utf-8") as f:
+                return falsk([cmd[0]] + f.read().splitlines(), cwd=cwd, **kw)
+        with mock.patch.object(plattform, "starta_barn", starta), self.assertLogs("akasha-protokoll", "INFO") as logg:
+            res = motor._whispercpp(np.zeros(int(sekunder * 16000), dtype=np.float32), False, prompt, None)
+        return res, logg.output
+
+    def test_fel_med_grafiken_ger_nytt_forsok_med_ng_och_fil(self):
+        falsk = GrafikFalskCli(self)
+        (text, segs, _), logg = self.kor(falsk)
+        self.assertEqual(text, "hej")
+        self.assertEqual(len(falsk.kommandon), 2)
+        self.assertNotIn("-ng", falsk.kommandon[0])
+        self.assertIn("-ng", falsk.kommandon[1])
+        with open(self.fil, encoding="utf-8") as f:
+            innehall = f.read()
+        self.assertRegex(innehall, r"^\d{4}-\d\d-\d\d\n")
+        self.assertIn("kod 3", innehall)
+        self.assertIn("whisper_model_load: type = 4 (medium)", innehall)  # sista diagnosraden
+        for hemligt in ("Åsa", "Öberg", "hej"):
+            self.assertNotIn(hemligt, innehall)
+            self.assertNotIn(hemligt, "\n".join(logg))
+        self.assertTrue(any("grafikkretsen fungerade inte" in r and "kod 3" in r for r in logg))
+
+    def test_filen_gor_att_nasta_kommando_far_ng(self):
+        self.kor(GrafikFalskCli(self))
+        falsk = GrafikFalskCli(self)
+        self.kor(falsk)
+        self.assertEqual(len(falsk.kommandon), 1)  # inget forsok med grafiken, direkt -ng
+        self.assertIn("-ng", falsk.kommandon[0])
+        self.assertFalse(motor.grafik_aktiv())
+
+    def test_utan_filen_och_med_grafik_pa_skickas_inte_ng(self):
+        falsk = GrafikFalskCli(self, forsta_kod=0)
+        self.kor(falsk)
+        self.assertEqual(len(falsk.kommandon), 1)
+        self.assertNotIn("-ng", falsk.kommandon[0])
+        self.assertFalse(os.path.exists(self.fil))
+
+    def test_grafik_av_ger_ng_och_ingen_aterfall(self):
+        with mock.patch.object(motor, "GRAFIK", "av"):
+            falsk = GrafikFalskCli(self, forsta_kod=3, kod_med_ng=3)
+            with self.assertRaises(motor.MotorFel):
+                self.kor(falsk)
+        self.assertEqual(len(falsk.kommandon), 1)
+        self.assertIn("-ng", falsk.kommandon[0])
+        self.assertFalse(os.path.exists(self.fil))
+
+    def test_kod_0_utan_ord_for_langt_ljud_ger_aterfall(self):
+        falsk = GrafikFalskCli(self, forsta_kod=0, ord_=())
+        # med -ng ger den falska cli:n ocksa inga ord; bara forsoket med grafiken avgor filen
+        (text, _, _), logg = self.kor(falsk, sekunder=6)
+        self.assertEqual(len(falsk.kommandon), 2)
+        self.assertIn("-ng", falsk.kommandon[1])
+        self.assertTrue(os.path.exists(self.fil))
+        with open(self.fil, encoding="utf-8") as f:
+            self.assertIn("inga ord", f.read())
+
+    def test_kod_0_utan_ord_for_kort_ljud_ger_inget_aterfall(self):
+        falsk = GrafikFalskCli(self, forsta_kod=0, ord_=())
+        self.kor(falsk, sekunder=4)
+        self.assertEqual(len(falsk.kommandon), 1)
+        self.assertFalse(os.path.exists(self.fil))
+
+    def test_avbrott_ger_inget_aterfall(self):
+        self.addCleanup(setattr, motor, "_avslutas", False)
+        falsk = GrafikFalskCli(self)
+        motor._avslutas = True
+        with self.assertRaises(motor.Avbruten):
+            self.kor(falsk)
+        self.assertEqual(len(falsk.kommandon), 1)
+        self.assertFalse(os.path.exists(self.fil))
+
+    def test_mac_styrs_inte_av_grafik(self):
+        with mock.patch.object(plattform, "system", lambda: "Darwin"):
+            self.assertFalse(motor.grafik_aktiv())
+            self.assertEqual(motor.modellnamn().endswith("Metal)"), motor.AKTIV == "whispercpp")
+
+    def test_modellnamn_pa_windows(self):
+        with mock.patch.object(motor, "AKTIV", "whispercpp"):
+            self.assertEqual(motor.modellnamn(), f"KB-Whisper {motor.MODELL} (whisper.cpp, grafikkretsen)")
+            with mock.patch.object(motor, "GRAFIK", "av"):
+                self.assertEqual(motor.modellnamn(), f"KB-Whisper {motor.MODELL} (whisper.cpp)")
+            open(self.fil, "w").close()  # grafiken fungerade inte: processorn
+            self.assertEqual(motor.modellnamn(), f"KB-Whisper {motor.MODELL} (whisper.cpp)")
+            with mock.patch.object(plattform, "system", lambda: "Darwin"):
+                self.assertEqual(motor.modellnamn(), f"KB-Whisper {motor.MODELL} (whisper.cpp, Metal)")
 
 
 class TestProblem(unittest.TestCase):

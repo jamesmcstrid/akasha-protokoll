@@ -26,6 +26,13 @@ jobs:
       AKASHA_VERSION: "0.2.0"
       AKASHA_BYGGNUMMER: ${{ github.run_number }}
       WHISPER_VERSION: ${{ inputs.whisper_version }}
+      # Vulkan SDK (LunarG) som bygger ggml-vulkan.dll. Versionen och sha256 ska hamtas fran LunarG:s egen sida
+      # (https://vulkan.lunarg.com/sdk/latest/windows.json och deras sha-fil for installationsfilen) och laggas in har.
+      # OBS: versionen ar vald ur minnet och sha256 ar INTE belagd (LunarG gick inte att na nar steget skrevs): tom
+      # VULKAN_SDK_SHA256 gor att steget bara raknar fram och skriver ut sha256. Fyll i den utskrivna summan nar
+      # den har kontrollerats mot LunarG, sa kontrollerar steget den.
+      VULKAN_SDK_VERSION: "1.4.309.0"
+      VULKAN_SDK_SHA256: ""
       # Actions-maskinens konsol ar inte UTF-8: utan detta kraschar ett Python-skript som skriver a-ring, a-prickar,
       # o-prickar eller pilar till en omdirigerad utskrift med UnicodeEncodeError. Skripten staller dessutom in
       # utskriften sjalva.
@@ -70,7 +77,7 @@ jobs:
         id: tester
         continue-on-error: true
         run: build/venv/Scripts/python -m unittest discover -s tester --durations 15
-      # Bara det kompilerade cachas (nyckel: version + hash av bygg-whisper-cli-windows.sh). C-runtime-filerna, fillistan och
+      # Bara det kompilerade cachas (nyckel: version + hash av bygg-whisper-cli-windows.sh + Vulkan SDK-versionen). C-runtime-filerna, fillistan och
       # beroendekontrollen gors av steget Samla whisper-cli efter varje bygge och varje cachetraff, sa att en rattning i
       # verktygen inte tvingar fram ett nytt bygge av whisper.cpp.
       - name: whisper-cli ur cachen (det kompilerade)
@@ -78,7 +85,28 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: build/whisper/kompilerat
-          key: whisper-cli-win-${{ inputs.whisper_version }}-${{ hashFiles('paketering/bygg-whisper-cli-windows.sh') }}-windows2025
+          key: whisper-cli-win-${{ inputs.whisper_version }}-${{ hashFiles('paketering/bygg-whisper-cli-windows.sh') }}-vulkan${{ env.VULKAN_SDK_VERSION }}-windows2025
+      - name: Vulkan SDK (for bygget av whisper-cli)
+        id: vulkan_sdk
+        if: steps.cli.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          # Tyst installation av bara det som behovs for att bygga (core: headers, vulkan-1.lib, glslc). Ingen tredjepartsaction.
+          FIL="$RUNNER_TEMP/vulkansdk-installation.exe"
+          curl -fsSL --retry 3 -o "$FIL" "https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/windows/vulkansdk-windows-X64-${VULKAN_SDK_VERSION}.exe"
+          SHA="$(sha256sum "$FIL" | cut -d' ' -f1)"
+          echo "sha256 for vulkansdk-windows-X64-${VULKAN_SDK_VERSION}.exe: $SHA"
+          if [ -n "$VULKAN_SDK_SHA256" ]; then
+            [ "$SHA" = "$VULKAN_SDK_SHA256" ] || { echo "FEL: sha256 stammer inte, vantade $VULKAN_SDK_SHA256" >&2; exit 1; }
+            echo "OK: sha256 stammer med den laste"
+          else
+            echo "OBS: ingen last sha256 (VULKAN_SDK_SHA256 ar tom): summan ovan ar inte kontrollerad mot LunarG"
+          fi
+          "$FIL" --accept-licenses --default-answer --confirm-command install com.lunarg.vulkan.core
+          SDK="C:\\VulkanSDK\\${VULKAN_SDK_VERSION}"
+          [ -f "/c/VulkanSDK/${VULKAN_SDK_VERSION}/Bin/glslc.exe" ] || { echo "FEL: glslc.exe saknas efter installationen" >&2; ls -R /c/VulkanSDK | head -50; exit 1; }
+          echo "VULKAN_SDK=$SDK" >> "$GITHUB_ENV"
+          echo "C:\\VulkanSDK\\${VULKAN_SDK_VERSION}\\Bin" >> "$GITHUB_PATH"
       - name: Bygg whisper-cli
         id: bygg_cli
         if: steps.cli.outputs.cache-hit != 'true'

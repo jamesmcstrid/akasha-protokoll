@@ -380,7 +380,7 @@ class WindowsBygget(unittest.TestCase):
         text = las("paketering", "bygg-windows.sh")
         for stycke in ("bygg_windows_verktyg.py", "ikon-1024.png", "-m PyInstaller", "akasha-protokoll.spec", "kontrollera_pe.py",
                        "forbjudet", "exeinfo", "storlekar", "Akasha-Protokoll-windows-x64.zip", "pyinstaller.log",
-                       "build/uppackad/Åsa Ölund", "_internal/whisper/whisper-cli.exe", "ggml-cpu-*.dll"):
+                       "build/uppackad/Åsa Ölund", "_internal/whisper/whisper-cli.exe", "ggml-cpu-*.dll", "ggml-vulkan.dll"):
             self.assertIn(stycke, text)
         self.assertNotIn("sys.frozen", text)
         # kontrollerna stoppar inte vid forsta felet: de gar genom fel(), och skriptet slutar med slutkod 1
@@ -734,8 +734,10 @@ class WindowsFlodet(unittest.TestCase):
         self.assertNotIn('bygg_windows_verktyg.py" runtime', bygg)  # kopieringen ligger i samla
         self.assertNotIn('kontrollera_pe.py"', bygg)
         samla = las("paketering", "samla-whisper-cli-windows.sh")
-        for stycke in ("runtime", "kontrollera_pe.py", "lista", "ggml-cpu-*.dll"):
+        for stycke in ("runtime", "kontrollera_pe.py", "lista", "ggml-cpu-*.dll", "ggml-vulkan.dll"):
             self.assertIn(stycke, samla)
+        self.assertIn("-DGGML_VULKAN=ON", bygg)
+        self.assertIn('FEL: ggml-vulkan.dll byggdes inte', bygg)
 
     def test_signera_finns_men_kors_aldrig(self):
         text = self.text()

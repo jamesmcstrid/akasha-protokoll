@@ -10,6 +10,7 @@ om whisper-cli och modellen finns, annars faster-whisper):
 Ingen sprakmodell rattar eller sammanfattar texten. Det som whisper hor ar det som skrivs.
 """
 import collections
+import datetime
 import importlib.util
 import io
 import json
@@ -28,7 +29,7 @@ import numpy as np
 import ljud
 import modeller
 import plattform
-from installningar import CPU_TRADAR, MODELL, MOTOR, SPRAK, WHISPERCPP_BIN
+from installningar import CPU_TRADAR, GRAFIK, MODELL, MOTOR, SPRAK, WHISPERCPP_BIN
 from modeller import CT2_MODELL, DTW, GGML_MODELL, STORLEKAR
 
 # faster-whisper ska aldrig hamta nagot sjalv: modellerna hamtas bara av modeller.py
@@ -172,11 +173,29 @@ def ord_grans():
     return 0.5 if AKTIV == "whispercpp" else 0.4
 
 
+# Filen i programkatalogen som talar om att grafikkretsen inte fungerade: sa lange den finns skickas -ng.
+GRAFIK_FIL = "grafik-fungerade-inte"
+
+
+def grafik_fil():
+    return os.path.join(plattform.programkatalog(), GRAFIK_FIL)
+
+
+def grafik_aktiv(system=None):
+    """Sant om whisper-cli ska fa anvanda grafikkretsen: GRAFIK=pa, filen grafik-fungerade-inte saknas, och inte Mac
+    (Mac har Metal och styrs inte av GRAFIK)."""
+    system = system or plattform.system()
+    return system != "Darwin" and GRAFIK == "pa" and not os.path.exists(grafik_fil())
+
+
 def modellnamn():
     if AKTIV != "whispercpp":
         return f"KB-Whisper {MODELL}"
-    return f"KB-Whisper {MODELL} (whisper.cpp, Metal)" if plattform.system() == "Darwin" \
-        else f"KB-Whisper {MODELL} (whisper.cpp)"
+    if plattform.system() == "Darwin":
+        return f"KB-Whisper {MODELL} (whisper.cpp, Metal)"
+    if plattform.system() == "Windows" and grafik_aktiv("Windows"):
+        return f"KB-Whisper {MODELL} (whisper.cpp, grafikkretsen)"
+    return f"KB-Whisper {MODELL} (whisper.cpp)"
 
 
 def avkoda(sokvag):
@@ -286,14 +305,17 @@ def standard_tradar(system, logiska):
     return min(logiska, min(8, max(4, logiska - 4)))
 
 
-def cli_kommando(cli, katalog_rel, per_ord, prompt, tradar, system):
+def cli_kommando(cli, katalog_rel, per_ord, prompt, tradar, system, grafik=False):
     """Kommandot for whisper-cli -> (argv, svarsfil_text eller None).
 
     katalog_rel: den tillfalliga katalogen (namnet under MODELLKATALOG). Alla sokvagar i argumenten
     ar relativa till MODELLKATALOG, dar whisper-cli kors. Pa Windows skrivs argumenten i en svarsfil
     (@args.txt i den tillfalliga katalogen, en rad per argument, UTF-8) som whisper-cli laser byte
     for byte, sa att prompten kommer fram som UTF-8; argv ar da bara [cli, "@..."] och svarsfil_text
-    ar filens innehall. Pa Mac och Linux skickas argumenten som vanligt och svarsfil_text ar None."""
+    ar filens innehall. Pa Mac och Linux skickas argumenten som vanligt och svarsfil_text ar None.
+
+    grafik: sant om whisper-cli far anvanda grafikkretsen (grafik_aktiv()). Annars skickas -ng, pa alla system
+    utom Mac (Mac har Metal och fortsatter som forut)."""
     modell = os.path.relpath(GGML_MODELL, modeller.MODELLKATALOG)
     cmd = [
         cli,
@@ -312,6 +334,8 @@ def cli_kommando(cli, katalog_rel, per_ord, prompt, tradar, system):
         tradar = standard_tradar(system, os.cpu_count())
     if tradar:
         cmd += ["-t", str(tradar)]
+    if not grafik and system != "Darwin":
+        cmd.append("-ng")
     if per_ord:
         # Ett segment per ord. whisper.cpp:s vanliga ordtider ar ungefarliga (ett ord kunde
         # hamna 0,6 s fel, sa att det fick fel talare). DTW ger tider som stammer med
@@ -368,7 +392,38 @@ def _far_sparas(rad, kansliga):
     return not any(w in liten for w in kansliga)
 
 
+def _skriv_grafik_fil(orsak, sista_rad):
+    """Skriver grafik-fungerade-inte: datum, orsaken och sista diagnosraden. Kastar aldrig."""
+    try:
+        with open(grafik_fil(), "w", encoding="utf-8", newline="\n") as f:
+            f.write(f"{datetime.date.today().isoformat()}\n{orsak}\n{(sista_rad or '-')[:300]}\n")
+    except OSError as e:
+        log.warning("kunde inte skriva %s: %s", GRAFIK_FIL, e)
+
+
 def _whispercpp(samples, per_ord, prompt, framsteg):
+    """whisper-cli. Med grafiken pa: ett fel, eller inga ord ur ett ljud over 5 s, ger ett nytt forsok med -ng
+    (och filen grafik-fungerade-inte, sa att nasta korning gar direkt pa processorn). Avbrott ger aldrig det."""
+    grafik = grafik_aktiv()
+    if not grafik:
+        return _whispercpp_en_gang(samples, per_ord, prompt, framsteg, False)[:3]
+    try:
+        text, segs, tider, sista_rad = _whispercpp_en_gang(samples, per_ord, prompt, framsteg, True)
+        if text.strip() or len(samples) / SR <= 5 or _avslutas:
+            return text, segs, tider
+        orsak = f"whisper-cli gav kod 0 men inga ord for {len(samples) / SR:.0f} s ljud"
+    except MotorFel as e:
+        if getattr(e, "cli_kod", None) is None:  # Avbruten, ett JSON-fel eller annat: inget nytt forsok
+            raise
+        orsak, sista_rad = f"whisper-cli avslutades med kod {e.cli_kod}", e.sista_rad
+    log.info("grafikkretsen fungerade inte (%s): %s skrivs och samma transkribering kors om med processorn (-ng)",
+             orsak, GRAFIK_FIL)
+    _skriv_grafik_fil(orsak, sista_rad)
+    return _whispercpp_en_gang(samples, per_ord, prompt, framsteg, False)[:3]
+
+
+def _whispercpp_en_gang(samples, per_ord, prompt, framsteg, grafik):
+    """En korning av whisper-cli -> (text, segment, ord, sista diagnosraden)."""
     global _process
     cli = plattform.whisper_cli()
     if cli is None:
@@ -383,7 +438,7 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
             f.write(wav_16k_mono(samples))
         ut = os.path.join(katalog, "ut")  # whisper-cli lagger till .json
         cmd, svarsfil = cli_kommando(cli, os.path.basename(katalog), per_ord, prompt, CPU_TRADAR,
-                                     plattform.system())
+                                     plattform.system(), grafik)
         if svarsfil is not None:
             with open(os.path.join(katalog, "args.txt"), "w", encoding="utf-8", newline="\n") as f:
                 f.write(svarsfil)
@@ -421,7 +476,9 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
         if kod != 0 and _avslutas:
             raise Avbruten("stoppad")
         if kod != 0:
-            raise MotorFel(f"whisper-cli avslutades med kod {p.returncode}: " + " | ".join(sista))
+            fel = MotorFel(f"whisper-cli avslutades med kod {p.returncode}: " + " | ".join(sista))
+            fel.cli_kod, fel.sista_rad = kod, (sista[-1] if sista else "")  # for aterfallet till processorn
+            raise fel
         try:
             with open(ut + ".json", "rb") as f:
                 # strict=False: whisper-cli escapar bara " och \ i texten, inte radbrytningar.
@@ -435,11 +492,11 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
     tider = [(s["offsets"]["from"] / 1000, s["offsets"]["to"] / 1000, s.get("text", "")) for s in raw]
     if per_ord:
         tider = dtw_ordtider(raw) or tider
-        return text, _ord_till_segment(tider), tider
+        return text, _ord_till_segment(tider), tider, sista[-1] if sista else ""
     segs = [
         {"start": round(a, 2), "end": round(b, 2), "text": t.strip()} for a, b, t in tider if t.strip()
     ]
-    return text, segs, []
+    return text, segs, [], sista[-1] if sista else ""
 
 
 SKILJETECKEN = set(".,!?;:…\"'()-–")

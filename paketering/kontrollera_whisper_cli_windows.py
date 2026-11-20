@@ -336,6 +336,43 @@ class Kontroll:
                     os.remove(rest)
         os.remove(wav)
 
+    def steg_8_grafik(self):
+        self.res.steg("8. Vulkan: ggml-vulkan.dll och transkribering med GRAFIK=pa utan grafikkort")
+        dll = os.path.join(os.path.dirname(self.cli), "ggml-vulkan.dll")
+        if os.name == "nt" or os.path.exists(dll):
+            self.res.kontrollera(os.path.isfile(dll), f"ggml-vulkan.dll finns bredvid {os.path.basename(self.cli)}",
+                                 f"ggml-vulkan.dll saknas bredvid {os.path.basename(self.cli)}: bygget gjordes utan Vulkan")
+        else:
+            self.res.info("ggml-vulkan.dll kontrolleras bara på Windows")
+        if not self.modell_pa_plats or self.samples is None:
+            self.res.fel("hoppas över: modellen eller testljudet saknas (se stegen ovan)")
+            return
+        # Maskinen saknar grafikkort: whisper.cpp ska inte kunna ladda Vulkan och ska anvanda processorn, sa att
+        # transkriberingen lyckas anda. Filen grafik-fungerade-inte laggs i arbetskatalogen, inte i en riktig programkatalog.
+        fil = os.path.join(self.arb, KATALOGNAMN, motor.GRAFIK_FIL)
+        if os.path.exists(fil):
+            os.remove(fil)
+        gammal = (motor.GRAFIK, motor.grafik_fil)
+        motor.GRAFIK, motor.grafik_fil = "pa", lambda: fil
+        try:
+            self.res.kontrollera(motor.grafik_aktiv(plattform.system()) == (plattform.system() != "Darwin"),
+                                 "GRAFIK=pa ger grafik_aktiv() (utom på Mac)", "GRAFIK=pa gav inte grafik_aktiv()")
+            text, _, tider = motor._whispercpp(self.samples, True, PROMPT, None)
+        except Exception as e:
+            self.res.fel(f"transkribering med GRAFIK=pa kastade {type(e).__name__}: {e}")
+            return
+        finally:
+            motor.GRAFIK, motor.grafik_fil = gammal
+        self.res.kontrollera(bool(text.strip()) and len(tider) >= 5,
+                             f"transkribering med GRAFIK=pa lyckades ({len(tider)} ord, {len(text)} tecken)",
+                             "transkribering med GRAFIK=pa gav ingen text")
+        if os.path.exists(fil):
+            with open(fil, encoding="utf-8") as f:
+                self.res.info("whisper-cli fick gå tillbaka till processorn med -ng (filen skrevs): "
+                              + " | ".join(f.read().splitlines()))
+        else:
+            self.res.ok("ingen återgång behövdes: whisper.cpp använde processorn själv")
+
     @staticmethod
     def visa_utdrag(text, kod):
         """Kod, om modellen laddades och de rader som behovs for att lasa av steget."""
@@ -378,7 +415,7 @@ def main(argv=None):
         k.res.fel("kunde inte importera app/ (numpy och PyAV behövs: kör med byggets venv)")
         return k.res.sammanfatta()
     for steg in (k.steg_1_beroenden, k.steg_2_flaggor, k.steg_3_modell, k.steg_4_ljud, k.steg_5_system_info,
-                 k.steg_6_transkribering, k.steg_7_dtw_forval):
+                 k.steg_6_transkribering, k.steg_7_dtw_forval, k.steg_8_grafik):
         try:
             steg()
         except Exception as e:

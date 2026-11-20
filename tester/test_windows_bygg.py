@@ -95,6 +95,15 @@ class BeroendeLogik(unittest.TestCase):
         self.assertEqual(r.fel, [])
         self.assertEqual(len(r.system), 6)
 
+    def test_vulkan_1_ar_system_dll_men_ggml_vulkan_levereras_av_oss(self):
+        t = trad({"ggml-vulkan.dll": info(["vulkan-1.dll", "KERNEL32.dll"])})
+        r = pe.kontrollera(t)
+        self.assertEqual(r.fel, [])
+        self.assertIn("vulkan-1", r.system)
+        # ggml-vulkan.dll som saknas i paketet hittas inte hos System32
+        t = trad({"a.dll": info(["ggml-vulkan.dll"])})
+        self.assertEqual(len(pe.kontrollera(t, system_stammar={"ggml-vulkan"}).fel), 1)
+
     def test_c_runtimen_ar_aldrig_windows_egen_ens_med_system_katalog(self):
         t = trad({"a.dll": info(["vcruntime140.dll", "MSVCP140.dll", "vcomp140.dll"])})
         stammar = {"vcruntime140", "msvcp140", "vcomp140", "kernel32"}
