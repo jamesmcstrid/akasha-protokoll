@@ -133,7 +133,9 @@ ikonen för att öppna sidan igen. Avsluta med **⌘Q** eller genom att högerkl
 **Har du installerat från Terminal tidigare** frågar programmet om det ska ta över. Då stängs den
 gamla installationen av och startar inte längre när du loggar in. Inspelningarna i `~/AkashaMeet`
 och modellerna du redan har används av programmet, så ingenting hämtas igen. Vill du ha tillbaka den
-gamla kör du `bash mac/installera.sh` igen. Ligger den gamla mappen i Hämtade filer, Dokument eller Skrivbord letar programmet inte efter modeller där (macOS skulle annars fråga om lov), utan erbjuder att hämta dem. Flytta mappen till hemkatalogen först om du vill slippa hämta igen.
+gamla kör du `bash mac/installera.sh` igen. Ligger den gamla mappen i Hämtade filer, Dokument eller
+Skrivbord letar programmet inte efter modeller där (macOS skulle annars fråga om lov), utan erbjuder
+att hämta dem. Flytta mappen till hemkatalogen först om du vill slippa hämta igen.
 
 ### Från Terminal
 
@@ -148,7 +150,10 @@ cd ~/akasha-meet
 bash mac/installera.sh
 ```
 
-Mappen ska ligga direkt i din hemkatalog, som `~/akasha-meet` ovan, och inte i Hämtade filer, Dokument, Skrivbord eller iCloud Drive. Där låter macOS inte bakgrundstjänster läsa, och installationen säger ifrån. Har du laddat ned repot som zip-fil, flytta den uppackade mappen till hemkatalogen innan du kör installationen.
+Mappen ska ligga direkt i din hemkatalog, som `~/akasha-meet` ovan, och inte i Hämtade filer,
+Dokument, Skrivbord eller iCloud Drive. Där låter macOS inte bakgrundstjänster läsa, och
+installationen säger ifrån. Har du laddat ned repot som zip-fil, flytta den uppackade mappen till
+hemkatalogen innan du kör installationen.
 
 Installationen skapar en Python-miljö och laddar ner modellerna (cirka 1,6 GB, bara första gången).
 På Apple Silicon installerar den också `whisper-cpp` via Homebrew, så att grafikprocessorn används.

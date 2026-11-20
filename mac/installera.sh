@@ -24,7 +24,12 @@ command -v "$PY" >/dev/null || { echo "FEL: $PY saknas. Kor: brew install python
 VERKLIG="$(cd "$REPO" && pwd -P)"
 SKYDDAD="$("$PY" -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import plattform; print(plattform.skyddad_plats(sys.argv[2]) or "")' "$REPO/app" "$VERKLIG")"
 if [ -n "$SKYDDAD" ]; then
-  MAL="$HOME/akasha-meet"; [ -e "$MAL" ] && MAL="$HOME/akasha-meet-ny"
+  # forsta lediga namn: akasha-meet, akasha-meet-ny, akasha-meet-ny2, ...
+  MAL="$HOME/akasha-meet"; N=1
+  while [ -e "$MAL" ]; do
+    if [ "$N" -eq 1 ]; then MAL="$HOME/akasha-meet-ny"; else MAL="$HOME/akasha-meet-ny$N"; fi
+    N=$((N + 1))
+  done
   RUBRIK="Gor sa har:"
   FINNS=""
   if [ -f "$HOME/akasha-meet/mac/installera.sh" ]; then
