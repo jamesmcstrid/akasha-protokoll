@@ -204,6 +204,18 @@ Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-2
   testljud med en liten modell, med ordtider från DTW (42 ord). Metal fanns på Actions-maskinen
   (en paravirtuell GPU) och kompilerade sina bibliotek första gången (23 s); hur lång tid det tar
   på en riktig Mac är inte mätt.
+- **Uppmätt i andra körningen (2026-11-20).** Enhetstesterna på macOS gav 261 tester, OK, fyra
+  överhoppade, och inga `Bad file descriptor` vid avslut (det som syntes i första körningen är
+  rättat). Ett enda test tog 36 s: det första som skapar en testserver med `http.server`, vars
+  `server_bind()` slår upp maskinens namn. Tolkningen, som inte är bevisad, är att namnuppslaget är
+  långsamt på Actions-maskinen; testservern slår därför inte längre upp något namn, och programmet
+  berörs inte (det använder waitress). `whisper-cli` byggdes igen från samma commit `d1be6fde…`.
+  Metal-biblioteken kompilerades på 18,9 s första gången (23 s i första körningen), och den lilla
+  transkriberingen tog 8 s. DTW-förvalen `medium` och `large.v3` godtas av v1.9.5: ett påhittat
+  förval ger `error: unknown DTW preset` innan modellen laddas, medan `medium` och `large.v3`
+  laddar modellen och sedan misslyckas som väntat, eftersom ordtidshuvudena inte passar den lilla
+  provmodellen. Programkontrollen: `/health` svarade efter 2,8 s, röstmodellen hämtades på 8,7 s,
+  zip-filen är 49 MB, 164 Mach-O-filer och signaturen är ad hoc.
 
 ## Talaruppdelningen
 
