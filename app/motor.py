@@ -23,6 +23,7 @@ import wave
 
 import numpy as np
 
+import ljud
 import modeller
 import plattform
 from installningar import CPU_TRADAR, MODELL, MOTOR, SPRAK, WHISPERCPP_BIN
@@ -133,17 +134,13 @@ def modellnamn():
 
 
 def avkoda(sokvag):
-    """Valfritt ljudformat -> float32, 16 kHz mono. PyAV (samma som faster-whisper anvander)."""
-    from faster_whisper.audio import decode_audio
-
-    return decode_audio(sokvag, sampling_rate=SR)
+    """Valfritt ljudformat -> float32, 16 kHz mono. PyAV, via ljud.py."""
+    return ljud.avkoda(sokvag, SR)
 
 
 def avkoda_kanaler(sokvag):
     """-> (vanster, hoger), float32, 16 kHz. En monofil ger tva lika kanaler."""
-    from faster_whisper.audio import decode_audio
-
-    return decode_audio(sokvag, sampling_rate=SR, split_stereo=True)
+    return ljud.avkoda(sokvag, SR, stereo=True)
 
 
 def transkribera(samples, per_ord=False, prompt="", framsteg=None):

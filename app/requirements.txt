@@ -6,3 +6,7 @@ requests==2.34.2
 sherpa-onnx==2.0.1
 # Anvands direkt av app/ (motor, talare). Kom tidigare bara med faster-whisper.
 numpy==2.5.5
+# Avkodar ljud (ljud.py). Kom tidigare bara med faster-whisper; 12.3.0 uppfyller dess krav (<13).
+av==12.3.0
+# Operativsystemets certifikat nar modellerna hamtas (modeller.ny_session).
+truststore==0.10.5
