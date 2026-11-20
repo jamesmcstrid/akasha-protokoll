@@ -1,13 +1,12 @@
 <!-- Akasha Meet: flikikon, elefanthuvud. Ritad för projektet. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <ellipse cx="13" cy="29" rx="12" ry="15" fill="#c4553a"/>
-  <ellipse cx="51" cy="29" rx="12" ry="15" fill="#c4553a"/>
-  <ellipse cx="14" cy="30" rx="7.5" ry="10" fill="#e3916f"/>
-  <ellipse cx="50" cy="30" rx="7.5" ry="10" fill="#e3916f"/>
-  <ellipse cx="32" cy="28" rx="15" ry="16" fill="#c4553a"/>
-  <path d="M32 38 C 32 47, 31 53, 37 55 C 40 56, 41 53, 39 52" fill="none" stroke="#c4553a" stroke-width="7" stroke-linecap="round"/>
-  <circle cx="26" cy="26" r="2.2" fill="#2a2420"/>
-  <circle cx="38" cy="26" r="2.2" fill="#2a2420"/>
-  <circle cx="23" cy="33" r="2.6" fill="#e3916f" opacity="0.7"/>
-  <circle cx="41" cy="33" r="2.6" fill="#e3916f" opacity="0.7"/>
+  <rect width="64" height="64" rx="14" fill="#0c3b2e"/>
+  <g transform="translate(5 7) scale(0.84)">
+    <ellipse cx="13" cy="29" rx="12" ry="15" fill="#cdf24f"/>
+    <ellipse cx="51" cy="29" rx="12" ry="15" fill="#cdf24f"/>
+    <ellipse cx="32" cy="28" rx="15" ry="16" fill="#cdf24f"/>
+    <path d="M32 38 C 32 47, 31 53, 37 55" fill="none" stroke="#cdf24f" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="26" cy="26" r="2.2" fill="#0c3b2e"/>
+    <circle cx="38" cy="26" r="2.2" fill="#0c3b2e"/>
+  </g>
 </svg>
