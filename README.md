@@ -179,19 +179,55 @@ fylls på, med bilder, när programmet har provats på en riktig dator. Programm
 64-bitars Windows (x64). Vilka versioner av Windows det fungerar på är inte provat.
 
 1. Öppna repot på GitHub (du måste vara inloggad), gå till **Actions → Windows-app**, välj den senaste
-   gröna körningen och ladda ned **Akasha-Protokoll-windows-x64.zip** under **Artifacts**. Filen sparas
-   bara i sju dagar i Actions. Är den borta behövs en ny körning.
-2. Högerklicka på zip-filen och välj **Extrahera alla…**. Följ rutan som öppnas. Mappen **Akasha Protokoll**
-   som då skapas är programmet: lägg den där den får ligga kvar. Starta inte programmet inifrån
-   zip-filen. Det behöver filerna i mappen bredvid sig.
-3. Öppna mappen **Akasha Protokoll** och dubbelklicka på **Akasha Protokoll.exe**. Första gången brukar
-   Windows varna för program som det inte känner igen, särskilt filer som hämtats från internet. Den här
-   varningen beror på att programmet inte är signerat. Rutan har en länk för mer information, och efter
-   den en knapp för att köra programmet ändå. Vad rutan och knapparna heter på svenska är inte sett än och
-   skrivs hit när programmet har provats. Ser du ingen sådan knapp, se Felsökning nedan.
+   gröna körningen och ladda ned **Akasha-Protokoll-installation.exe** under **Artifacts**. Filen sparas
+   bara i sju dagar i Actions. Är den borta behövs en ny körning. Under Artifacts ligger också
+   `SHA256SUMS.txt` (se Kontrollera nedladdningen nedan) och zip-filen, om du hellre vill slippa
+   installera (se längre ned).
+2. Dubbelklicka på filen. Första gången brukar Windows varna för program som det inte känner igen,
+   särskilt filer som hämtats från internet. Den här varningen beror på att programmet inte är
+   signerat. Rutan har en länk för mer information, och efter den en knapp för att köra ändå. Vad rutan
+   och knapparna heter på svenska är inte sett än och skrivs hit när installationsfilen har provats på en
+   riktig dator. Ser du ingen sådan knapp, se Felsökning nedan.
+3. Installationsguiden är på svenska. Programmet installeras bara för ditt konto, utan administratörsrätt,
+   i `%LOCALAPPDATA%\Programs\Akasha Protokoll`, och du får inte välja någon annan mapp. Du får läsa
+   licensen ("Läs licensen nedan innan du fortsätter. Andra delar av programmet har egna licenser."). Du kan
+   kryssa i **Skapa en genväg på skrivbordet** (den är inte ikryssad från början). Genvägen
+   **Akasha Protokoll** läggs alltid i Start-menyn. Sist kan du låta kryssrutan **Starta Akasha Protokoll**
+   vara ikryssad, så startar programmet när guiden är klar.
 4. Ikonen kommer upp vid klockan och sidan öppnas av sig själv, så snart programmet har startat.
    Sidan erbjuder att hämta modellerna (cirka 1,6 GB, bara första gången). Att hämta modellerna är
    inte provat på Windows än.
+
+Hur guiden ser ut och fungerar med mus och tangentbord är inte provat på en riktig dator: det som är provat
+är en tyst installation på byggmaskinen (se docs/TEKNIK.md).
+
+**Uppdatera:** kör den nya installationsfilen. Är Akasha Protokoll igång säger guiden till: "Installationsprogrammet
+har upptäckt att Akasha Protokoll är igång. Avsluta det angivna programmet nu. Klicka sedan på OK för att gå vidare
+eller på Avbryt för att avsluta." Avsluta programmet (högerklicka på ikonen vid klockan och välj
+**Avsluta Akasha Protokoll**) och klicka på OK. Guiden stänger inte programmet själv, eftersom en inspelning kan
+pågå. Uppdatering från en äldre installation är inte provad.
+
+**Avinstallera:** Inställningar → Appar → Akasha Protokoll (inte provat). Bara programmet och genvägarna tas bort.
+Slutrutan säger: "Dina inspelningar ligger kvar i mappen AkashaProtokoll i din hemkatalog, och modellerna i
+%LOCALAPPDATA%\Akasha Protokoll. Ta bort dem själv om du inte vill ha dem." Inställningarna ligger i samma mapp
+som modellerna och tas inte heller bort.
+
+**Utan installation (zip-filen):** ladda ned **Akasha-Protokoll-windows-x64.zip** i stället. Högerklicka på den och
+välj **Extrahera alla…**. Följ rutan som öppnas. Mappen **Akasha Protokoll** som då skapas är programmet: lägg den
+där den får ligga kvar, och starta inte programmet inifrån zip-filen. Det behöver filerna i mappen bredvid sig.
+Öppna mappen och dubbelklicka på **Akasha Protokoll.exe**. Windows varnar på samma sätt som ovan.
+
+**Kontrollera nedladdningen:** varje körning lägger också en fil, `SHA256SUMS.txt`, bland artefakterna. Den har
+en kontrollsumma (SHA-256) för zip-filen och för installationsfilen. Är du osäker på att filen är orörd, jämför
+summan. Öppna PowerShell och skriv, om filen ligger i Hämtade filer:
+
+```powershell
+Get-FileHash "$HOME\Downloads\Akasha-Protokoll-installation.exe" -Algorithm SHA256
+```
+
+Summan som visas ska vara densamma som på raden för filen i `SHA256SUMS.txt`. Stora och små bokstäver spelar
+ingen roll. Kontrollsumman visar att filen inte har ändrats på vägen eller blivit skadad, men inte vem som har
+byggt den: den kommer från samma körning, så den ersätter ingen signering. Mac-programmet har ingen sådan fil.
 
 **Igång och avsluta på Windows:** när Akasha Protokoll är igång finns en ikon vid klockan, längst ned i
 aktivitetsfältet. Syns den inte, klicka på pilen **^** vid klockan: Windows lägger ofta nya ikoner där.
@@ -322,7 +358,8 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 | "Operation not permitted" i loggen, eller installationen säger att mappen ligger fel | Mappen med Akasha Protokoll ligger där macOS inte låter bakgrundstjänster läsa (Hämtade filer, Dokument, Skrivbord, iCloud Drive). Flytta den till hemkatalogen, ta bort mappen `venv` i den, och kör `bash mac/installera.sh` igen. Modellerna och .env följer med. |
 | "Akasha Protokoll svarar inte" | Programmet har avslutats eller stannat. Öppna Akasha Protokoll igen. Från Terminal: tjänsten startar av sig själv när du loggar in, så logga ut och in igen, eller kör `launchctl kickstart -k gui/$(id -u)/local.akasha-meet` i Terminal. Det du redan spelat in ligger kvar. Sidan märker själv när Akasha Protokoll är igång igen. |
 | Windows: sidan öppnas inte, eller sidan säger att Akasha Protokoll inte svarar | Titta efter ikonen vid klockan, kanske bakom pilen **^**. Finns den inte har programmet avslutats: starta **Akasha Protokoll.exe** igen. Det du redan spelat in ligger kvar. Finns ikonen, högerklicka och välj **Öppna Akasha Protokoll i webbläsaren**. Håller programmet på att starta och du startar det en gång till väntar den andra kopian högst 30 sekunder och öppnar sedan sidan. Svarar programmet inte alls visas rutan **Akasha Protokoll startar redan**: vänta en stund och försök igen, och hjälper det inte, starta om datorn. Loggen ligger i `%LOCALAPPDATA%\Akasha Protokoll\logg\akasha-protokoll.log` (öppnas i Anteckningar) |
-| Windows: programmet startar inte, eller Windows säger att en fil saknas | Kontrollera att du har packat upp hela zip-filen med **Extrahera alla…** och att du startar **Akasha Protokoll.exe** i den uppackade mappen, inte inifrån zip-filen. Flytta inte bara `.exe`-filen: mappen `_internal` måste ligga bredvid den |
+| Windows: guiden säger att Akasha Protokoll är igång | Installationsfilen ser att programmet kör (ikonen vid klockan, kanske bakom pilen **^**). Högerklicka på ikonen, välj **Avsluta Akasha Protokoll** och klicka sedan på OK i guiden. Guiden stänger inte programmet själv, eftersom en inspelning kan pågå |
+| Windows: programmet startar inte, eller Windows säger att en fil saknas (zip-filen) | Kontrollera att du har packat upp hela zip-filen med **Extrahera alla…** och att du startar **Akasha Protokoll.exe** i den uppackade mappen, inte inifrån zip-filen. Flytta inte bara `.exe`-filen: mappen `_internal` måste ligga bredvid den |
 | Windows varnar när du startar programmet | Programmet är inte signerat, så Windows (SmartScreen) brukar varna första gången. Rutan har en länk för mer information och därefter en knapp för att köra ändå. Namnen på dem är inte sedda än och skrivs hit när programmet har provats på en riktig Windows-dator |
 | Windows blockerar programmet och det finns ingen knapp för att köra ändå | Det kan bero på Smart App Control (i Windows 11) eller på regler på en jobbdator. Inget av det är provat här. Skriv ned vad rutan säger och säg till. Försök inte ta dig runt reglerna på en jobbdator: fråga IT om de kan godkänna programmet. Det lyssnar bara på `127.0.0.1` och använder internet bara för att hämta modellerna |
 | Windows-säkerhet (Defender) säger att filen är ett hot, eller tar bort den | Program som byggs med samma verktyg som det här flaggas ibland av virusskydd, oftast felaktigt (uppgift ur forum, inte från Microsoft; det har inte hänt här än). Skriv ned vad Windows-säkerhet säger (hotets namn och filen), återställ filen under Skyddshistorik bara om du har hämtat den från repots egen sida, och säg till |

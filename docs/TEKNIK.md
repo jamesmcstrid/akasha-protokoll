@@ -254,9 +254,10 @@ har inte körts på en vanlig Windows-dator.**
   varje cacheträff. `bygg-windows.sh` gör ikonen (`.ico`) och versionsresursen, kör PyInstaller i katalogläge med
   `akasha-protokoll.spec` (samma spec-fil som Mac och Linux, med `windows_app.py` som startfil och
   `console=False`, alltså ett fönsterprogram utan konsol), kontrollerar innehållet och beroendena, och packar
-  zip-filen och en uppackad kopia. Artefakten är `Akasha-Protokoll-windows-x64.zip`, uppladdad som den är
+  zip-filen och en uppackad kopia. Artefakterna är `Akasha-Protokoll-windows-x64.zip`,
+  `Akasha-Protokoll-installation.exe` och `SHA256SUMS.txt`, var och en uppladdad som den är
   (`archive: false`) och sparad i sju dagar. Det finns ett jobb `signera`, men det körs aldrig
-  (`if: false`) och har inga steg: programmet är inte signerat.
+  (`if: false`) och har bara ett platshållarsteg: programmet är inte signerat.
 - **Vad som följer med.** Det som följer med Mac-programmet, utom PyObjC och Mac-versionen av
   `whisper-cli`, och i stället pystray och Pillow för ikonen. `whisper-cli.exe` ligger i
   `_internal\whisper\` med `whisper.dll`, `ggml.dll`, `ggml-base.dll`, de nio `ggml-cpu-*.dll` och
@@ -326,13 +327,59 @@ har inte körts på en vanlig Windows-dator.**
   testljudet med två talare. Enhetstesterna körs också på Windows vid varje push (487 tester); bland dem
   barnprocessen som dör vid `TerminateProcess`, en kopia åt gången, datorn som hålls vaken och svarsfilen med
   en modellkatalog under `Åsa Ölund`.
+- **Installationsfilen.** `Akasha-Protokoll-installation.exe` byggs efter zip-kontrollen av
+  `paketering/bygg_installation.py`, som letar upp `ISCC.exe` (Inno Setup 6) och kompilerar
+  `paketering/akasha-protokoll.iss` ur `dist\Akasha Protokoll\`, med versionen `0.2.0.<byggnummer>`. Skriptet
+  installerar per användare med `PrivilegesRequired=lowest`, alltså utan administratörsrätt och utan
+  UAC-ruta, till `{localappdata}\Programs\Akasha Protokoll` (`DisableDirPage=yes`: ingen väljer en mapp
+  med annat i; `/DIR=` på kommandoraden gäller ändå, och kontrollen använder det). Det är bara för x64
+  (`ArchitecturesAllowed=x64compatible`, `MinVersion=10.0`), har ett fast `AppId`, utgivaren Dennis Fredin,
+  licenssidan med `LICENSE`, en uppgift `desktopicon` (av från början) och genvägen i Start-menyn, och en
+  rad under `[Run]` för att starta programmet efteråt (inte i tyst läge). `AppMutex=Local\AkashaProtokoll` är
+  samma mutex som skalet skapar (`windows_app.MUTEX`): är programmet igång ber installationen och
+  avinstallationen användaren avsluta det, och stänger det inte själva (`CloseApplications=no`, eftersom en
+  inspelning kan pågå). Avinstallationen tar bort `_internal` (som PyInstaller kan ha lagt filer i
+  efter installationen) men aldrig `{app}` med allt innehåll, så att andras filer klarar den, och rör aldrig
+  inspelningarna eller `%LOCALAPPDATA%\Akasha Protokoll`; slutrutan säger det. Texterna är på svenska
+  (`Swedish.isl`, en inofficiell översättning som följer med Inno Setup om den installationen har den; annars
+  används den engelska språkfilen och texterna i `[Messages]` och `[Tasks]` är ändå svenska). Inget
+  av detta har körts med mus och tangentbord.
+- **Kontrollen av installationen.** `kontrollera_installation.py` körs bara i Actions
+  (`GITHUB_ACTIONS=true`), eftersom den installerar och avinstallerar för den inloggade användaren med samma
+  `AppId` som en riktig installation och skriver i de riktiga mapparna. Den gör en tyst installation
+  (`/VERYSILENT`) till en katalog med å, ä, ö och mellanslag och kontrollerar filerna, genvägen i Start-menyn
+  och posten i Windows applista (`DisplayName`, `DisplayVersion`, `Publisher`). Med programmet igång
+  provar den mutexen: installationsfilen ska avbryta i tyst läge med kod 1 och inte stänga programmet.
+  `kontrollera.py` körs mot det installerade programmet. Sist avinstallerar den tyst och kontrollerar att
+  programmets filer, genvägen och posten är borta, medan en främmande fil som kontrollen lade i
+  installationskatalogen, `AkashaProtokoll` i hemkatalogen och `%LOCALAPPDATA%\Akasha Protokoll\modeller`
+  ligger kvar.
+- **Kontrollsummor.** `kontrollsummor.py` skriver `SHA256SUMS.txt` i `sha256sum`-format (summan, två mellanslag
+  och filnamnet) för zip-filen och installationsfilen, och skriver ut hela filen i jobbloggen. Filen laddas
+  upp som en egen artefakt. Mac-flödet skriver ingen sådan fil. Summan visar att filen är orörd, inte vem
+  som byggt den.
 - **Vad kontrollen inte visar.** Att SmartScreen, Smart App Control eller Defender släpper igenom ett
   nedladdat, osignerat program. Att en riktig KB-Whisper-modell transkriberar på Windows, och hur lång tid
   det tar. Hur rutorna, menyn och notisen ser ut, om ikonen syns vid klockan (loggraden `win: ikonen visas`
   säger bara att anropet gick igenom på byggmaskinen), och att inget svart fönster blinkar förbi.
   Mikrofonen i webbläsaren på Windows, "Visa i Utforskaren", ett riktigt konto med å, ä eller ö i namnet,
-  och utloggning medan programmet kör. Hämtningen av KB-Whisper (1,5 GB) har inte gjorts på Windows.
-- **Uppmätt på byggmaskinen (körningarna 1–3 av flödet).** Maskinen var Windows Server 2025 (10.0.26100),
+  och utloggning medan programmet kör. Att installationsguiden fungerar med mus och tangentbord på en riktig
+  dator, vad Windows säger om installationsfilen (SmartScreen m.m.), uppdatering från en äldre installation
+  och avinstallation via Inställningar → Appar. Hämtningen av KB-Whisper (1,5 GB) har inte gjorts på Windows.
+- **Uppmätt på byggmaskinen, installationsfilen (körningarna 4–6).** Inno Setup 6.7.1 fanns på
+  byggmaskinen, med den svenska språkfilen, och guiden är på svenska. Kompileringen tog cirka 40 s.
+  Installationsfilen blev 48 474 168 byte (körning 6), version 0.2.0.<byggnummer>, utgivare Dennis Fredin. Den
+  tysta installationen till `…\Installerat Åäö\Akasha Protokoll` gav 290 filer, 185,2 MB, genvägen i
+  Start-menyn och en post i applistan (`DisplayName=Akasha Protokoll`, `DisplayVersion=0.2.0.6`,
+  `Publisher=Dennis Fredin`). `kontrollera.py` godtog det installerade programmet (`/health` efter
+  1,7–2,5 s, ikonen, andra kopian, avslutet). Mutexprovet: med programmet igång avbröt installationsfilen i tyst
+  läge med kod 1 och stängde inte programmet; guidens text i det läget, ur Inno Setups logg, var
+  "Installationsprogrammet har upptäckt att Akasha Protokoll är igång. Avsluta det angivna programmet nu.
+  Klicka sedan på OK för att gå vidare eller på Avbryt för att avsluta." Avinstallationen tog bort
+  `Akasha Protokoll.exe`, `_internal`, genvägen och posten, och lämnade den främmande filen,
+  `AkashaProtokoll` i hemkatalogen och `modeller`. Hela flödet med installationsfilen och cacheträff tog 3 min 45 s till
+  3 min 48 s.
+- **Uppmätt på byggmaskinen, programmet (körningarna 1–3 av flödet).** Maskinen var Windows Server 2025 (10.0.26100),
   Visual Studio 2026 (18.12) med MSVC 19.52.37029, CMake 4.5.0 och Python 3.12.10, med 2 kärnor och 8 GB
   minne. whisper.cpp byggdes på 5 min 22 s, och hela flödet tog 7 min 49 s och 9 min 16 s när whisper.cpp
   byggdes och 2 min 54 s ur cachen. Programmet är 180,7 MB uppackat (288 filer), zip-filen är 70 589 058 byte och
@@ -562,7 +609,8 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 **Inte provat än:**
 
 - programmet på en riktig Mac: tider för en längre inspelning (inte mätta) och avslut mitt i en transkribering (Gatekeeper, övertagande, första start, hämtning, en kort transkribering och loggfilen är provade, se ovan);
-- Windows-programmet på en riktig Windows-dator: SmartScreen, Smart App Control och Defender med ett nedladdat
+- Windows-programmet på en riktig Windows-dator: guiden med mus och tangentbord, varningen från Windows för
+  installationsfilen, uppdatering från en äldre installation, avinstallation via Inställningar, SmartScreen, Smart App Control och Defender med ett nedladdat
   program, en riktig transkribering med KB-Whisper och hur lång tid den tar, rutorna, menyn och notisen (och att
   inget svart fönster blinkar förbi), mikrofonen i webbläsaren, "Visa i Utforskaren", ett riktigt konto med å, ä
   eller ö i namnet och utloggning medan programmet kör (det som är provat står under Programmet (Windows));
