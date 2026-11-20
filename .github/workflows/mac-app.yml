@@ -1,0 +1,88 @@
+name: Mac-app
+on:
+  workflow_dispatch:
+    inputs:
+      whisper_version:
+        description: "whisper.cpp-version (tagg)"
+        type: string
+        default: "v1.9.5"
+permissions:
+  contents: read
+concurrency:
+  group: mac-app
+  cancel-in-progress: true
+jobs:
+  bygg:
+    # Kostar som tio Linux-jobb medan repot ar privat: bara for hand. Fast etikett, sa att
+    # maskinens macOS inte byts under steget.
+    runs-on: macos-26
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      AKASHA_VERSION: "0.2.0"
+      AKASHA_BYGGNUMMER: ${{ github.run_number }}
+      WHISPER_VERSION: ${{ inputs.whisper_version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            app/requirements.txt
+            paketering/krav-bygg.txt
+      - name: Visa system
+        run: |
+          sw_vers
+          uname -m
+          sysctl -n machdep.cpu.brand_string hw.ncpu
+          xcodebuild -version
+          cmake --version | sed -n 1p
+          python -c "import platform, sys; print(platform.platform(), sys.version)"
+      - name: Beroenden (utan faster-whisper)
+        run: |
+          python -m venv build/venv
+          grep -v '^faster-whisper' app/requirements.txt > build/krav.txt
+          build/venv/bin/pip install -q -r build/krav.txt -r paketering/krav-bygg.txt
+          build/venv/bin/pip list
+      - name: Enhetstester
+        run: build/venv/bin/python -m unittest discover -s tester
+      - name: whisper-cli ur cachen
+        id: cli
+        uses: actions/cache@v6
+        with:
+          path: build/whisper/whisper-cli
+          key: whisper-cli-${{ inputs.whisper_version }}-${{ hashFiles('paketering/bygg-whisper-cli.sh') }}-macos26
+      - name: Bygg whisper-cli
+        if: steps.cli.outputs.cache-hit != 'true'
+        run: bash paketering/bygg-whisper-cli.sh "$WHISPER_VERSION" build/whisper
+      - name: Kontrollera whisper-cli
+        run: bash paketering/kontrollera-whisper-cli.sh build/whisper/whisper-cli build/venv/bin/python
+      - name: Bygg programmet
+        run: bash paketering/bygg-mac.sh build/whisper/whisper-cli
+      - name: Kontrollera programmet (uppackat ur zip-filen)
+        run: |
+          build/venv/bin/python paketering/kontrollera.py \
+            --program "build/uppackad/Akasha Meet.app/Contents/MacOS/Akasha Meet" \
+            --hem "$RUNNER_TEMP/hem" --port 8611 \
+            --vantad-motor whispercpp --vantat-jobbfel whisper-cli --riktig-rostmodell
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/Akasha-Meet-mac-arm64.zip
+          archive: false
+          retention-days: 7
+      - name: Samla loggar
+        if: always()
+        run: |
+          mkdir -p build/loggar
+          cp -R "$RUNNER_TEMP/hem/Library/Logs" build/loggar/ 2>/dev/null || true
+          cp "$RUNNER_TEMP/hem/program-utskrift.log" build/app/pyinstaller.log build/app/*.txt build/loggar/ 2>/dev/null || true
+          cp build/app/pyi/akasha-meet/warn-*.txt build/loggar/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: loggar
+          path: build/loggar
+          retention-days: 7
