@@ -1,0 +1,5 @@
+# Bara for att bygga programmet (paketering/). Appens egna beroenden star i app/requirements.txt.
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.10
+pyobjc-core==13.0; sys_platform == "darwin"
+pyobjc-framework-Cocoa==13.0; sys_platform == "darwin"
