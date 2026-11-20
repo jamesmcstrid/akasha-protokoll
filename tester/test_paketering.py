@@ -203,7 +203,7 @@ class Paketering(unittest.TestCase):
 
 
 WINDOWS_PY = ("kontroll_hjalp.py", "kontrollera_pe.py", "kontrollera_whisper_cli_windows.py", "kontrollera_windows.py",
-              "bygg_windows_verktyg.py")
+              "bygg_windows_verktyg.py", "bygg_installation.py", "kontrollera_installation.py")
 WINDOWS_SH = ("bygg-whisper-cli-windows.sh", "samla-whisper-cli-windows.sh", "bygg-windows.sh")
 
 
@@ -383,6 +383,111 @@ class WindowsBygget(unittest.TestCase):
         self.assertIn('exit 1\nfi\necho "OK: bygget klart', text)
 
 
+class Installationsfilen(unittest.TestCase):
+    """Statiska kontroller av paketering/akasha-protokoll.iss (Inno Setup finns bara pa Windows-maskinen i Actions)."""
+
+    def iss(self):
+        with open(os.path.join(PAKETERING, "akasha-protokoll.iss"), "rb") as f:
+            data = f.read()
+        self.assertTrue(data.startswith(b"\xef\xbb\xbf"), "UTF-8 med BOM, annars laser Inno Setup a, a, o fel")
+        return data.decode("utf-8-sig")
+
+    def sektion(self, namn):
+        text = self.iss()
+        delar = re.split(r"(?m)^\[(\w+)\]\s*$", text)
+        return dict(zip(delar[1::2], delar[2::2]))[namn]
+
+    def test_texterna_ordagrant(self):
+        text = self.iss()
+        self.assertIn('Description: "Skapa en genväg på skrivbordet"; Flags: unchecked', text)  # av som standard
+        self.assertIn('Description: "Starta Akasha Protokoll"; Flags: nowait postinstall skipifsilent', text)
+        self.assertIn("SuppressibleMsgBox('Dina inspelningar ligger kvar i mappen AkashaProtokoll i din hemkatalog, och "
+                      "modellerna i %LOCALAPPDATA%\\Akasha Protokoll. Ta bort dem själv om du inte vill ha dem.', mbInformation, "
+                      "MB_OK, IDOK)", text)
+        self.assertIn("CurUninstallStep = usPostUninstall", text)
+        self.assertIn("LicenseLabel=Läs licensen nedan innan du fortsätter. Andra delar av programmet har egna licenser.", text)
+        self.assertIn('Name: "sv"', text)
+        self.assertIn("Name: \"{autoprograms}\\{#Namn}\"", text)  # genvagen i Start-menyn heter Akasha Protokoll
+        self.assertIn('#define Namn "Akasha Protokoll"', text)
+
+    def test_per_anvandare_utan_administratorsratt(self):
+        text = self.iss()
+        self.assertIn("PrivilegesRequired=lowest", text)
+        self.assertNotIn("PrivilegesRequired=admin", text)
+        self.assertIn("DefaultDirName={localappdata}\\Programs\\{#Namn}", text)
+        self.assertNotIn("{pf", text)
+        self.assertNotIn("{commonappdata}", text)
+        self.assertNotIn("HKLM", text)
+
+    def test_mutexen_ar_samma_som_programmets_och_programmet_stangs_inte(self):
+        text = self.iss()
+        mutex = re.search(r'MUTEX = "(.+?)"', las("app", "windows_app.py")).group(1).replace("\\\\", "\\")
+        self.assertEqual(mutex, "Local\\AkashaProtokoll")
+        self.assertIn(f"AppMutex={mutex}", text)
+        self.assertIn("CloseApplications=no", text)
+
+    def test_licensen_finns_och_licenser_txt_namns_inte(self):
+        text = self.iss()
+        self.assertIn("LicenseFile=..\\LICENSE", text)
+        self.assertTrue(os.path.isfile(os.path.join(ROT, "LICENSE")))
+        self.assertNotIn("LICENSER", text)  # filen finns inte an
+
+    def test_inga_sokvagar_fran_byggmaskinen(self):
+        text = self.iss()
+        self.assertIsNone(re.search(r"(?i)\b[a-z]:\\", text), "en enhetsbokstav i skriptet")
+        self.assertNotIn("runner", text.lower())
+        self.assertNotIn("/home/", text)
+
+    def test_avinstallationen_ror_inte_anvandarens_data(self):
+        borta = self.sektion("UninstallDelete").strip().splitlines()
+        poster = [r for r in borta if r.strip() and not r.startswith(";")]
+        self.assertEqual(poster, ['Type: filesandordirs; Name: "{app}"'])  # bara programkatalogen under Programs
+        text = self.iss()
+        self.assertNotIn("{userdocs}", text)
+        self.assertNotIn("{%USERPROFILE}", text)
+        for ord_ in ("AkashaProtokoll\\", "{localappdata}\\Akasha Protokoll"):
+            for sektion in ("Files", "Icons", "Run", "UninstallDelete", "Setup"):
+                self.assertNotIn(ord_, self.sektion(sektion))
+        # {app} (Programs\\Akasha Protokoll) ar inte %LOCALAPPDATA%\\Akasha Protokoll (log, modeller, installningar)
+        self.assertIn("{localappdata}\\Programs\\{#Namn}", text)
+
+    def test_versionen_och_upphovsratten_som_i_versionsresursen(self):
+        import bygg_windows_verktyg as v
+        text = self.iss()
+        self.assertIn(f"AppCopyright={v.UPPHOVSRATT}", text)
+        self.assertIn(f"VersionInfoCopyright={v.UPPHOVSRATT}", text)
+        self.assertIn("AppPublisher=Dennis Fredin", text)
+        self.assertIn("OutputBaseFilename=Akasha-Protokoll-installation", text)
+        self.assertIn("{#Namn}", text)
+        self.assertEqual(v.NAMN, "Akasha Protokoll")
+        import kontrollera_installation as k
+        self.assertIn("AppId={" + k.APPID, text)  # AppId={{GUID} i Inno Setup: dubbla { ar ett enda {
+
+    def test_kommentarerna_i_iss_har_inga_aao(self):
+        for rad in self.iss().splitlines():
+            if rad.startswith(";"):
+                self.assertIsNone(re.search("[åäöÅÄÖ]", rad), rad)
+
+    def test_bygget_hittar_iscc_och_skriver_versionen(self):
+        import bygg_installation as b
+        funna, sokt = b.hitta_iscc({"ProgramFiles(x86)": "P86", "ProgramFiles": "P"}, finns=lambda s: s == os.path.join("P", "Inno Setup 6", "ISCC.exe"),
+                                   which=lambda n: None)
+        self.assertEqual(funna, os.path.join("P", "Inno Setup 6", "ISCC.exe"))
+        self.assertEqual(sokt[0], os.path.join("P86", "Inno Setup 6", "ISCC.exe"))  # Program Files (x86) forst
+        saknas, sokt = b.hitta_iscc({}, finns=lambda s: False, which=lambda n: None)
+        self.assertIsNone(saknas)
+        self.assertTrue(sokt)
+        pa_path, _ = b.hitta_iscc({}, finns=lambda s: s == "/x/ISCC", which=lambda n: "/x/ISCC")
+        self.assertEqual(pa_path, "/x/ISCC")
+        self.assertEqual(b.versionsrad("Inno Setup 6 Command-Line Compiler\nCopyright (C) ...\n"), "Inno Setup 6 Command-Line Compiler")
+
+    def test_inno_setup_kommandoraden_har_citattecken_runt_sokvagar_med_mellanslag(self):
+        import kontrollera_installation as k
+        rad = k.kommandorad("C:\\x y\\Setup.exe", k.TYSTA + ["/CURRENTUSER"], DIR="C:\\Åsa Ölund\\Akasha Protokoll", LOG="C:\\l.log")
+        self.assertEqual(rad, '"C:\\x y\\Setup.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER '
+                              '/DIR="C:\\Åsa Ölund\\Akasha Protokoll" /LOG="C:\\l.log"')
+
+
 class WindowsFlodet(unittest.TestCase):
     """Statiska kontroller av .github/workflows/windows-app.yml (flodet kors bara i Actions)."""
     FLODE = (".github", "workflows", "windows-app.yml")
@@ -481,6 +586,30 @@ class WindowsFlodet(unittest.TestCase):
         self.assertIn("find \"$HEM\" -name 'akasha-protokoll.log'", samla["run"])  # loggen letas upp, antas inte ligga pa en plats
         for fil in ("pyinstaller.log", "warn-*.txt", "program-utskrift.log", "program-utskrift-andra.log", "programlogg"):
             self.assertIn(fil, samla["run"])
+
+    def test_installationen_i_flodet(self):
+        d = self.yaml()
+        steg = d["jobs"]["bygg"]["steps"]
+        id_ = [s_.get("id") for s_ in steg]
+        for i in ("installation", "kontroll_installation"):
+            s_ = steg[id_.index(i)]
+            self.assertTrue(s_["continue-on-error"], i)  # ett fel hos Inno Setup hindrar aldrig zip-filen
+            self.assertEqual(s_["if"], "${{ !cancelled() }}", i)
+        # efter zip-kontrollen, fore sammanfattningen
+        self.assertLess(id_.index("kontroll_windows"), id_.index("installation"))
+        self.assertLess(id_.index("installation"), id_.index("kontroll_installation"))
+        text = self.text()
+        for stycke in ("bygg_installation.py", "kontrollera_installation.py",
+                       '--version "$AKASHA_VERSION.$AKASHA_BYGGNUMMER"', "$RUNNER_TEMP/Installerat Åäö/Akasha Protokoll",
+                       "$RUNNER_TEMP/Hem för installationen Åäö", "dist/Akasha-Protokoll-installation.exe"):
+            self.assertIn(stycke, text)
+        uppladdat = [s_["with"]["path"] for s_ in steg if s_.get("uses", "").startswith("actions/upload-artifact") and "path" in s_.get("with", {})
+                     and not s_["with"].get("name")]
+        self.assertEqual(uppladdat, ["dist/Akasha-Protokoll-windows-x64.zip", "dist/Akasha-Protokoll-installation.exe"])
+        sammanfattning = next(s_ for s_ in steg if s_.get("name") == "Sammanfattning")
+        for i in ("installation", "kontroll_installation"):
+            self.assertIn(f"steps.{i}.outcome", str(sammanfattning["env"]))
+        self.assertNotIn("secrets", text.lower())
 
     def test_cachen_sparas_bara_nar_bygget_lyckades(self):
         d = self.yaml()

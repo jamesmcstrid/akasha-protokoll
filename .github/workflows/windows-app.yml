@@ -135,10 +135,35 @@ jobs:
           if [ -f build/loggar/ordtider.json ]; then ARGUMENT=(--ordtider build/loggar/ordtider.json); fi
           build/venv/Scripts/python paketering/kontrollera_windows.py --hem "$RUNNER_TEMP/Åsa Ölund" \
             "${ARGUMENT[@]}" 2>&1 | tee build/loggar/kontrollera-windows.log
+      # Installationsfilen byggs efter att zip-kontrollen ar klar, i egna steg med continue-on-error: ett fel hos Inno Setup
+      # hindrar aldrig zip-filen.
+      - name: Bygg installationsfilen (Inno Setup)
+        id: installation
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          build/venv/Scripts/python paketering/bygg_installation.py --version "$AKASHA_VERSION.$AKASHA_BYGGNUMMER" \
+            --kalla "dist/Akasha Protokoll" --ikon build/app/ikon.ico --ut dist 2>&1 | tee build/loggar/bygg-installation.log
+      - name: Kontrollera installationen (tyst installation under Åäö, kontrollera.py, tyst avinstallation)
+        id: kontroll_installation
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          build/venv/Scripts/python paketering/kontrollera_installation.py --installation dist/Akasha-Protokoll-installation.exe \
+            --katalog "$RUNNER_TEMP/Installerat Åäö/Akasha Protokoll" --hem "$RUNNER_TEMP/Hem för installationen Åäö" \
+            --version "$AKASHA_VERSION.$AKASHA_BYGGNUMMER" --port 8611 --logg-katalog build/loggar 2>&1 | tee build/loggar/kontrollera-installation.log
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           path: dist/Akasha-Protokoll-windows-x64.zip
+          archive: false
+          retention-days: 7
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          path: dist/Akasha-Protokoll-installation.exe
           archive: false
           retention-days: 7
       - name: Sammanfattning
@@ -151,10 +176,13 @@ jobs:
           BYGG: ${{ steps.bygg.outcome }}
           KONTROLL_PROGRAM: ${{ steps.kontroll_program.outcome }}
           KONTROLL_WINDOWS: ${{ steps.kontroll_windows.outcome }}
+          INSTALLATION: ${{ steps.installation.outcome }}
+          KONTROLL_INSTALLATION: ${{ steps.kontroll_installation.outcome }}
         run: |
           fel=0
           for rad in "Enhetstester=$TESTER" "Bygg whisper-cli (skipped betyder ur cachen)=$BYGG_CLI" "Samla whisper-cli=$SAMLA_CLI" "Kontroll av whisper-cli=$KONTROLL_CLI" \
-                     "Bygg av programmet=$BYGG" "Kontroll av programmet=$KONTROLL_PROGRAM" "Sökvägar och talare=$KONTROLL_WINDOWS"; do
+                     "Bygg av programmet=$BYGG" "Kontroll av programmet=$KONTROLL_PROGRAM" "Sökvägar och talare=$KONTROLL_WINDOWS" \
+                     "Bygg av installationsfilen=$INSTALLATION" "Kontroll av installationen=$KONTROLL_INSTALLATION"; do
             namn="${rad%=*}"
             utfall="${rad##*=}"
             echo "$namn: ${utfall:-ej körd}"
