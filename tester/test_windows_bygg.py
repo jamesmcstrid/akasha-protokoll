@@ -21,6 +21,7 @@ sys.path.insert(0, PAKETERING)
 import bygg_windows_verktyg as verktyg  # noqa: E402
 import kontrollera_pe as pe  # noqa: E402
 import kontrollera_whisper_cli_windows as kcli  # noqa: E402
+import kontrollera_windows as kwin  # noqa: E402
 
 HAR_PEFILE = importlib.util.find_spec("pefile") is not None
 HAR_PIL = importlib.util.find_spec("PIL") is not None
@@ -492,6 +493,46 @@ class KontrolleraPerPlattform(unittest.TestCase):
         svar = mock.Mock(stdout=b"INFO: No tasks are running which match the specified criteria.\r\n")
         with mock.patch.object(k.subprocess, "run", return_value=svar):
             self.assertEqual(k.tasklist("whisper-cli.exe"), [])
+
+
+class KontrollAvSokvagarOchTalare(unittest.TestCase):
+    """paketering/kontrollera_windows.py med en falsk sherpa_onnx (tester/falsk_sherpa): ingen riktig rostmodell."""
+
+    def kor(self, modellinnehall):
+        mapp = tempfile.mkdtemp(prefix="akasha-kwin-")
+        self.addCleanup(shutil.rmtree, mapp, True)
+        hem = os.path.join(mapp, "Åsa Ölund")
+        modell = os.path.join(kwin.modellkatalog(hem), "talare", "nemo_en_titanet_small.onnx")
+        os.makedirs(os.path.dirname(modell))
+        skriv(modell, modellinnehall.ljust(40257283, b"x"))
+        ordtider = os.path.join(mapp, "ordtider.json")
+        with open(ordtider, "w", encoding="utf-8") as f:
+            f.write('[[1.0, 1.4, " Hej"], [1.6, 2.0, " Åsa"], [2.2, 2.6, " och"], [2.8, 3.2, " välkomna"], [3.4, 3.8, "."]]')
+        env = {**os.environ, "PYTHONPATH": os.path.join(ROT, "tester", "falsk_sherpa"), "PYTHONIOENCODING": "utf-8"}
+        p = subprocess.run([sys.executable, os.path.join(PAKETERING, "kontrollera_windows.py"), "--hem", hem,
+                            "--ordtider", ordtider], capture_output=True, env=env, timeout=240)
+        return p.returncode, p.stdout.decode("utf-8", "replace")
+
+    def test_modellen_laddas_fran_sokvagen_och_dela_upp_gar(self):
+        kod, ut = self.kor(b"en modell")
+        fel = [r for r in ut.splitlines() if r.startswith("FEL:")]
+        # den enda avvikelsen: modellen ar inte den riktiga (sha256), allt annat ska vara OK
+        self.assertEqual(len([f for f in fel if "sha256" in f]), 2, ut)  # raden i steg 1 och i sammanfattningen
+        self.assertEqual(len(fel), 2, ut)
+        self.assertEqual(kod, 1)
+        self.assertIn("OK: röstavtrycket har längd 8", ut)
+        self.assertIn("OK: talare.dela_upp() (två talare, påhittade ordtider)", ut)
+        self.assertIn("OK: talare.dela_upp() (en talare, riktiga ordtider", ut)
+        self.assertIn("avkodad med PyAV", ut)
+
+    def test_en_krasch_i_sherpa_ger_fel_med_sokvagen_och_diagnos(self):
+        kod, ut = self.kor(b"KRASCH")
+        self.assertEqual(kod, 1)
+        self.assertIn("FEL: sherpa-onnx klarade inte röstmodellen på sökvägen", ut)
+        self.assertIn("Åsa Ölund", ut)
+        self.assertIn("INFO: diagnos: relativ sokvag med arbetskatalogen satt till modellkatalogen: fungerade inte", ut)
+        self.assertIn("INFO: diagnos: en kopia i en ASCII-katalog", ut)
+        self.assertIn("FEL: talare.dela_upp()", ut)  # kraschen stoppar inte skriptet
 
 
 class Kontrollskripten(unittest.TestCase):

@@ -201,7 +201,8 @@ class Paketering(unittest.TestCase):
             self.assertIn(f'"{rad}"', text)
 
 
-WINDOWS_PY = ("kontroll_hjalp.py", "kontrollera_pe.py", "kontrollera_whisper_cli_windows.py", "bygg_windows_verktyg.py")
+WINDOWS_PY = ("kontroll_hjalp.py", "kontrollera_pe.py", "kontrollera_whisper_cli_windows.py", "kontrollera_windows.py",
+              "bygg_windows_verktyg.py")
 WINDOWS_SH = ("bygg-whisper-cli-windows.sh", "bygg-windows.sh")
 
 
@@ -224,7 +225,8 @@ class WindowsBygget(unittest.TestCase):
 
     def test_kommentarerna_i_windows_filerna_har_inga_aao(self):
         filer = [("paketering", n) for n in WINDOWS_PY + WINDOWS_SH] + [("paketering", "akasha-protokoll.spec")]
-        for delar in filer + [("tester", "falsk_whisper_cli.py"), ("tester", "test_windows_bygg.py")]:
+        for delar in filer + [("tester", "falsk_whisper_cli.py"), ("tester", "test_windows_bygg.py"),
+                               ("tester", "falsk_sherpa", "sherpa_onnx", "__init__.py")]:
             for kommentar in kommentarer(delar):
                 self.assertIsNone(re.search("[åäöÅÄÖ]", kommentar), f"{'/'.join(delar)}: {kommentar}")
 
