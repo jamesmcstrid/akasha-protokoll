@@ -549,12 +549,23 @@ class TestStartaBarn(unittest.TestCase):
             p = plattform.starta_barn(["x.exe"], cwd="C:\\mapp", stderr=subprocess.PIPE)
         self.assertIsInstance(p, FalskBarn)
         popen.assert_called_once_with(["x.exe"], cwd="C:\\mapp", stderr=subprocess.PIPE,
-                                      creationflags=0x08000000)
+                                      creationflags=0x08000000, stdin=subprocess.DEVNULL)
         self.assertEqual(k.flaggor, 0x2000)  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
         self.assertEqual([x[0] for x in k.anrop],
                          ["CreateJobObjectW", "SetInformationJobObject", "AssignProcessToJobObject"])
         self.assertEqual(k.anrop[1][2:], (9, ctypes.sizeof(plattform._ExtendedLimit)))
         self.assertEqual(k.anrop[2][1:], (1234, 999))
+
+    def test_stdin_ar_devnull_pa_windows_om_inget_annat_anges(self):
+        with falsk_win(FalskKernel32()), mock.patch.object(subprocess, "Popen", return_value=FalskBarn()) as popen:
+            plattform.starta_barn(["x"])
+            self.assertIs(popen.call_args[1]["stdin"], subprocess.DEVNULL)
+            plattform.starta_barn(["x"], stdin=subprocess.PIPE)
+            self.assertIs(popen.call_args[1]["stdin"], subprocess.PIPE)
+        for namn in ("Darwin", "Linux"):  # Mac och Linux ar oforandrade: ingen stdin skickas med
+            with system(namn), mock.patch.object(subprocess, "Popen") as popen:
+                plattform.starta_barn(["x"])
+            self.assertNotIn("stdin", popen.call_args[1])
 
     def test_egna_flaggor_behalls(self):
         with falsk_win(FalskKernel32()), mock.patch.object(subprocess, "Popen", return_value=FalskBarn()) as popen:

@@ -406,10 +406,12 @@ def starta_barn(cmd, cwd=None, **kw):
     Pa Windows: utan konsolfonster (CREATE_NO_WINDOW), och processen laggs i ett jobbobjekt sa att den
     dor nar programmet dor, ocksa vid Aktivitetshanteraren, utloggning eller krasch (Windows
     avslutar annars inte barnprocesser). Gar det inte att lagga den i jobbet loggas det och processen
-    kors anda. Pa Mac och Linux bara Popen."""
+    kors anda. stdin ar DEVNULL om inget annat anges: programmet har ingen konsol (console=False) och darmed inga
+    standardhandtag att arva, och whisper-cli laser aldrig stdin. Pa Mac och Linux bara Popen."""
     if system() != "Windows":
         return subprocess.Popen(cmd, cwd=cwd, **kw)
     kw["creationflags"] = kw.get("creationflags", 0) | CREATE_NO_WINDOW
+    kw.setdefault("stdin", subprocess.DEVNULL)
     p = subprocess.Popen(cmd, cwd=cwd, **kw)
     try:
         jobb = _skapa_jobb()
