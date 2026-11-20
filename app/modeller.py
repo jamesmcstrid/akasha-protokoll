@@ -98,6 +98,8 @@ FORSOK = 3            # forsok utan framsteg per fil vid avbrott, tidsgrans och 
 FRAMSTEG_MIN = 1 << 20  # byte som ett forsok maste ha lagt till i .delvis for att inte raknas
 MAX_FORSOK = 20       # ovre grans per fil, sa att det aldrig snurrar for evigt
 PAUSER = (2, 5)       # sekunder mellan forsoken; testerna satter (0, 0)
+ERSATT_FORSOK = 20    # os.replace pa Windows: antivirus kan halla den nyss skrivna filen en stund
+ERSATT_PAUS = 0.5     # sekunder mellan forsoken (tillsammans 10 s); testerna satter 0
 MARGINAL = 100_000_000  # byte som ska finnas kvar pa disken efter hamtningen
 
 # Sokvagarna som motor och talare anvander. Okand MODELL faller tillbaka pa medium (motor.problem()
@@ -344,7 +346,24 @@ def _hamta(fil, session, framsteg, avbryt, lasta):
     if summa.hexdigest() != fil.sha256:
         _ta_bort(delv)
         raise HamtFel("kontrollsumma", fil=fil.namn)
-    os.replace(delv, sok)  # atomiskt: en halv fil far aldrig malets namn
+    _ersatt(delv, sok)  # atomiskt: en halv fil far aldrig malets namn
+
+
+def _ersatt(delv, sok):
+    """os.replace med omforsok vid PermissionError. Pa Windows kan en virusskanner (Defender) lasa en
+    nyss skriven fil en stund, och en hamtning pa 1,5 GB ska inte sluta i "Kunde inte spara" for det.
+    Kontrollsumman ar redan raknad och raknas inte om: bara namnbytet provas igen. Efter
+    ERSATT_FORSOK forsok kastas felet som vanligt (och .delvis ligger kvar)."""
+    for forsok in range(1, ERSATT_FORSOK + 1):
+        try:
+            os.replace(delv, sok)
+            return
+        except PermissionError as e:
+            if forsok == ERSATT_FORSOK:
+                raise
+            log.info("kunde inte byta namn pa %s (forsok %d av %d): %s", os.path.basename(delv), forsok,
+                     ERSATT_FORSOK, e)
+            time.sleep(ERSATT_PAUS)
 
 
 def hamta_fil(fil, session, framsteg=None, avbryt=None):

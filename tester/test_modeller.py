@@ -23,6 +23,7 @@ class Bas(unittest.TestCase):
         hjalp.tom_datakatalog()
         self.paket, self.innehall = falska_paket()
         for patch in (mock.patch.object(modeller, "PAUSER", (0, 0)),
+                      mock.patch.object(modeller, "ERSATT_PAUS", 0),
                       mock.patch.object(modeller, "PAKET", self.paket)):
             patch.start()
             self.addCleanup(patch.stop)
@@ -99,6 +100,56 @@ class TestHamtaFil(Bas):
                 modeller.hamta_fil(self.fil, self.adapter())
         self.assertEqual(cm.exception.kod, "skrivfel")
         self.assertIn("Permission denied", str(cm.exception))
+
+    def test_last_fil_vid_namnbytet_provas_igen(self):
+        """Antivirus kan halla den nyss skrivna filen: os.replace kastar tva ganger och lyckas sedan."""
+        riktig = os.replace
+        anrop = []
+
+        def replace(a, b):
+            anrop.append((a, b))
+            if len(anrop) <= 2:
+                raise PermissionError(13, "Access is denied")
+            return riktig(a, b)
+
+        with mock.patch.object(modeller.os, "replace", replace), \
+             mock.patch.object(modeller.hashlib, "sha256", wraps=hashlib.sha256) as sha:
+            self.assertEqual(modeller.hamta_fil(self.fil, self.adapter()), "hamtad")
+        self.assertEqual(len(anrop), 3)
+        self.assertEqual(sha.call_count, 1, "kontrollsumman ska inte raknas om vid omforsoken")
+        self.assertEqual(len(self.a.anrop), 2)  # inte hamtat om
+        self.assertEqual(self.sha(), self.fil.sha256)
+        self.assertFalse(os.path.exists(self.delv()))
+
+    def test_namnbytet_som_alltid_nekas_ger_skrivfel_och_delvis_ligger_kvar(self):
+        anrop = []
+
+        def replace(a, b):
+            anrop.append(1)
+            raise PermissionError(13, "Access is denied")
+
+        with mock.patch.object(modeller.os, "replace", replace):
+            with self.assertRaises(modeller.HamtFel) as cm:
+                modeller.hamta_fil(self.fil, self.adapter())
+        self.assertEqual(cm.exception.kod, "skrivfel")
+        self.assertEqual(len(anrop), modeller.ERSATT_FORSOK)
+        self.assertEqual(modeller.ERSATT_FORSOK, 20)
+        self.assertTrue(os.path.exists(self.delv()))
+        self.assertFalse(os.path.exists(self.fil.sokvag()))
+
+    def test_ersatt_vantar_mellan_forsoken(self):
+        with mock.patch.object(modeller, "ERSATT_PAUS", 0.5), \
+             mock.patch.object(modeller.time, "sleep") as sov, \
+             mock.patch.object(modeller.os, "replace", side_effect=[PermissionError(13, "x"), None]) as ersatt:
+            modeller._ersatt("a", "b")
+        sov.assert_called_once_with(0.5)
+        self.assertEqual(ersatt.call_count, 2)
+
+    def test_andra_fel_an_permissionerror_provas_inte_igen(self):
+        with mock.patch.object(modeller.os, "replace", side_effect=OSError(errno.EXDEV, "x")) as ersatt:
+            with self.assertRaises(OSError):
+                modeller._ersatt("a", "b")
+        self.assertEqual(ersatt.call_count, 1)
 
     def test_inget_nat_och_certifikat(self):
         with self.assertRaises(modeller.HamtFel) as cm:
