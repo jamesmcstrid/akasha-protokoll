@@ -55,36 +55,162 @@ class TestKataloger(unittest.TestCase):
 
 
 class TestInstallningsfil(Tillfallig):
-    def test_las_installningsfil(self):
-        fil = os.path.join(self.katalog, "installningar.env")
-        text = ("# kommentar\n\nexport A=1\nB = två ord \nC=\"med # inuti\"\nD='x'\n"
-                "E=värde # kommentar\n1FEL=x\nrad utan likhetstecken\nF=a=b\n")
+    def skriv(self, data, namn="installningar.env"):
+        fil = os.path.join(self.katalog, namn)
         with open(fil, "wb") as f:
-            f.write(b"\xef\xbb\xbf" + text.encode("utf-8"))
+            f.write(data)
+        return fil
+
+    def test_las_installningsfil(self):
+        text = ("# kommentar\n\nexport A=1\nB = två ord \nC=\"med # inuti\"\nD='x'\n"
+                "E=värde # kommentar\nF=a=b\n"
+                "G=\"http://proxy.exempel:3128\" # företagets\nH='a b'   \n")
+        fil = self.skriv(b"\xef\xbb\xbf" + text.encode("utf-8"))
         self.assertEqual(plattform.las_installningsfil(fil),
-                         {"A": "1", "B": "två ord", "C": "med # inuti", "D": "x", "E": "värde", "F": "a=b"})
+                         ({"A": "1", "B": "två ord", "C": "med # inuti", "D": "x", "E": "värde", "F": "a=b",
+                           "G": "http://proxy.exempel:3128", "H": "a b"}, []))
+
+    def test_oavslutat_citattecken_och_text_efter(self):
+        fil = self.skriv('A=1\nI="ingen slut\nJ="x" y\nK=2\n'.encode("utf-8"))
+        varden, problem = plattform.las_installningsfil(fil)
+        self.assertEqual(varden, {"A": "1", "K": "2"})
+        self.assertEqual(problem, [plattform.RAD_FEL.format(nr=2), plattform.RAD_FEL.format(nr=3)])
+        self.assertFalse(any("ingen slut" in text for text in problem))
+
+    def test_felaktiga_rader_namner_inget_ur_filen(self):
+        fil = self.skriv("# rubrik\n\n1FEL=hemligt-lösen\nrad utan likhetstecken hemligt\nOK=1\n".encode("utf-8"))
+        varden, problem = plattform.las_installningsfil(fil)
+        self.assertEqual(varden, {"OK": "1"})
+        self.assertEqual(problem, [plattform.RAD_FEL.format(nr=3), plattform.RAD_FEL.format(nr=4)])
+        self.assertFalse(any("hemligt" in text for text in problem))
+
+    def test_utf16_med_bom_och_crlf(self):
+        fil = self.skriv("PORT=8700\n".encode("utf-16"))
+        self.assertEqual(plattform.las_installningsfil(fil), ({"PORT": "8700"}, []))
+        fil = self.skriv(b"A=1\r\nB=2\r\n", "crlf.env")
+        self.assertEqual(plattform.las_installningsfil(fil), ({"A": "1", "B": "2"}, []))
+        fil = self.skriv(b"A=1\rB=2\r", "cr.env")
+        self.assertEqual(plattform.las_installningsfil(fil), ({"A": "1", "B": "2"}, []))
+
+    def test_latin1_ger_kodningsproblem(self):
+        fil = self.skriv("ORDLISTA=Västerås\n".encode("latin-1"))
+        self.assertEqual(plattform.las_installningsfil(fil), ({}, [plattform.FIL_KODNING]))
+
+    def test_katalog_med_filens_namn(self):
+        fil = os.path.join(self.katalog, "installningar.env")
+        os.mkdir(fil)
+        varden, problem = plattform.las_installningsfil(fil)
+        self.assertEqual(varden, {})
+        self.assertEqual(len(problem), 1)
+        self.assertTrue(problem[0].startswith("Filen gick inte att läsa ("))
+        self.assertTrue(problem[0].endswith("). Inga inställningar ur den används."))
+
+    @unittest.skipIf(os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+                     "filbehorigheter gar inte att prova pa Windows eller som root")
+    def test_fil_utan_behorighet(self):
+        fil = self.skriv(b"A=1\n")
+        os.chmod(fil, 0)
+        self.addCleanup(os.chmod, fil, 0o600)
+        varden, problem = plattform.las_installningsfil(fil)
+        self.assertEqual(varden, {})
+        self.assertEqual(len(problem), 1)
 
     def test_saknad_fil(self):
-        self.assertEqual(plattform.las_installningsfil(os.path.join(self.katalog, "finns-inte.env")), {})
+        self.assertEqual(plattform.las_installningsfil(os.path.join(self.katalog, "finns-inte.env")), ({}, []))
+
+    def test_samma_namn_tva_ganger_sista_gar_fore(self):
+        fil = self.skriv(b"A=1\nA=2\n")
+        self.assertEqual(plattform.las_installningsfil(fil), ({"A": "2"}, []))
 
     def test_las_in_installningar_i_programmet(self):
-        fil = os.path.join(self.katalog, "installningar.env")
-        with open(fil, "w", encoding="utf-8") as f:
-            f.write("AKASHA_PROV_NY=ny\nAKASHA_PROV_GAMMAL=fran-filen\n")
+        fil = self.skriv("AKASHA_PROV_NY=ny\nAKASHA_PROV_GAMMAL=fran-filen\nrad utan likhet\n".encode("utf-8"))
         with mock.patch.dict(os.environ, {"AKASHA_PROV_GAMMAL": "fran-miljon"}), \
              mock.patch.object(plattform, "ar_paketerad", return_value=True), \
              mock.patch.object(plattform, "installningsfil", return_value=fil):
-            lastes = plattform.las_in_installningar()
+            problem = plattform.las_in_installningar()
             self.assertEqual(os.environ["AKASHA_PROV_NY"], "ny")
             self.assertEqual(os.environ["AKASHA_PROV_GAMMAL"], "fran-miljon")
             os.environ.pop("AKASHA_PROV_NY")
-        self.assertEqual(lastes, {"AKASHA_PROV_NY": "ny", "AKASHA_PROV_GAMMAL": "fran-filen"})
+        self.assertEqual(problem, [plattform.RAD_FEL.format(nr=3)])
 
     def test_las_in_installningar_utanfor_programmet(self):
         with mock.patch.object(plattform, "ar_paketerad", return_value=False), \
              mock.patch.object(plattform, "las_installningsfil") as las:
-            self.assertEqual(plattform.las_in_installningar(), {})
+            self.assertEqual(plattform.las_in_installningar(), [])
         las.assert_not_called()
+
+
+class TestVarden(unittest.TestCase):
+    def tearDown(self):
+        importlib.reload(installningar)
+
+    def ladda(self, **miljo):
+        with mock.patch.dict(os.environ, miljo):
+            return importlib.reload(installningar)
+
+    def test_port_som_inte_ar_ett_tal(self):
+        i = self.ladda(PORT="abc")
+        self.assertEqual(i.PORT, 8611)
+        self.assertEqual(len(i.PROBLEM), 1)
+        self.assertIn("PORT", i.PROBLEM[0])
+        self.assertNotIn("abc", i.PROBLEM[0])
+
+    def test_port_utanfor_intervallet(self):
+        i = self.ladda(PORT="80")
+        self.assertEqual(i.PORT, 8611)
+        self.assertEqual(len(i.PROBLEM), 1)
+
+    def test_giltig_port(self):
+        i = self.ladda(PORT="8700")
+        self.assertEqual(i.PORT, 8700)
+        self.assertEqual(i.PROBLEM, [])
+
+    def test_troskel_med_komma_och_utanfor(self):
+        self.assertEqual(self.ladda(TALARE_TROSKEL="0,7").TALARE_TROSKEL, 0.7)
+        i = self.ladda(TALARE_TROSKEL="2")
+        self.assertEqual(i.TALARE_TROSKEL, 0.6)
+        self.assertEqual(len(i.PROBLEM), 1)
+        self.assertIn("Standardvärdet 0,6 används.", i.PROBLEM[0])
+
+    def test_max_mb_och_cpu_tradar(self):
+        i = self.ladda(MAX_MB="0", CPU_TRADAR="300")
+        self.assertEqual((i.MAX_MB, i.CPU_TRADAR), (1024, 0))
+        self.assertEqual(len(i.PROBLEM), 2)
+
+
+class TestRenProcess(Tillfallig):
+    """Som granskarens prov: import i en ren process dar sys.frozen sattes fore importen."""
+
+    def kor(self, data):
+        hem = os.path.join(self.katalog, "hem")
+        mapp = os.path.join(hem, "xdg", "akasha-meet")
+        os.makedirs(mapp)
+        fil = os.path.join(mapp, "installningar.env")
+        if data is None:
+            os.mkdir(fil)
+        else:
+            with open(fil, "wb") as f:
+                f.write(data)
+        miljo = {k: v for k, v in os.environ.items() if k not in ("PORT", "XDG_DATA_HOME", "HOME", "LOCALAPPDATA")}
+        miljo.update(HOME=hem, USERPROFILE=hem, XDG_DATA_HOME=os.path.join(hem, "xdg"),
+                     LOCALAPPDATA=os.path.join(hem, "xdg"), PYTHONPATH=os.path.join(os.path.dirname(hjalp.__file__), "..", "app"))
+        kod = ("import sys; sys.frozen = True\n"
+               "import plattform\n"
+               "plattform.system = lambda: 'Linux'\n"
+               "import installningar\n"
+               "print(installningar.PORT, len(installningar.PROBLEM))\n")
+        svar = subprocess.run([sys.executable, "-c", kod], env=miljo, capture_output=True, text=True, timeout=60)
+        self.assertEqual(svar.returncode, 0, svar.stderr)
+        return svar.stdout.split()
+
+    def test_utf16(self):
+        self.assertEqual(self.kor("PORT=8700\n".encode("utf-16")), ["8700", "0"])
+
+    def test_latin1(self):
+        self.assertEqual(self.kor("ORDLISTA=Västerås\n".encode("latin-1")), ["8611", "1"])
+
+    def test_katalog(self):
+        self.assertEqual(self.kor(None), ["8611", "1"])
 
 
 class TestWhisperCli(Tillfallig):

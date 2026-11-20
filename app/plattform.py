@@ -19,6 +19,11 @@ log = logging.getLogger("akasha-meet")
 NAMN = "Akasha Meet"
 GAMMAL_ETIKETT = "local.akasha-meet"  # launchd-tjansten fran mac/installera.sh
 
+FIL_GICK_INTE = "Filen gick inte att läsa ({orsak}). Inga inställningar ur den används."
+FIL_KODNING = ("Filen är inte sparad som ren text i UTF-8. Inga inställningar ur den används. "
+               "Spara den igen i TextEdit med Format → Gör till ren text, och välj Unicode (UTF-8).")
+RAD_FEL = "Rad {nr} förstods inte och hoppades över. En rad ska se ut som NAMN=värde."
+
 _NAMNMONSTER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -52,15 +57,47 @@ def installningsfil():
     return os.path.join(programkatalog(), "installningar.env")
 
 
+def _avkoda(data):
+    """UTF-16 med BOM (Anteckningar kan spara sa) eller UTF-8 med/utan BOM. Ingen gissning pa Latin-1."""
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return data.decode("utf-16")
+    return data.decode("utf-8-sig")
+
+
+def _varde(text):
+    """Varde ur en rad: med citattecken (som bash, med kommentar efter) eller utan. None = raden forstods inte."""
+    text = text.lstrip()
+    if text[:1] in ("\"", "'"):
+        slut = text.find(text[0], 1)
+        if slut < 0:
+            return None
+        resten = text[slut + 1:].strip()
+        if resten and not resten.startswith("#"):
+            return None
+        return text[1:slut]
+    if text.startswith("#"):
+        return ""
+    return text.split(" #", 1)[0].rstrip()
+
+
 def las_installningsfil(sokvag):
-    """NAMN=varde-rader -> dict. Saknad fil ger {}."""
+    """NAMN=varde-rader -> (dict, problem). Kastar aldrig pa grund av filen. Problemtexterna innehaller
+    aldrig nagot ur filen (en rad kan ha en proxyadress med losenord), bara radnummer och orsak.
+    Loggar inget: loggningen ar inte installd nar den har kors."""
     try:
-        with open(sokvag, encoding="utf-8-sig") as f:
-            rader = f.read().splitlines()
+        with open(sokvag, "rb") as f:
+            data = f.read()
     except FileNotFoundError:
-        return {}
+        return {}, []
+    except (OSError, ValueError) as e:
+        return {}, [FIL_GICK_INTE.format(orsak=getattr(e, "strerror", None) or type(e).__name__)]
+    try:
+        text = _avkoda(data)
+    except UnicodeError:
+        return {}, [FIL_KODNING]
     resultat = {}
-    for rad in rader:
+    problem = []
+    for nr, rad in enumerate(text.splitlines(), 1):
         rad = rad.strip()
         if not rad or rad.startswith("#"):
             continue
@@ -68,30 +105,25 @@ def las_installningsfil(sokvag):
             rad = rad[len("export "):].lstrip()
         namn, skiljetecken, varde = rad.partition("=")
         namn = namn.strip()
-        if not skiljetecken or not _NAMNMONSTER.match(namn):
-            log.warning("hoppar over raden %r i %s", rad, sokvag)
+        if skiljetecken:
+            varde = _varde(varde)
+        if not skiljetecken or varde is None or not _NAMNMONSTER.match(namn):
+            problem.append(RAD_FEL.format(nr=nr))
             continue
-        varde = varde.strip()
-        if len(varde) >= 2 and varde[0] == varde[-1] and varde[0] in "\"'":
-            varde = varde[1:-1]
-        else:
-            if varde.startswith("#"):
-                varde = ""
-            else:
-                varde = varde.split(" #", 1)[0].rstrip()
         resultat[namn] = varde
-    return resultat
+    return resultat, problem
 
 
 def las_in_installningar():
     """Lagger installningar.env i miljon, men bara i programmet: terminalinstallationen har .env
-    via mac/kor.sh. setdefault gor att en miljovariabel som redan finns vinner (som med .env)."""
+    via mac/kor.sh. setdefault gor att en miljovariabel som redan finns vinner (som med .env).
+    Returnerar problemlistan (tom utanfor programmet)."""
     if not ar_paketerad():
-        return {}
-    installningar = las_installningsfil(installningsfil())
+        return []
+    installningar, problem = las_installningsfil(installningsfil())
     for namn, varde in installningar.items():
         os.environ.setdefault(namn, varde)
-    return installningar
+    return problem
 
 
 def whisper_cli():

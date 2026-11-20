@@ -23,6 +23,7 @@ import numpy as np
 from flask import Flask, jsonify, request, send_file
 
 import export
+import installningar
 import lagring
 import modeller
 import motor
@@ -574,6 +575,8 @@ def transkribera_direkt():
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    for text in installningar.PROBLEM:
+        log.warning("installningar: %s", text)
     os.makedirs(DATAKATALOG, mode=0o700, exist_ok=True)
     lagring.aterstall_avbrutna()
     starta_arbetare()
