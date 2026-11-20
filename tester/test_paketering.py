@@ -739,6 +739,15 @@ class WindowsFlodet(unittest.TestCase):
         self.assertIn("-DGGML_VULKAN=ON", bygg)
         self.assertIn('FEL: ggml-vulkan.dll byggdes inte', bygg)
 
+    def test_vulkan_last_av_summa_och_incheckning(self):
+        text = self.text()
+        env = self.yaml()["jobs"]["bygg"]["env"]
+        self.assertRegex(env["VULKAN_SDK_SHA256"], "^[0-9a-f]{64}$")
+        self.assertRegex(env["SPIRV_HEADERS_COMMIT"], "^[0-9a-f]{40}$")
+        self.assertIn("SPIRV_HEADERS_COMMIT", text.split("key: whisper-cli-win-")[1].split("\n")[0])
+        self.assertIn("sha256sum < ", text)
+        self.assertIn("CMAKE_PREFIX_PATH=", text)
+
     def test_signera_finns_men_kors_aldrig(self):
         text = self.text()
         d = self.yaml()

@@ -26,13 +26,13 @@ jobs:
       AKASHA_VERSION: "0.2.0"
       AKASHA_BYGGNUMMER: ${{ github.run_number }}
       WHISPER_VERSION: ${{ inputs.whisper_version }}
-      # Vulkan SDK (LunarG) som bygger ggml-vulkan.dll. Versionen och sha256 ska hamtas fran LunarG:s egen sida
-      # (https://vulkan.lunarg.com/sdk/latest/windows.json och deras sha-fil for installationsfilen) och laggas in har.
-      # OBS: versionen ar vald ur minnet och sha256 ar INTE belagd (LunarG gick inte att na nar steget skrevs): tom
-      # VULKAN_SDK_SHA256 gor att steget bara raknar fram och skriver ut sha256. Fyll i den utskrivna summan nar
-      # den har kontrollerats mot LunarG, sa kontrollerar steget den.
+      # Vulkan SDK (LunarG) som bygger ggml-vulkan.dll. Summan raknades fram av byggmaskinen i korning 10 fran
+      # LunarG:s egen adress over HTTPS (den gick inte att jamfora med en publicerad summa), och den last nu sa att
+      # en andrad fil marks. SPIRV-Headers (Khronos) behovs for CMake-konfigurationen som SDK:n inte har: last pa
+      # den exakta incheckningen for taggen vulkan-sdk-<version>.
       VULKAN_SDK_VERSION: "1.4.309.0"
-      VULKAN_SDK_SHA256: ""
+      VULKAN_SDK_SHA256: "48b132169b64fe65cdb0f20970195335a65354e73f1ea5373032c2a8bbad4297"
+      SPIRV_HEADERS_COMMIT: "09913f088a1197aba4aefd300a876b2ebbaa3391"
       # Actions-maskinens konsol ar inte UTF-8: utan detta kraschar ett Python-skript som skriver a-ring, a-prickar,
       # o-prickar eller pilar till en omdirigerad utskrift med UnicodeEncodeError. Skripten staller dessutom in
       # utskriften sjalva.
@@ -77,7 +77,7 @@ jobs:
         id: tester
         continue-on-error: true
         run: build/venv/Scripts/python -m unittest discover -s tester --durations 15
-      # Bara det kompilerade cachas (nyckel: version + hash av bygg-whisper-cli-windows.sh + Vulkan SDK-versionen). C-runtime-filerna, fillistan och
+      # Bara det kompilerade cachas (nyckel: version + hash av bygg-whisper-cli-windows.sh + Vulkan SDK-versionen + SPIRV-Headers-incheckningen). C-runtime-filerna, fillistan och
       # beroendekontrollen gors av steget Samla whisper-cli efter varje bygge och varje cachetraff, sa att en rattning i
       # verktygen inte tvingar fram ett nytt bygge av whisper.cpp.
       - name: whisper-cli ur cachen (det kompilerade)
@@ -85,38 +85,24 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: build/whisper/kompilerat
-          key: whisper-cli-win-${{ inputs.whisper_version }}-${{ hashFiles('paketering/bygg-whisper-cli-windows.sh') }}-vulkan${{ env.VULKAN_SDK_VERSION }}-windows2025
+          key: whisper-cli-win-${{ inputs.whisper_version }}-${{ hashFiles('paketering/bygg-whisper-cli-windows.sh') }}-vulkan${{ env.VULKAN_SDK_VERSION }}-spirv${{ env.SPIRV_HEADERS_COMMIT }}-windows2025
       - name: Vulkan SDK (for bygget av whisper-cli)
         id: vulkan_sdk
         if: steps.cli.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
-          # Tyst installation utan tredjepartsaction. Adressmonstret ar inte belagt (LunarG gick inte att na nar steget
-          # skrevs): prova tre kanda i tur och ordning och ta den forsta som ger en exe-fil over 50 MB.
+          # Tyst installation utan tredjepartsaction. Adressen gav 200 och ratt fil i korning 10.
           FIL="$RUNNER_TEMP/vulkansdk-installation.exe"
-          BAS="https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/windows"
-          ANVAND=""
-          for NAMN in "vulkansdk-windows-X64-${VULKAN_SDK_VERSION}.exe" "VulkanSDK-${VULKAN_SDK_VERSION}-Installer.exe" "vulkan_sdk.exe"; do
-            rm -f "$FIL"
-            if curl -fSL --retry 3 -o "$FIL" "$BAS/$NAMN"; then
-              STORLEK="$(wc -c < "$FIL" | tr -d ' ')"
-              if [ "$(head -c 2 "$FIL")" = "MZ" ] && [ "$STORLEK" -gt 52428800 ]; then ANVAND="$BAS/$NAMN"; break; fi
-              echo "Hoppar over $BAS/$NAMN: borjar inte med MZ eller ar inte over 50 MB ($STORLEK byte)"
-            else
-              echo "Kunde inte hamta $BAS/$NAMN"
-            fi
-          done
-          [ -n "$ANVAND" ] || { echo "FEL: ingen av adresserna gav en Vulkan SDK-installationsfil" >&2; exit 1; }
-          SHA="$(sha256sum "$FIL" | cut -d' ' -f1)"
-          echo "Adress som anvandes: $ANVAND"
+          ADRESS="https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/windows/VulkanSDK-${VULKAN_SDK_VERSION}-Installer.exe"
+          curl -fSL --retry 3 -o "$FIL" "$ADRESS"
+          STORLEK="$(wc -c < "$FIL" | tr -d ' ')"
+          # sha256sum i Git Bash satter ett bakstreck forst om filnamnet har bakstreck: ta bara summan
+          SHA="$(sha256sum < "$FIL" | cut -d' ' -f1)"
+          echo "Adress: $ADRESS"
           echo "Storlek: $STORLEK byte"
           echo "sha256: $SHA"
-          if [ -n "$VULKAN_SDK_SHA256" ]; then
-            [ "$SHA" = "$VULKAN_SDK_SHA256" ] || { echo "FEL: sha256 stammer inte, vantade $VULKAN_SDK_SHA256" >&2; exit 1; }
-            echo "OK: sha256 stammer med den laste"
-          else
-            echo "OBS: sha256 ej last (VULKAN_SDK_SHA256 ar tom): summan ovan ar inte kontrollerad mot LunarG"
-          fi
+          [ "$SHA" = "$VULKAN_SDK_SHA256" ] || { echo "FEL: sha256 stammer inte, vantade $VULKAN_SDK_SHA256" >&2; exit 1; }
+          echo "OK: sha256 stammer med den laste"
           WINROT="C:\\VulkanSDK\\${VULKAN_SDK_VERSION}"
           GITROT="/c/VulkanSDK/${VULKAN_SDK_VERSION}"
           if ! "$FIL" --root "$WINROT" --accept-licenses --default-answer --confirm-command install; then
@@ -134,6 +120,27 @@ jobs:
           echo "OK: glslc.exe, vulkan.h och vulkan-1.lib finns"
           echo "VULKAN_SDK=$WINROT" >> "$GITHUB_ENV"
           echo "$WINROT\\Bin" >> "$GITHUB_PATH"
+          # SPIRV-Headers: ggml-vulkan kraver find_package(SPIRV-Headers CONFIG), som SDK:n inte har. Bygg och installera
+          # dem fran den laste incheckningen. Windows-form (C:\...) till CMake och $GITHUB_ENV, /c/... bara till [ -f ].
+          SPKALLA="$RUNNER_TEMP/spirv-headers-kalla"
+          SPBYGG="$RUNNER_TEMP/spirv-headers-bygg"
+          SPWIN="C:\\VulkanSDK\\spirv-headers-${VULKAN_SDK_VERSION}"
+          SPGIT="/c/VulkanSDK/spirv-headers-${VULKAN_SDK_VERSION}"
+          rm -rf "$SPKALLA" "$SPBYGG"
+          git clone --depth 1 --branch "vulkan-sdk-${VULKAN_SDK_VERSION}" https://github.com/KhronosGroup/SPIRV-Headers.git "$SPKALLA"
+          SPHEAD="$(git -C "$SPKALLA" rev-parse HEAD)"
+          [ "$SPHEAD" = "$SPIRV_HEADERS_COMMIT" ] || { echo "FEL: SPIRV-Headers-incheckningen stammer inte: $SPHEAD, vantade $SPIRV_HEADERS_COMMIT" >&2; exit 1; }
+          echo "OK: SPIRV-Headers $SPHEAD"
+          cmake -S "$SPKALLA" -B "$SPBYGG" -DSPIRV_HEADERS_ENABLE_TESTS=OFF -DSPIRV_HEADERS_ENABLE_INSTALL=ON
+          cmake --install "$SPBYGG" --prefix "$SPWIN"
+          SPCONF="$SPGIT/share/cmake/SPIRV-Headers/SPIRV-HeadersConfig.cmake"
+          if [ ! -f "$SPCONF" ]; then
+            echo "FEL: saknas efter installationen av SPIRV-Headers: $SPCONF. Det som finns under $SPWIN:" >&2
+            find "$SPGIT" | head -100 >&2
+            exit 1
+          fi
+          echo "OK: $SPCONF finns"
+          echo "CMAKE_PREFIX_PATH=$SPWIN" >> "$GITHUB_ENV"
       - name: Bygg whisper-cli
         id: bygg_cli
         if: steps.cli.outputs.cache-hit != 'true'
