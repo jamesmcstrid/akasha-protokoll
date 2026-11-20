@@ -21,19 +21,26 @@ echo "whisper.cpp $VERSION = $(git -C "$UT/src" rev-parse HEAD)"
 # Statiskt (BUILD_SHARED_LIBS=OFF): inga libwhisper/libggml-dylib som skulle behova ligga bredvid
 #   programmet; hos anvandaren finns inget Homebrew.
 # Metal med biblioteket inbaddat (GGML_METAL_EMBED_LIBRARY=ON): ingen .metal-fil behovs bredvid binaren.
-# GGML_NATIVE=OFF med en uttrycklig arkitektur: maskinen som bygger far inte avgora vilka processorer
-#   programmet gar pa. armv8.4-a med dotprod klarar alla Apple Silicon fran M1.
+# GGML_NATIVE=OFF utan GGML_CPU_ARM_ARCH: maskinen som bygger far inte avgora vilka processorer
+#   programmet gar pa. Utan GGML_CPU_ARM_ARCH lagger ggml ingen -march, och kompilatorns standardmal
+#   for arm64 pa macOS galler (loggen nedan visar vilka processorfunktioner det ger).
+# GGML_OPENMP=OFF: hittar CMake en libomp pa byggmaskinen lankas den annars in, och den finns inte
+#   hos anvandaren.
 # Okanda CMake-flaggor ger bara en varning ("Manually-specified variables were not used"): leta efter
 #   den raden i loggen nedan.
+echo "== Kompilatorns processorfunktioner (arm64, macOS 14.0)"
+echo | cc -arch arm64 -mmacosx-version-min=14.0 -E -dM - \
+  | grep -E '__ARM_NEON|__ARM_FEATURE_(DOTPROD|FP16_VECTOR_ARITHMETIC|FP16_SCALAR_ARITHMETIC|MATMUL_INT8|BF16)' || true
+
 echo "== CMake: konfigurerar"
 cmake -S "$UT/src" -B "$UT/bygg" \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
   -DBUILD_SHARED_LIBS=OFF -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON \
-  -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8.4-a+dotprod \
-  -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF -DWHISPER_CURL=OFF -DWHISPER_FFMPEG=OFF
+  -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
+  -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF -DWHISPER_CURL=OFF
 
 echo "== CMake: sammanfattning av valen (ur cache-filen)"
-grep -E '^(CMAKE_BUILD_TYPE|CMAKE_OSX_ARCHITECTURES|CMAKE_OSX_DEPLOYMENT_TARGET|BUILD_SHARED_LIBS|GGML_METAL|GGML_METAL_EMBED_LIBRARY|GGML_NATIVE|GGML_CPU_ARM_ARCH|GGML_BLAS|GGML_ACCELERATE|WHISPER_[A-Z_]+):' "$UT/bygg/CMakeCache.txt" || true
+grep -E '^(CMAKE_BUILD_TYPE|CMAKE_OSX_ARCHITECTURES|CMAKE_OSX_DEPLOYMENT_TARGET|BUILD_SHARED_LIBS|GGML_METAL|GGML_METAL_EMBED_LIBRARY|GGML_NATIVE|GGML_OPENMP|GGML_BLAS|GGML_ACCELERATE|WHISPER_[A-Z_]+):' "$UT/bygg/CMakeCache.txt" || true
 
 echo "== CMake: bygger whisper-cli"
 cmake --build "$UT/bygg" --config Release -j "$(sysctl -n hw.ncpu)" --target whisper-cli
@@ -50,6 +57,12 @@ if [ ! -f "$BIN" ]; then
 fi
 cp "$BIN" "$UT/whisper-cli"
 chmod +x "$UT/whisper-cli"
+
+echo "== Bibliotek som whisper-cli lankar mot"
+otool -L "$UT/whisper-cli"
+
+echo "== CMake-cachen: OpenMP, Metal, BLAS, Accelerate"
+grep -iE "OPENMP|METAL|BLAS|ACCELERATE" "$UT/bygg/CMakeCache.txt" | grep -v '^//' || true
 
 echo "== Klar"
 file "$UT/whisper-cli"
