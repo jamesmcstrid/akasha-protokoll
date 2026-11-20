@@ -16,7 +16,6 @@ HELP = """usage: whisper-cli [options] file0 file1 ...
   -f FNAME,  --file FNAME        [       ] input audio file path
   -l LANG,   --language LANG     [en     ] spoken language
   -bs N,     --beam-size N       [5      ] beam size for beam search
-  -np,       --no-prints         [false  ] do not print anything other than the results
   -pp,       --print-progress    [false  ] print progress
   -oj,       --output-json       [false  ] output result in a JSON file
   -ojf,      --output-json-full  [false  ] include more information in the JSON file

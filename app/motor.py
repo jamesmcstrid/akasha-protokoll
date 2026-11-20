@@ -38,6 +38,19 @@ log = logging.getLogger("akasha-protokoll")
 SR = 16000
 BEAM = 5
 PROGRESS_RE = re.compile(r"progress\s*=\s*(\d+)%")
+# Raderna ur whisper-clis stderr som loggas (INFO, prefixet "whisper-cli: "), hogst MAX_LOGGRADER per korning:
+# vilken processorvariant ggml laddade, systeminformationen (AVX, AVX2 ...), GPU, modelltyp och tiderna
+# i slutet. Inget annat ur stderr loggas.
+LOGGA_RADER = re.compile(
+    r"(?:load_backend:|system_info:|whisper_backend_init_gpu:|whisper_model_load:\s+(?:type|ftype)\b"
+    r"|whisper_print_timings:)")
+MAX_LOGGRADER = 30
+# Raderna som far ligga i "sista" (de 15 sista raderna, som hamnar i felmeddelandet och darmed i loggen):
+# bara whisper.cpps och ggml:s egna diagnosrader (funktionsnamn med understrykning, main:, error: ...).
+# Texten skrivs pa stdout (aldrig last), men en rad som ser ut som text eller som innehaller prompten
+# (de svarstavade orden) tas aldrig med.
+SAKER_RAD = re.compile(
+    r"(?:[a-z][a-z0-9]*_[a-z0-9_]*|main|error|warning|usage|WARNING|ERROR):|\s*$")
 # Interna markeringar som whisper.cpp ibland skriver i texten, t.ex. <|nospeech|> och [BLANK_AUDIO].
 INTERNA_RE = re.compile(r"<\|[^|>]*\|>|\[[A-Z_]+\]")
 
@@ -279,7 +292,9 @@ def cli_kommando(cli, katalog_rel, per_ord, prompt, tradar, system):
         "-f", os.path.join(katalog_rel, "ljud.wav"),
         "-l", SPRAK,
         "-bs", str(BEAM),
-        "-np", "-pp",  # inga utskrifter utom framsteg
+        # Utan -np skriver whisper-cli sina diagnosrader (backend, system_info, tider) pa stderr; de
+        # utvalda loggas av _whispercpp (LOGGA_RADER). Texten skrivs pa stdout, som aldrig lases.
+        "-pp",
         "-oj", "-of", os.path.join(katalog_rel, "ut"),  # whisper-cli lagger till .json
     ]
     if prompt:
@@ -326,6 +341,22 @@ def stada_kvarglomda(katalog=None):
     return antal
 
 
+def _kansliga_ord(prompt):
+    """Prompten och dess ord (minst 4 tecken, gemener): rader som innehaller nagot av dem loggas aldrig."""
+    ord_ = {w.lower() for w in re.split(r"[\s,;.:]+", prompt or "") if len(w) >= 4}
+    if prompt and prompt.strip():
+        ord_.add(prompt.strip().lower())
+    return ord_
+
+
+def _far_sparas(rad, kansliga):
+    """Sant om raden far loggas och ga in i felmeddelandet: en diagnosrad utan prompten eller dess ord."""
+    if not SAKER_RAD.match(rad):
+        return False
+    liten = rad.lower()
+    return not any(w in liten for w in kansliga)
+
+
 def _whispercpp(samples, per_ord, prompt, framsteg):
     global _process
     cli = plattform.whisper_cli()
@@ -356,8 +387,14 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
                 p.terminate()
             sista = collections.deque(maxlen=15)
             forsta = None  # tiden till forsta framsteg (pa Mac kompileras Metal-biblioteken forst)
-            for rad in p.stderr:
-                sista.append(rad.rstrip())
+            loggade = 0
+            kansliga = _kansliga_ord(prompt)
+            for rad in p.stderr:  # en rad i taget: inget buffras obegransat
+                if _far_sparas(rad, kansliga):
+                    sista.append(rad.rstrip())
+                    if loggade < MAX_LOGGRADER and LOGGA_RADER.match(rad):
+                        loggade += 1
+                        log.info("whisper-cli: %s", rad.strip())
                 m = PROGRESS_RE.search(rad)
                 if m and forsta is None:
                     forsta = time.monotonic() - t0

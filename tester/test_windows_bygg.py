@@ -376,7 +376,7 @@ class KontrollAvWhisperCliMedFalskCli(unittest.TestCase):
         kod, ut, ordtider = self.kor()
         self.assertEqual(kod, 0, ut)
         self.assertIn("KONTROLL AV WHISPER-CLI: OK", ut)
-        self.assertIn("OK: alla 15 flaggor finns i --help", ut)
+        self.assertIn("OK: alla 14 flaggor finns i --help", ut)
         self.assertIn("OK: forvalet medium kanns igen", ut)
         self.assertIn("OK: ordtiderna kommer från DTW", ut)
         self.assertIn("Åsa Ölund", ut)  # modellkatalogen heter sa

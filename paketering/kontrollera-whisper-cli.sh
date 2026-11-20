@@ -125,14 +125,14 @@ echo "== 2. flaggor i --help"
 "$CLI" --help > "$ARB/help.txt" 2>&1 || true
 cat "$ARB/help.txt"
 SAKNAS=""
-for f in -m -f -l -bs -np -pp -oj -of --prompt -t -ml -sow --dtw -nfa -ojf; do
+for f in -m -f -l -bs -pp -oj -of --prompt -t -ml -sow --dtw -nfa -ojf; do
   grep -qE -- "(^|[[:space:],])$f([[:space:],=]|$)" "$ARB/help.txt" || SAKNAS="$SAKNAS $f"
 done
 if [ -n "$SAKNAS" ]; then
   echo "FEL: whisper-cli saknar flaggorna$SAKNAS som app/motor.py anvander (se --help ovan)" >&2
   exit 1
 fi
-echo "OK: alla 15 flaggor finns i --help"
+echo "OK: alla 14 flaggor finns i --help"
 
 # 3. Den lilla modellen, bara for den har kontrollen (ingen modell for programmet, darfor inte i app/modeller.py).
 echo "== 3. testmodellen ggml-tiny-q5_1.bin"
@@ -163,7 +163,7 @@ echo "(information, ingen kontroll)"
 
 # 6. Samma flaggor som motor._whispercpp med ordtider.
 echo "== 6. transkribering med ordtider"
-KOMMANDO=("$CLI" -m "$ARB/tiny.bin" -f "$ARB/en.wav" -l sv -bs 5 -np -pp -oj -of "$ARB/ut" -ml 1 -sow --dtw tiny -nfa -ojf)
+KOMMANDO=("$CLI" -m "$ARB/tiny.bin" -f "$ARB/en.wav" -l sv -bs 5 -pp -oj -of "$ARB/ut" -ml 1 -sow --dtw tiny -nfa -ojf)
 echo "${KOMMANDO[@]}"
 T0="$(date +%s)"
 if ! "${KOMMANDO[@]}" > "$ARB/korning.txt" 2>&1; then

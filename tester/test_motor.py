@@ -208,7 +208,7 @@ def gammalt_kommando(cli, katalog, per_ord, prompt, tradar):
         "-f", os.path.join(katalog, "ljud.wav"),
         "-l", installningar.SPRAK,
         "-bs", str(motor.BEAM),
-        "-np", "-pp",
+        "-pp",  # W14a: -np togs bort, sa att whisper-cli skriver system_info, backend och tider till stderr
         "-oj", "-of", ut,
     ]
     if prompt:
@@ -246,7 +246,7 @@ class TestCliKommando(unittest.TestCase):
         cmd, _ = motor.cli_kommando("/x/whisper-cli", self.REL, True, "Åsa", 4, "Darwin")
         self.assertEqual(cmd, [
             "/x/whisper-cli", "-m", os.path.join("kb-whisper-medium-ggml", "ggml-model.bin"),
-            "-f", os.path.join(self.REL, "ljud.wav"), "-l", "sv", "-bs", "5", "-np", "-pp",
+            "-f", os.path.join(self.REL, "ljud.wav"), "-l", "sv", "-bs", "5", "-pp",
             "-oj", "-of", os.path.join(self.REL, "ut"), "--prompt", "Åsa", "-t", "4",
             "-ml", "1", "-sow", "--dtw", "medium", "-nfa", "-ojf"])
 
@@ -380,6 +380,112 @@ class TestWhispercppKor(FalskCliMiljo):
     def test_windows_riktigt_med_modellkatalog_som_heter_asa_olund(self):
         mk, logg, res, fr = self.kor("Åsa Ölund")  # plattform.system() ar riktigt "Windows"
         self.kontrollera(mk, logg, res, fr)
+
+
+class StderrProcess(FalskProcess):
+    """En whisper-cli som skriver givna rader pa stderr och slutar med given kod."""
+
+    def __init__(self, rader, kod=0):
+        self.stderr = [r + "\n" for r in rader]
+        self.returncode = kod
+        self._kod = kod
+
+    def wait(self, timeout=None):
+        return self._kod
+
+
+DIAGNOS = [
+    "whisper_init_from_file_with_params_no_state: loading model from 'kb-whisper-medium-ggml/ggml-model.bin'",
+    "load_backend: loaded CPU backend from C:\\p\\ggml-cpu-haswell.dll",
+    "whisper_model_load: type          = 4 (medium)",
+    "whisper_model_load: ftype         = 9",
+    "whisper_model_load: n_vocab       = 51865",
+    "whisper_backend_init_gpu: no GPU found",
+    "system_info: n_threads = 4 / 8 | WHISPER : CPU : SSE3 = 1 | AVX = 1 | AVX2 = 1 |",
+    "main: processing 'tmp-akasha-protokoll-x/ljud.wav' (1600 samples, 0.1 sec), 4 threads",
+    "whisper_print_progress_callback: progress =  10%",
+    "whisper_print_progress_callback: progress = 100%",
+    "whisper_print_timings:     load time =    47.64 ms",
+    "whisper_print_timings:    total time =  2090.68 ms",
+]
+
+
+class TestLoggaWhisperCli(unittest.TestCase):
+    def kor(self, rader, kod=0, prompt="", framsteg=None):
+        with mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
+             mock.patch.object(plattform, "system", lambda: "Darwin"), \
+             mock.patch.object(plattform, "starta_barn", return_value=StderrProcess(rader, kod)), \
+             self.assertLogs("akasha-protokoll", "INFO") as logg:
+            try:
+                motor._whispercpp(np_tyst(), False, prompt, framsteg)
+                fel = None
+            except motor.MotorFel as e:
+                fel = str(e)
+        return logg.output, fel
+
+    def test_bara_utvalda_rader_loggas_med_prefixet(self):
+        ut, _ = self.kor(DIAGNOS + ["[00:00.000 --> 00:02.000]  Hej Åsa"])
+        rader = [r.split("whisper-cli: ", 1)[1] for r in ut if r.startswith("INFO:akasha-protokoll:whisper-cli: ")
+                 and "forsta framsteg" not in r]
+        self.assertEqual(rader, [
+            "load_backend: loaded CPU backend from C:\\p\\ggml-cpu-haswell.dll",
+            "whisper_model_load: type          = 4 (medium)",
+            "whisper_model_load: ftype         = 9",
+            "whisper_backend_init_gpu: no GPU found",
+            "system_info: n_threads = 4 / 8 | WHISPER : CPU : SSE3 = 1 | AVX = 1 | AVX2 = 1 |",
+            "whisper_print_timings:     load time =    47.64 ms",
+            "whisper_print_timings:    total time =  2090.68 ms",
+        ])
+        self.assertFalse(any("n_vocab" in r or "processing" in r or "progress =" in r for r in ut))
+
+    def test_hogst_30_rader_per_korning(self):
+        ut, _ = self.kor(["whisper_print_timings: rad %d" % i for i in range(100)])
+        self.assertEqual(len([r for r in ut if "whisper_print_timings" in r]), motor.MAX_LOGGRADER)
+        self.assertEqual(motor.MAX_LOGGRADER, 30)
+
+    def test_varken_prompten_eller_texten_hamnar_i_loggen_eller_felmeddelandet(self):
+        prompt = "Åsa Öberg, Västerås"
+        rader = DIAGNOS + [
+            f"main: prompt = '{prompt}'",
+            "whisper_full: initial prompt: Åsa Öberg, Västerås",
+            "whisper_print_timings: Västerås",
+            "[00:00:00.000 --> 00:00:02.000]  transkriberad text",
+            " transkriberad text om mötet",
+            "transkriberad text: mer",
+            "whisper_full_with_state: fel i avkodningen",
+        ]
+        ut, fel = self.kor(rader, kod=1, prompt=prompt)
+        allt = "\n".join(ut) + "\n" + fel
+        for hemligt in ("Åsa", "Öberg", "Västerås", "transkriberad", prompt):
+            self.assertNotIn(hemligt, allt)
+        self.assertIn("kod 1", fel)
+        self.assertIn("whisper_full_with_state: fel i avkodningen", fel)  # vanliga diagnosrader finns kvar
+
+    def test_far_sparas(self):
+        k = motor._kansliga_ord("Åsa Öberg, Västerås")
+        self.assertTrue(motor._far_sparas("whisper_init_state: kv size = 2.36 MB\n", k))
+        self.assertTrue(motor._far_sparas("aheads_masks_init: tried to set\n", k))
+        self.assertTrue(motor._far_sparas("error: failed to initialize whisper context\n", k))
+        self.assertFalse(motor._far_sparas("whisper_x: Västerås\n", k))
+        self.assertFalse(motor._far_sparas("Hej och valkomna\n", k))
+        self.assertFalse(motor._far_sparas("[00:00 --> 00:01]  text\n", k))
+
+    def test_framstegen_och_tiden_till_forsta_ar_som_forut(self):
+        for rad in DIAGNOS:
+            self.assertEqual(bool(motor.PROGRESS_RE.search(rad)), "progress =" in rad, rad)
+        framsteg = []
+        ut, _ = self.kor(DIAGNOS, framsteg=framsteg.append)
+        self.assertEqual(framsteg, [0.1, 1.0])
+        rader = [r for r in ut if "forsta framsteg efter" in r]
+        self.assertEqual(len(rader), 1)
+        self.assertRegex(rader[0], r"forsta framsteg efter \d+\.\d s, klar efter \d+\.\d s \(kod 0, ")
+
+    def test_kommandot_har_inte_np_men_pp(self):
+        for system in ("Darwin", "Windows", "Linux"):
+            cmd, svarsfil = motor.cli_kommando("c", "tmp-x", False, "", 0, system)
+            delar = " ".join(cmd).split() + (svarsfil or "").splitlines()
+            self.assertNotIn("-np", delar)
+            self.assertIn("-pp", delar)
 
 
 @unittest.skipIf(os.name == "nt", "ett skalskript som cli; sokvagstestet i test_plattform tacker Windows")

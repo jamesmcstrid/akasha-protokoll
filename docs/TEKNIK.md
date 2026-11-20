@@ -310,7 +310,7 @@ har inte körts på en vanlig Windows-dator.**
 - **Kontrollerna i Actions.** Flödet kör, var och en så att alla körs även om en faller (steget Sammanfattning
   faller jobbet om något föll): enhetstesterna; kontrollen av `whisper-cli` (`kontrollera_whisper_cli_windows.py`);
   bygget med sina egna kontroller; `kontrollera.py` mot programmet uppackat ur zip-filen; och
-  `kontrollera_windows.py` (sökvägar och talare). Kontrollen av `whisper-cli` ser att alla 15 flaggor som
+  `kontrollera_windows.py` (sökvägar och talare). Kontrollen av `whisper-cli` ser att alla 14 flaggor som
   `motor.py` använder finns, och transkriberar testljudet (26 s) med den lilla testmodellen genom programmets
   egen kod (`motor.cli_kommando()` och `motor._whispercpp()`), med svarsfilen, med modellkatalogen under en
   mapp som heter `Åsa Ölund` och med prompten "Åsa Öberg, Göteborg". `kontrollera_pe.py` kontrollerar att alla

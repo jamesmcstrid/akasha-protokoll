@@ -30,7 +30,7 @@ import urllib.request
 import kontroll_hjalp
 
 ROT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FLAGGOR = ["-m", "-f", "-l", "-bs", "-np", "-pp", "-oj", "-of", "--prompt", "-t", "-ml", "-sow", "--dtw", "-nfa", "-ojf"]
+FLAGGOR = ["-m", "-f", "-l", "-bs", "-pp", "-oj", "-of", "--prompt", "-t", "-ml", "-sow", "--dtw", "-nfa", "-ojf"]
 # Samma lasta testmodell som paketering/kontrollera-whisper-cli.sh (Mac).
 MODELL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny-q5_1.bin"
 MODELL_SHA = "818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7"
