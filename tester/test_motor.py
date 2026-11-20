@@ -141,6 +141,7 @@ class TestWhispercpp(unittest.TestCase):
 class TestStoppa(unittest.TestCase):
     def setUp(self):
         self.addCleanup(setattr, motor, "_process", None)
+        self.addCleanup(setattr, motor, "_avslutas", False)  # stoppa() lamnar flaggan satt
 
     def test_stoppar_pagaende_process(self):
         p = mock.Mock()
@@ -166,6 +167,49 @@ class TestStoppa(unittest.TestCase):
         motor._process = p
         motor.stoppa()
         p.terminate.assert_not_called()
+
+
+class DodadProcess(FalskProcess):
+    """En whisper-cli som har fatt SIGTERM: wait() ger -15."""
+    returncode = -15
+
+    def terminate(self):
+        pass
+
+    def wait(self, timeout=None):
+        return -15
+
+
+class TestAvbruten(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(setattr, motor, "_process", None)
+        self.addCleanup(setattr, motor, "_avslutas", False)
+
+    def test_stoppa_sater_flaggan_och_gor_avbruten_av_dodad_process(self):
+        self.assertFalse(motor._avslutas)
+        motor.stoppa()
+        self.assertTrue(motor._avslutas)
+        with mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
+             mock.patch.object(motor.subprocess, "Popen", return_value=DodadProcess()):
+            with self.assertRaises(motor.Avbruten) as e:
+                motor._whispercpp(np_tyst(), False, "", None)
+        self.assertIsInstance(e.exception, motor.MotorFel)
+
+    def test_utan_stoppa_ar_det_vanligt_motorfel(self):
+        with mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
+             mock.patch.object(motor.subprocess, "Popen", return_value=DodadProcess()):
+            with self.assertRaises(motor.MotorFel) as e:
+                motor._whispercpp(np_tyst(), False, "", None)
+        self.assertNotIsInstance(e.exception, motor.Avbruten)
+        self.assertIn("kod -15", str(e.exception))
+
+    def test_efter_stoppa_startas_ingen_ny_whisper_cli(self):
+        motor.stoppa()
+        with mock.patch.object(motor.subprocess, "Popen") as popen, \
+             mock.patch.object(motor, "problem", lambda: None):
+            with self.assertRaises(motor.Avbruten):
+                motor.transkribera(np_tyst())
+        popen.assert_not_called()
 
 
 def np_tyst():

@@ -73,6 +73,9 @@ class TestLagring(unittest.TestCase):
         self.assertEqual([m["id"] for m in lagring.lista()], [b["id"], a["id"]])
         lagring.aterstall_avbrutna()
         self.assertEqual(lagring.las(b["id"])["status"], "avbruten")
+        self.assertEqual(lagring.las(b["id"])["fel"], lagring.AVBRUTEN)
+        self.assertEqual(lagring.AVBRUTEN, "Transkriberingen avbröts eftersom Akasha Meet avslutades. "
+                                           "Tryck Försök igen för att göra om den.")
         self.assertEqual(lagring.las(a["id"])["status"], "spelar_in")  # orord
         lagring.radera(a["id"])
         self.assertFalse(os.path.exists(lagring.ljudfil(a)))

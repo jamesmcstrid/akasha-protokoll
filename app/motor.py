@@ -82,6 +82,10 @@ class MotorFel(Exception):
     """Motorn saknas, kraschar eller svarar fel."""
 
 
+class Avbruten(MotorFel):
+    """Transkriberingen stoppades for att programmet avslutas."""
+
+
 def _cli_saknas():
     if plattform.ar_paketerad():
         return "whisper-cli saknas i programmet. Ladda ned Akasha Meet på nytt."
@@ -154,16 +158,20 @@ def avkoda_kanaler(sokvag):
 
 
 def transkribera(samples, per_ord=False, prompt="", framsteg=None):
-    """-> (text, segment, ord).
+    """-> (text, segment, ord). Kastar Avbruten om programmet har borjat avslutas.
 
     segment: [{"start", "end", "text"}] i sekunder.
     ord: [(start, slut, text)] om per_ord (behovs for talaridentifiering), annars [].
     framsteg: anropas med en andel 0..1 medan arbetet pagar.
     """
+    if _avslutas:
+        raise Avbruten("stoppad")
     fel = problem()
     if fel:
         raise MotorFel(fel)
     with _las:
+        if _avslutas:  # kan ha satts medan jobbet vantade pa laset
+            raise Avbruten("stoppad")
         if AKTIV == "faster":
             return _faster(samples, per_ord, prompt, framsteg)
         return _whispercpp(samples, per_ord, prompt, framsteg)
@@ -214,9 +222,13 @@ def wav_16k_mono(samples):
 # Pagaende whisper-cli. start.Tjanst.stang() anropar stoppa() nar programmet avslutas, annars
 # fortsatter whisper-cli efter att programmet har stangts.
 _process = None
+# Sant sa snart programmet avslutas. Lamnas satt: inga nya whisper-cli ska startas efter det.
+_avslutas = False
 
 
 def stoppa():
+    global _avslutas
+    _avslutas = True  # fore terminate(), sa att _whispercpp() ser att det ar ett avslut
     p = _process
     if p is not None and p.poll() is None:
         p.terminate()
@@ -260,6 +272,8 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
         )
         _process = p
         try:
+            if _avslutas:  # stoppa() hann inte se processen
+                p.terminate()
             sista = collections.deque(maxlen=15)
             for rad in p.stderr:
                 sista.append(rad.rstrip())
@@ -269,6 +283,8 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
             kod = p.wait()
         finally:
             _process = None
+        if kod != 0 and _avslutas:
+            raise Avbruten("stoppad")
         if kod != 0:
             raise MotorFel(f"whisper-cli avslutades med kod {p.returncode}: " + " | ".join(sista))
         try:

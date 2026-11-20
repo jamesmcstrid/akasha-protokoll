@@ -72,6 +72,20 @@ class TestApp(unittest.TestCase):
 
     # --- skydd ---------------------------------------------------------------------------
 
+    def test_avbruten_nar_programmet_avslutas(self):
+        def avbryt(*a, **k):
+            raise motor.Avbruten("stoppad")
+
+        with mock.patch.object(motor, "transkribera", avbryt):
+            id_ = self.ladda_upp()
+        m = self.klient.get(f"/api/inspelningar/{id_}").get_json()
+        self.assertEqual((m["status"], m["fel"]), ("avbruten", lagring.AVBRUTEN))
+        # Forsok igen: jobbet kor vidare med den vanliga (falska) motorn.
+        r = self.klient.post(f"/api/inspelningar/{id_}/transkribera", headers=H)
+        self.assertEqual(r.status_code, 200, r.get_json())
+        akasha._ko.join()
+        self.assertEqual(self.klient.get(f"/api/inspelningar/{id_}").get_json()["status"], "klar")
+
     def test_annat_vardnamn_avvisas(self):
         self.assertEqual(self.klient.get("/", base_url="http://angripare.example").status_code, 403)
         self.assertEqual(self.klient.get("/health", base_url="http://127.0.0.1:8611").status_code, 200)

@@ -249,6 +249,13 @@ def _arbetare():
                 kor(id_)
         except lagring.Fel as e:
             lagring.uppdatera(id_, status="fel", fel=str(e))
+        except motor.Avbruten:
+            # Programmet avslutas: samma status och text som aterstall_avbrutna() ger vid nasta start.
+            log.info("avbruten %s: programmet avslutas", id_)
+            try:
+                lagring.uppdatera(id_, status="avbruten", fel=lagring.AVBRUTEN)
+            except lagring.Fel:
+                pass  # inspelningen raderades under tiden
         except motor.MotorFel as e:
             log.error("motorfel %s: %s", id_, e)
             lagring.uppdatera(id_, status="fel", fel=f"Transkriberingen misslyckades: {e}")
@@ -573,20 +580,31 @@ def transkribera_direkt():
     return jsonify(svar)
 
 
+def forbered():
+    """Det som maste goras en gang innan tjansten tar emot anrop."""
+    os.makedirs(DATAKATALOG, mode=0o700, exist_ok=True)
+    lagring.aterstall_avbrutna()
+    starta_arbetare()
+
+
+def skapa_server(port=PORT):
+    """waitress-servern, bunden till 127.0.0.1. Kastar OSError om porten ar upptagen."""
+    from waitress import create_server
+
+    return create_server(app, host="127.0.0.1", port=port, threads=8,
+                         max_request_body_size=MAX_MB * 1024 * 1024)
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     for text in installningar.PROBLEM:
         log.warning("installningar: %s", text)
-    os.makedirs(DATAKATALOG, mode=0o700, exist_ok=True)
-    lagring.aterstall_avbrutna()
-    starta_arbetare()
-    from waitress import serve
-
+    forbered()
+    server = skapa_server()
     log.info("Akasha Meet: http://127.0.0.1:%s (motor %s, data i %s)", PORT, motor.AKTIV, DATAKATALOG)
     if motor.problem():
         log.warning("motorn ar inte redo: %s", motor.problem())
-    serve(app, host="127.0.0.1", port=PORT, threads=8,
-          max_request_body_size=MAX_MB * 1024 * 1024)
+    server.run()
 
 
 if __name__ == "__main__":

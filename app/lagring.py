@@ -19,6 +19,7 @@ from installningar import DATAKATALOG
 ID_RE = re.compile(r"^\d{8}-\d{6}(-\d{1,3})?$")
 ANDELSER = {".webm", ".m4a", ".mp4", ".mp3", ".wav", ".ogg", ".oga", ".opus", ".aac", ".flac", ".mov"}
 PAGAENDE = {"koar", "transkriberar", "talare"}
+AVBRUTEN = "Transkriberingen avbröts eftersom Akasha Meet avslutades. Tryck Försök igen för att göra om den."
 
 _las = threading.RLock()
 
@@ -204,4 +205,4 @@ def aterstall_avbrutna():
     """
     for meta in lista():
         if meta["status"] in PAGAENDE:
-            uppdatera(meta["id"], status="avbruten", fel="Tjänsten startades om under transkriberingen.")
+            uppdatera(meta["id"], status="avbruten", fel=AVBRUTEN)
