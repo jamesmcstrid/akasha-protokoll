@@ -435,6 +435,65 @@ class Byggverktyg(unittest.TestCase):
         self.assertTrue(res.ok_rader)
 
 
+def ladda_kontrollera(plattform):
+    """paketering/kontrollera.py inladdad med en annan sys.platform (konstanterna rakas ut vid import)."""
+    spec = importlib.util.spec_from_file_location(f"kontrollera_{plattform}", os.path.join(PAKETERING, "kontrollera.py"))
+    modul = importlib.util.module_from_spec(spec)
+    with mock.patch.object(sys, "platform", plattform):
+        spec.loader.exec_module(modul)
+    return modul
+
+
+class KontrolleraPerPlattform(unittest.TestCase):
+    def setUp(self):
+        self.hem = tempfile.mkdtemp(prefix="akasha-kontr-")
+        self.addCleanup(shutil.rmtree, self.hem, True)
+
+    def miljo(self, plattform, extra=None):
+        k = ladda_kontrollera(plattform)
+        k.args = mock.Mock(port=8611)
+        with mock.patch.dict(os.environ, extra or {}, clear=True):
+            return k, k.programmiljo(self.hem)
+
+    def test_linux_och_mac_far_samma_miljo_som_forut(self):
+        for plattform in ("linux", "darwin"):
+            k, miljo = self.miljo(plattform, {"HTTPS_PROXY": "http://p:1", "TMPDIR": "/t"})
+            self.assertEqual(miljo, {"HOME": self.hem, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "PORT": "8611",
+                                     "LANG": "sv_SE.UTF-8", "TMPDIR": "/t", "HTTPS_PROXY": "http://p:1"})
+            self.assertEqual(k.START_TIDSGRANS, 60)
+        self.assertEqual(ladda_kontrollera("linux").NY_PROGRAMKATALOG, (".local", "share", "akasha-protokoll"))
+        self.assertEqual(ladda_kontrollera("darwin").NY_PROGRAMKATALOG, ("Library", "Application Support", "Akasha Protokoll"))
+
+    def test_windows_miljon_har_userprofile_localappdata_och_temp_under_hem(self):
+        k, miljo = self.miljo("win32", {"SYSTEMROOT": "C:\\Windows", "HOME": "/ska/inte/med", "PATH": "/ska/inte/med",
+                                        "NUMBER_OF_PROCESSORS": "4", "HTTPS_PROXY": "http://p:1"})
+        self.assertEqual(miljo["USERPROFILE"], self.hem)
+        self.assertEqual(miljo["LOCALAPPDATA"], os.path.join(self.hem, "AppData", "Local"))
+        self.assertEqual(miljo["TEMP"], os.path.join(self.hem, "AppData", "Local", "Temp"))
+        self.assertEqual(miljo["TMP"], miljo["TEMP"])
+        self.assertTrue(os.path.isdir(miljo["TEMP"]))
+        self.assertEqual(miljo["SYSTEMROOT"], "C:\\Windows")
+        self.assertEqual(miljo["PORT"], "8611")
+        self.assertEqual(miljo["NUMBER_OF_PROCESSORS"], "4")
+        self.assertEqual(miljo["HTTPS_PROXY"], "http://p:1")
+        self.assertNotIn("HOME", miljo)
+        self.assertNotIn("/ska/inte/med", miljo["PATH"])
+        self.assertTrue(miljo["PATH"].startswith(os.path.join("C:\\Windows", "System32")))
+        self.assertEqual(k.NY_PROGRAMKATALOG, ("AppData", "Local", "Akasha Protokoll"))
+        self.assertEqual(k.GAMMAL_PROGRAMKATALOG, ("AppData", "Local", "Akasha Meet"))
+        self.assertEqual(k.START_TIDSGRANS, 120)
+
+    def test_tasklist_hittar_bara_rader_med_avbildningens_namn(self):
+        k = ladda_kontrollera("win32")
+        svar = mock.Mock(stdout=b'"whisper-cli.exe","123","Console","1","50 000 K"\r\n')
+        with mock.patch.object(k.subprocess, "run", return_value=svar) as kor:
+            self.assertEqual(len(k.tasklist("whisper-cli.exe")), 1)
+        self.assertEqual(kor.call_args[0][0][:3], ["tasklist", "/FI", "IMAGENAME eq whisper-cli.exe"])
+        svar = mock.Mock(stdout=b"INFO: No tasks are running which match the specified criteria.\r\n")
+        with mock.patch.object(k.subprocess, "run", return_value=svar):
+            self.assertEqual(k.tasklist("whisper-cli.exe"), [])
+
+
 class Kontrollskripten(unittest.TestCase):
     def test_skripten_utan_nagon_utskrift_som_inte_ar_utf8(self):
         # Actions-maskinens konsol ar inte UTF-8: en utskrift med a-ring och pilar far inte krascha skripten.

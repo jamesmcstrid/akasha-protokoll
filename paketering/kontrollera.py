@@ -7,6 +7,10 @@ Kors med en vanlig Python som har requests (inte inuti programmet):
 
 Varje steg skriver "OK: ..." eller "FEL: ...". Forsta FEL ger slutkod 1 (och de sista raderna av
 programmets utskrift och logg). Sist "KONTROLL: OK".
+
+Pa Windows (sys.platform == "win32") ar miljon USERPROFILE, LOCALAPPDATA och TEMP under --hem (ge en katalog med
+a-ring och o-prickar och mellanslag i namnet), programmet avslutas med TerminateProcess, ett steg provar den andra
+kopian (mutexen) och whisper-cli-processer letas med tasklist.
 """
 import argparse
 import os
@@ -22,14 +26,24 @@ ROT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROT, "app"))
 
 MAC = sys.platform == "darwin"
+WIN = sys.platform == "win32"
 HEADERS = {"X-Akasha-Protokoll": "1"}
 TALARE_SAKNAS = "röstmodellen saknas. Hämta den på sidan."
 FLYTTPROV = "flyttprov"
 # Programkatalogen under hemkatalogen, med det gamla namnet (Akasha Meet) och det nya.
-GAMMAL_PROGRAMKATALOG = ("Library", "Application Support", "Akasha Meet") if MAC else (".local", "share", "akasha-meet")
-NY_PROGRAMKATALOG = ("Library", "Application Support", "Akasha Protokoll") if MAC else (".local", "share", "akasha-protokoll")
+GAMMAL_PROGRAMKATALOG = ("Library", "Application Support", "Akasha Meet") if MAC else \
+    ("AppData", "Local", "Akasha Meet") if WIN else (".local", "share", "akasha-meet")
+NY_PROGRAMKATALOG = ("Library", "Application Support", "Akasha Protokoll") if MAC else \
+    ("AppData", "Local", "Akasha Protokoll") if WIN else (".local", "share", "akasha-protokoll")
+START_TIDSGRANS = 120 if WIN else 60  # Windows: Defender granskar en nyuppackad exe och dess DLL-filer forsta gangen
+ANDRA_KOPIAN_TIDSGRANS = 40
+# Windows: variabler som programmet behover ur den egna miljon (utan SYSTEMROOT fungerar inte Pythons nat och slumptal).
+WINDOWS_MILJO = ("SYSTEMROOT", "WINDIR", "COMSPEC", "SYSTEMDRIVE", "PATHEXT", "PROCESSOR_ARCHITECTURE",
+                 "PROCESSOR_ARCHITEW6432", "NUMBER_OF_PROCESSORS", "OS", "PROGRAMDATA", "PROGRAMFILES", "ALLUSERSPROFILE",
+                 "USERNAME", "COMPUTERNAME")
 
 proc = None
+andra_proc = None
 args = None
 utskrift = None
 logg = None
@@ -48,9 +62,10 @@ def slut(text):
                 rader = f.read().splitlines()[-40:]
             print(f"--- {namn} ({sokvag}), sista {len(rader)} raderna ---", flush=True)
             print("\n".join(rader), flush=True)
-    if proc is not None and proc.poll() is None:
-        proc.kill()
-        proc.wait()
+    for p in (andra_proc, proc):
+        if p is not None and p.poll() is None:
+            p.kill()
+            p.wait()
     sys.exit(1)
 
 
@@ -77,6 +92,38 @@ def port_ledig():
     return False
 
 
+def programmiljo(hem):
+    """Miljon programmet startas med: tom hemkatalog, och bara det som behovs ur den egna miljon."""
+    if WIN:
+        sysrot = os.environ.get("SYSTEMROOT") or r"C:\Windows"
+        lokal = os.path.join(hem, "AppData", "Local")
+        temp = os.path.join(lokal, "Temp")
+        os.makedirs(temp, exist_ok=True)
+        miljo = {"USERPROFILE": hem, "APPDATA": os.path.join(hem, "AppData", "Roaming"), "LOCALAPPDATA": lokal,
+                 "TEMP": temp, "TMP": temp, "SYSTEMROOT": sysrot, "WINDIR": os.environ.get("WINDIR") or sysrot,
+                 "COMSPEC": os.environ.get("COMSPEC") or os.path.join(sysrot, "System32", "cmd.exe"),
+                 "PATH": os.path.join(sysrot, "System32") + os.pathsep + sysrot, "PORT": str(args.port)}
+        for namn in WINDOWS_MILJO:
+            if namn in os.environ:
+                miljo.setdefault(namn, os.environ[namn])
+    else:
+        miljo = {"HOME": hem, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "PORT": str(args.port),
+                 "LANG": "sv_SE.UTF-8"}
+    for namn in ("TMPDIR", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "REQUESTS_CA_BUNDLE",
+                 "SSL_CERT_FILE", "CURL_CA_BUNDLE"):
+        for n in (namn, namn.lower()):
+            if n in os.environ:
+                miljo[n] = os.environ[n]
+    return miljo
+
+
+def tasklist(avbildning):
+    """Namn pa processer med den avbildningen (tasklist; MSYS omskriver inte argument som startas fran Python)."""
+    ut = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {avbildning}", "/NH", "/FO", "CSV"], capture_output=True,
+                        timeout=60).stdout.decode("utf-8", "replace")
+    return [r for r in ut.splitlines() if avbildning.lower() in r.lower()]
+
+
 def programstorlek(program):
     """Summa av filstorlekar: .app pa Mac, annars katalogen programmet ligger i."""
     rot = os.path.dirname(os.path.abspath(program))
@@ -94,7 +141,10 @@ def programstorlek(program):
 
 
 def main():
-    global proc, args, utskrift, logg
+    global proc, andra_proc, args, utskrift, logg
+    if WIN:  # Actions-maskinens konsol ar inte UTF-8: en omdirigerad utskrift med a-ring far inte krascha skriptet
+        for strom in (sys.stdout, sys.stderr):
+            strom.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
     ap.add_argument("--program", required=True)
     ap.add_argument("--hem", required=True)
@@ -130,13 +180,7 @@ def main():
     ok(f"gamla mappar lagda: {gammal_data} (flyttprov.txt) och {gammal_program} (installningar.env)")
 
     # 2. Starta programmet med tom hemkatalog. Inga MODELLKATALOG eller DATAKATALOG: standardvardena provas.
-    miljo = {"HOME": hem, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "PORT": str(args.port),
-             "LANG": "sv_SE.UTF-8"}
-    for namn in ("TMPDIR", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "REQUESTS_CA_BUNDLE",
-                 "SSL_CERT_FILE", "CURL_CA_BUNDLE"):
-        for n in (namn, namn.lower()):
-            if n in os.environ:
-                miljo[n] = os.environ[n]
+    miljo = programmiljo(hem)
     utskrift = os.path.join(hem, "program-utskrift.log")
     logg = os.path.join(hem, "Library", "Logs", "Akasha Protokoll", "akasha-protokoll.log") if MAC else \
         os.path.join(hem, *NY_PROGRAMKATALOG, "logg", "akasha-protokoll.log")
@@ -154,8 +198,8 @@ def main():
             break
         except requests.RequestException:
             pass
-        if time.monotonic() - start > 60:
-            slut("programmet svarade inte på /health inom 60 s")
+        if time.monotonic() - start > START_TIDSGRANS:
+            slut(f"programmet svarade inte på /health inom {START_TIDSGRANS} s")
         time.sleep(0.5)
     ok(f"/health svarar efter {time.monotonic() - start:.1f} s")
 
@@ -253,15 +297,51 @@ def main():
     text = open(logg, encoding="utf-8", errors="replace").read() if os.path.isfile(logg) else None
     kontrollera(text is not None and rad in text, f"loggfilen {logg} finns och innehåller '{rad}'",
                 f"loggfilen {logg} saknas eller saknar raden '{rad}'")
+    if WIN:
+        # Raderna "win: ..." visar hur langt skalet kom (ikonen vid klockan, beslutet, webblasaren).
+        print("--- loggrader fran Windows-skalet (win: ...) ---", flush=True)
+        print("\n".join(r for r in text.splitlines() if "win:" in r), flush=True)
+        for rad_win in ("win: startar", "win: beslut starta", "win: tjansten svarar, oppnar webblasaren"):
+            kontrollera(rad_win in text, f"loggen har raden '{rad_win}'", f"loggen saknar raden '{rad_win}'")
+        if "win: ikonen visas" in text:
+            ok("ikonen vid klockan visades (win: ikonen visas)")
+        else:
+            print("INFO: loggen saknar 'win: ikonen visas' (en Actions-maskin kan sakna skrivbord; tjansten gick anda)",
+                  flush=True)
 
-    # 10. SIGTERM: processen ska avslutas och porten bli ledig.
-    proc.send_signal(signal.SIGTERM)
+    # 9b. Windows: starta programmet en gang till. Den andra kopian ska se mutexen, oppna sidan och avsluta sig
+    # sjalv med kod 0, och den forsta ska fortfarande svara.
+    if WIN:
+        with open(os.path.join(hem, "program-utskrift-andra.log"), "wb") as ut2:
+            andra_proc = subprocess.Popen([program], env=miljo, stdout=ut2, stderr=subprocess.STDOUT)
+        try:
+            kod = andra_proc.wait(ANDRA_KOPIAN_TIDSGRANS)
+        except subprocess.TimeoutExpired:
+            slut(f"den andra kopian avslutades inte inom {ANDRA_KOPIAN_TIDSGRANS} s (mutexen eller redan_igang fungerar inte)")
+        kontrollera(kod == 0, "den andra kopian avslutade sig själv med kod 0",
+                    f"den andra kopian avslutades med kod {kod}, väntade 0")
+        r = hamta("/health")
+        kontrollera(r.status_code == 200, "den första kopian svarar fortfarande på /health efter den andra starten",
+                    f"/health gav {r.status_code} efter den andra starten")
+        text = open(logg, encoding="utf-8", errors="replace").read()
+        kontrollera("win: kopia finns redan" in text, "loggen har raden 'win: kopia finns redan'",
+                    "loggen saknar raden 'win: kopia finns redan' (den andra kopian kom inte till mutexen)")
+
+    # 10. SIGTERM (Windows: TerminateProcess, som Aktivitetshanteraren): processen ska avslutas och porten bli ledig.
+    if WIN:
+        proc.terminate()
+    else:
+        proc.send_signal(signal.SIGTERM)
     try:
         proc.wait(10)
     except subprocess.TimeoutExpired:
-        slut("programmet avslutades inte inom 10 s efter SIGTERM")
+        slut(f"programmet avslutades inte inom 10 s efter {'TerminateProcess' if WIN else 'SIGTERM'}")
     kontrollera(port_ledig(), f"programmet avslutades (kod {proc.returncode}) och porten är ledig",
-                "porten är inte ledig efter SIGTERM")
+                f"porten är inte ledig efter {'TerminateProcess' if WIN else 'SIGTERM'}")
+    if WIN:
+        kvar = tasklist("whisper-cli.exe")
+        kontrollera(not kvar, "ingen whisper-cli.exe kvar", f"whisper-cli.exe är kvar efter att programmet avslutats: {kvar}")
+        print(f"INFO: processer som heter Akasha Protokoll.exe: {len(tasklist('Akasha Protokoll.exe'))}", flush=True)
     if MAC:
         kvar = subprocess.run(["pgrep", "-f", "whisper-cli"], capture_output=True)
         kontrollera(kvar.returncode != 0, "ingen whisper-cli kvar", "en whisper-cli är kvar efter SIGTERM")
