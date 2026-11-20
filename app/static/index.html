@@ -210,11 +210,13 @@
           </div>
           <!-- Foljer med nar man bladdrar, sa att ljudet och nasta osakra alltid gar att na. -->
           <div id="v-kontrollrad" class="kontrollrad">
-            <audio id="v-ljud" controls preload="none"></audio>
-            <button id="v-backa" type="button" class="knapp liten-knapp" title="Backa 5 sekunder">Backa 5 s</button>
-            <button id="v-nasta-osakra" type="button" class="knapp liten-knapp" aria-describedby="v-osakra-lage"
-              hidden>Nästa osäkra talare</button>
-            <span id="v-osakra-lage" class="osakra-lage" role="status" hidden></span>
+            <div class="spelare">
+              <audio id="v-ljud" controls preload="none"></audio>
+              <button id="v-backa" type="button" class="knapp liten-knapp" title="Backa 5 sekunder">Backa 5 s</button>
+              <button id="v-nasta-osakra" type="button" class="knapp liten-knapp" aria-describedby="v-osakra-lage"
+                hidden>Nästa osäkra talare</button>
+              <span id="v-osakra-lage" class="osakra-lage" role="status" hidden></span>
+            </div>
           </div>
           <div id="v-text" class="transkript"></div>
         </div>
@@ -223,7 +225,7 @@
           <h3 id="v-anvand-rubrik" tabindex="-1"><span class="stegnr" aria-hidden="true"></span>Använd texten</h3>
           <div class="knappar">
             <span id="v-atgarder" hidden>
-              <button id="v-kopiera" type="button" class="knapp">Kopiera texten</button>
+              <button id="v-kopiera" type="button" class="knapp primar">Kopiera texten</button>
               <a id="v-txt" class="knapp" href="#">Ladda ner som text (.txt)</a>
               <a id="v-md" class="knapp" href="#">Ladda ner som Markdown (.md)</a>
             </span>

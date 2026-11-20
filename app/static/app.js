@@ -1549,14 +1549,17 @@ function renderaText(m) {
     if ("speaker" in s) {
       const namn = namnFor(m, s.speaker);
       const nr = String(s.speaker);
-      p.append(kanRatta
-        ? el("button", { type: "button", class: `namn ${farg(s.speaker)}`, "data-talare": nr, title: "Byt talare",
-          "aria-label": `${namn}, byt talare`, "aria-haspopup": "dialog",
+      // Namn och osakert-tecken i en grupp med fast bredd, sa att texten borjar pa samma stalle i alla repliker.
+      const vem = el("span", { class: "vem" });
+      p.append(vem);
+      vem.append(kanRatta
+        ? el("button", { type: "button", class: `namn ${farg(s.speaker)}`, "data-talare": nr, "data-initial": initial(namn),
+          title: "Byt talare", "aria-label": `${namn}, byt talare`, "aria-haspopup": "dialog",
           onclick: (e) => oppnaTalarval(e.currentTarget, i, null, null) }, `${namn}:`)
-        : el("span", { class: `namn ${farg(s.speaker)}`, "data-talare": nr }, `${namn}:`));
+        : el("span", { class: `namn ${farg(s.speaker)}`, "data-talare": nr, "data-initial": initial(namn) }, `${namn}:`));
       if (s.osaker_talare) {
         // En knapp till samma talarval som namnet: tecknet ar det som drar blicken till sig.
-        p.append(kanRatta
+        vem.append(kanRatta
           ? el("button", { type: "button", class: "osaker-tecken", "aria-haspopup": "dialog",
             "aria-label": "Osäker talare. Kontrollera och välj talare.",
             title: "Osäker talare: kontrollera mot ljudet och välj talare",
@@ -1574,7 +1577,7 @@ function renderaText(m) {
       });
       p.append(text);
     } else {
-      p.append(s.text);
+      p.append(el("span", { class: "repliktext" }, s.text));
     }
     yta.append(p);
   });
@@ -1597,7 +1600,8 @@ function renderaOsakert(m) {
     el("span", { class: "prov", "aria-hidden": "true" }, prov), el("span", {}, ...text)));
   rad(el("span", { class: "tid" }, "00:00"), "Klicka på en tid för att lyssna därifrån.");
   if (nummer.length) {
-    rad(el("span", { class: `namn ${farg(nummer[0])}`, "data-talare": String(nummer[0]) }, `${namnFor(m, nummer[0])}:`),
+    rad(el("span", { class: `namn ${farg(nummer[0])}`, "data-talare": String(nummer[0]),
+      "data-initial": initial(namnFor(m, nummer[0])) }, `${namnFor(m, nummer[0])}:`),
       "Klicka på namnet för att byta talare. Markera några ord för att byta talare på bara dem.");
   }
   if (talare) {
@@ -1724,12 +1728,12 @@ function oppnaTalarval(ankare, i, fran, till) {
   const val = el("div", { class: "knappar" });
   if (helReplik && s.osaker_talare) {
     val.append(el("button", { type: "button", class: `knapp liten-knapp ${farg(s.speaker)}`,
-      onclick: () => ratta(i, { talare: s.speaker }) }, `${namnFor(m, s.speaker)} stämmer`));
+      "data-initial": initial(namnFor(m, s.speaker)), onclick: () => ratta(i, { talare: s.speaker }) }, `${namnFor(m, s.speaker)} stämmer`));
   }
   for (const nr of talarnummer(m)) {
     if (helReplik && nr === s.speaker) continue;
     val.append(el("button", { type: "button", class: `knapp liten-knapp ${farg(nr)}`,
-      onclick: () => ratta(i, { talare: nr, fran, till }) }, namnFor(m, nr)));
+      "data-initial": initial(namnFor(m, nr)), onclick: () => ratta(i, { talare: nr, fran, till }) }, namnFor(m, nr)));
   }
   val.append(el("button", { type: "button", class: "knapp liten-knapp",
     onclick: () => ratta(i, { talare: "ny", fran, till }) }, "Ny talare"));
@@ -1739,7 +1743,7 @@ function oppnaTalarval(ankare, i, fran, till) {
     const alla = el("div", { class: "knappar" });
     for (const nr of andra) {
       alla.append(el("button", { type: "button", class: `knapp liten-knapp ${farg(nr)}`,
-        onclick: () => ratta(i, { talare: nr, alla: true }) }, namnFor(m, nr)));
+        "data-initial": initial(namnFor(m, nr)), onclick: () => ratta(i, { talare: nr, alla: true }) }, namnFor(m, nr)));
     }
     ruta.append(el("p", { class: "dampad liten" }, `Alla repliker från ${namnFor(m, s.speaker)} är egentligen:`), alla);
   }
