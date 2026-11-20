@@ -145,11 +145,11 @@ class TestFlytt(TillfalligtHem):
         ut = {}
         for rot, kataloger, filer in os.walk(self.hem):
             for namn in kataloger:
-                ut[os.path.relpath(os.path.join(rot, namn), self.hem)] = None
+                ut[os.path.relpath(os.path.join(rot, namn), self.hem).replace(os.sep, "/")] = None
             for namn in filer:
                 sokvag = os.path.join(rot, namn)
                 with open(sokvag, encoding="utf-8") as f:
-                    ut[os.path.relpath(sokvag, self.hem)] = f.read()
+                    ut[os.path.relpath(sokvag, self.hem).replace(os.sep, "/")] = f.read()
         return ut
 
     def test_bara_gammal_finns_flyttas_och_upplosningen_ger_den_nya(self):

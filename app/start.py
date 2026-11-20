@@ -221,7 +221,8 @@ def flytta_till_nya_namn():
     rot = logging.getLogger()
     for h in list(rot.handlers):
         if isinstance(h, logging.handlers.RotatingFileHandler) and any(
-                h.baseFilename.startswith(os.path.abspath(g) + os.sep) for g, _ in flyttat):
+                os.path.normcase(h.baseFilename).startswith(os.path.normcase(os.path.abspath(g)) + os.sep)
+                for g, _ in flyttat):
             rot.removeHandler(h)
             h.close()
             stall_in_loggning()

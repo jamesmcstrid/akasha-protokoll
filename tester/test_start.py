@@ -371,6 +371,8 @@ class TestFlyttVidStart(Stadning):
                 start.main()
             flytta.assert_not_called()
 
+    @unittest.skipIf(os.name == "nt", "Windows nekar namnbyte av en katalog med en oppen loggfil: flytten "
+                                      "misslyckas da (se plattform-testet for det) och loggern behover inte byta fil")
     def test_loggfilen_foljer_med_nar_dess_katalog_flyttas(self):
         gammal = os.path.join(self.katalog, "gammal")
         ny = os.path.join(self.katalog, "ny")

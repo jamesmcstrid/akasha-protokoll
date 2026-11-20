@@ -40,9 +40,15 @@ def ar_paketerad():
     return bool(getattr(sys, "frozen", False))
 
 
+def _under_hem(*delar):
+    """Sokvag under hemkatalogen med en enda sorts avskiljare (expanduser("~/x/y") ger blandade
+    avskiljare pa Windows)."""
+    return os.path.join(os.path.expanduser("~"), *delar)
+
+
 def _programkatalog(namn_mac, namn_linux):
     if system() == "Darwin":
-        return os.path.expanduser("~/Library/Application Support/" + namn_mac)
+        return _under_hem("Library", "Application Support", namn_mac)
     if system() == "Windows":
         bas = os.environ.get("LOCALAPPDATA") or os.path.expanduser(os.path.join("~", "AppData", "Local"))
         return os.path.join(bas, namn_mac)
@@ -72,9 +78,9 @@ def programkatalog():
 
 def standard_datakatalog():
     """Standardvardet for DATAKATALOG (med ~): samma upplosning som programkatalog()."""
-    if os.path.exists(os.path.expanduser(NY_DATAKATALOG)):
+    if os.path.exists(_under_hem(NY_DATAKATALOG[2:])):
         return NY_DATAKATALOG
-    return GAMMAL_DATAKATALOG if os.path.isdir(os.path.expanduser(GAMMAL_DATAKATALOG)) else NY_DATAKATALOG
+    return GAMMAL_DATAKATALOG if os.path.isdir(_under_hem(GAMMAL_DATAKATALOG[2:])) else NY_DATAKATALOG
 
 
 def flytta_till_nya_namn(datakatalog_satt=None):
@@ -87,7 +93,7 @@ def flytta_till_nya_namn(datakatalog_satt=None):
         datakatalog_satt = bool(os.environ.get("DATAKATALOG", "").strip())
     par = [(gammal_programkatalog(), ny_programkatalog())]
     if not datakatalog_satt:
-        par.append((os.path.expanduser(GAMMAL_DATAKATALOG), os.path.expanduser(NY_DATAKATALOG)))
+        par.append((_under_hem(GAMMAL_DATAKATALOG[2:]), _under_hem(NY_DATAKATALOG[2:])))
     flyttat = []
     for gammal, ny in par:
         if not os.path.isdir(gammal):
@@ -106,7 +112,7 @@ def flytta_till_nya_namn(datakatalog_satt=None):
 
 def loggkatalog():
     if system() == "Darwin":
-        return os.path.expanduser("~/Library/Logs/Akasha Protokoll")
+        return _under_hem("Library", "Logs", "Akasha Protokoll")
     return os.path.join(programkatalog(), "logg")
 
 

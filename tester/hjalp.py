@@ -13,6 +13,7 @@ atexit.register(shutil.rmtree, HEM, True)
 os.environ["HOME"] = HEM
 os.environ["USERPROFILE"] = HEM
 os.environ.pop("XDG_DATA_HOME", None)
+os.environ["LOCALAPPDATA"] = os.path.join(HEM, "AppData", "Local")  # programkatalogen pa Windows
 os.environ["DATAKATALOG"] = DATA
 os.environ["MODELLKATALOG"] = os.path.join(DATA, "inga-modeller")
 os.environ["MOTOR"] = "faster"
