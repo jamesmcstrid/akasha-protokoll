@@ -25,12 +25,12 @@ app/app.py (Flask, bara 127.0.0.1) ── sparar i ~/AkashaProtokoll ── köa
 
 | Mapp | Innehåll |
 |---|---|
-| `app/` | Tjänsten (`app.py`), motorerna (`motor.py`), modellerna och hämtningen (`modeller.py`), talaruppdelningen (`talare.py`), det som skiljer mellan operativsystemen (`plattform.py`), starten som är gemensam för alla system (`start.py`), Dock-ikonen och menyn på Mac (`mac_app.py`), avkodning med PyAV (`ljud.py`), lagring, export och webbsidan i `static/` |
+| `app/` | Tjänsten (`app.py`), motorerna (`motor.py`), modellerna och hämtningen (`modeller.py`), talaruppdelningen (`talare.py`), det som skiljer mellan operativsystemen (`plattform.py`), starten som är gemensam för alla system (`start.py`), Dock-ikonen och menyn på Mac (`mac_app.py`), ikonen vid klockan och menyn på Windows (`windows_app.py`), avkodning med PyAV (`ljud.py`), lagring, export och webbsidan i `static/` |
 | `paketering/` | PyInstaller-spec, kontrollskript och byggskript för programmet. `prova-linux.sh` bygger samma Python-delar på Linux och kör kontrollen. |
 | `mac/` | `installera.sh`, `hamta-modeller.sh`, `kor.sh`, `avinstallera.sh` och launchd-mallen. Skripten som hämtar modeller anropar `app/modeller.py` |
 | `halsokoll/` | `prov.sh`: provet efter installation. `sammanfatta.sh` och `talardiagnos.sh`: hur en transkribering gick, utan att visa texten (se nedan) |
 | `tester/` | Enhetstester. De behöver inga modeller. Här finns också `falsk_hf.py` (en låtsaskälla som spelar Hugging Face), `forsta_start.py` (startar sidan som vid första start, med låtsaskällan) och `test_riktig_hamtning.py` (hämtar röstmodellen på riktigt, bara för hand) |
-| `.github/workflows/` | Testerna i GitHub Actions |
+| `.github/workflows/` | Testerna i GitHub Actions och byggflödena för Mac- och Windows-programmet |
 | `testljud/` | Tre testljud ur FLEURS, se [KALLOR.md](../testljud/KALLOR.md) |
 | `docs/` | Den här filen och bilderna till README |
 
@@ -234,6 +234,114 @@ Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-2
   laddar modellen och sedan misslyckas som väntat, eftersom ordtidshuvudena inte passar den lilla
   provmodellen. Programkontrollen: `/health` svarade efter 2,8 s, röstmodellen hämtades på 8,7 s,
   zip-filen är 49 MB, 164 Mach-O-filer och signaturen är ad hoc.
+
+## Programmet (Windows)
+
+Windows-programmet är en katalog, `Akasha Protokoll\`, med `Akasha Protokoll.exe` och `_internal\`, för
+x64. Det använder samma kod i `app/` som Mac-programmet, och det finns ingen installationsfil än: zip-filen
+packas upp och programmet startas i mappen. Flödet `.github/workflows/windows-app.yml` bygger det bara för
+hand, på `windows-2025`. **Allt nedan är byggt och kontrollerat på den maskinen (byggmaskinen). Programmet
+har inte körts på en vanlig Windows-dator.**
+
+- **Hur det byggs.** Fyra skript, i den här ordningen. `bygg-whisper-cli-windows.sh` hämtar whisper.cpp
+  v1.9.5 (commiten `d1be6fde11ac6e0407606b4e42fe72d34add8037`, låst i skriptet) och bygger det med
+  whisper.cpp:s egna Windows-flaggor: `BUILD_SHARED_LIBS=ON`, `GGML_NATIVE=OFF`, `GGML_BACKEND_DL=ON`
+  och `GGML_CPU_ALL_VARIANTS=ON`, utan SDL2, tester, server och curl. Det ger en `ggml-cpu-<variant>.dll`
+  för varje processorgeneration, nio stycken (x64, sse42, sandybridge, haswell, skylakex, cannonlake,
+  cascadelake, icelake, alderlake), och den bästa väljs när `whisper-cli` startar (på byggmaskinen
+  laddades `ggml-cpu-cascadelake.dll`). Det kompilerade cachas med nyckeln version plus hash av skriptet.
+  `samla-whisper-cli-windows.sh` kopierar in C-runtimen och kontrollerar beroendena efter varje bygge och
+  varje cacheträff. `bygg-windows.sh` gör ikonen (`.ico`) och versionsresursen, kör PyInstaller i katalogläge med
+  `akasha-protokoll.spec` (samma spec-fil som Mac och Linux, med `windows_app.py` som startfil och
+  `console=False`, alltså ett fönsterprogram utan konsol), kontrollerar innehållet och beroendena, och packar
+  zip-filen och en uppackad kopia. Artefakten är `Akasha-Protokoll-windows-x64.zip`, uppladdad som den är
+  (`archive: false`) och sparad i sju dagar. Det finns ett jobb `signera`, men det körs aldrig
+  (`if: false`) och har inga steg: programmet är inte signerat.
+- **Vad som följer med.** Det som följer med Mac-programmet, utom PyObjC och Mac-versionen av
+  `whisper-cli`, och i stället pystray och Pillow för ikonen. `whisper-cli.exe` ligger i
+  `_internal\whisper\` med `whisper.dll`, `ggml.dll`, `ggml-base.dll`, de nio `ggml-cpu-*.dll` och
+  C-runtimen (`MSVCP140.dll`, `VCOMP140.DLL`, `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`, version
+  14.52.37029.0, ur Visual Studios Redist-katalog, eftersom hos användaren inte alltid finns Visual C++
+  Redistributable). `parakeet.dll` och de andra programmen ur whisper.cpp-bygget följer inte med.
+  faster-whisper, ctranslate2, tokenizers, huggingface_hub, onnxruntime och tkinter följer inte med
+  (`bygg-windows.sh` kontrollerar det). pystray är LGPL-3.0, så dess kod ligger som vanliga `.py`-filer i
+  programmet (`module_collection_mode`), inte inbakad i arkivet. `plattform.whisper_cli()` letar efter
+  `_internal\whisper\whisper-cli.exe` i det paketerade programmet.
+- **Start och avslut.** `windows_app.py` är det tunna skalet; texterna ligger i `start.py` (`WIN_*`,
+  `STARTAR_REDAN_*` och de gemensamma). Rutorna är `MessageBoxW` via `ctypes`, med `MB_SETFOREGROUND` och
+  `MB_TOPMOST`. Knapparnas text (*Ja*, *Nej*, *OK*) kommer från Windows och följer Windows språk, så
+  varje fråga slutar med en ja/nej-fråga i stället för egna knappnamn som på Mac. Ordningen vid start:
+  loggningen ställs in (`win: startar`); en mutex (`Local\AkashaProtokoll`, per inloggad användare) ser
+  till att bara en kopia kör, och en andra kopia väntar högst 30 s på att den första svarar, öppnar sidan
+  och avslutas med kod 0 (annars rutan `STARTAR_REDAN_*`); fel i inställningsfilen ger en ruta; `start.forbered()`
+  avgör `starta`, `redan_igang` eller `upptagen` (`ta_over` kan inte hända, launchd finns inte).
+  Ikonen visas direkt, med verktygstipset "Akasha Protokoll startar…", och tjänsten startar i en
+  bakgrundstråd. När tjänsten svarar blir tipset "Akasha Protokoll är igång", sidan öppnas, och första
+  gången (ingen `forsta-start-visad` i programkatalogen) visas en notis med `pystray.Icon.notify()`. Svarar
+  tjänsten inte inom 30 s visas rutan `STARTADE_INTE_*` med frågan om loggen ska visas, och programmet
+  avslutas. Menyn har två rader, "Öppna Akasha Protokoll i webbläsaren" (förval, alltså vänsterklick
+  och dubbelklick på ikonen) och "Avsluta Akasha Protokoll". Vid avslut frågar programmet först om det
+  pågår något (`start.pagar()`, rutan med *Nej* förvalt), och stänger sedan tjänsten och ikonen. Går ikonen
+  inte att skapa loggas `win: ikonen kunde inte visas: …` och programmet fortsätter utan ikon.
+  pystray och Pillow importeras först i `main()`, så att loggningen hinner ställas in före allt annat.
+- **Barnprocessen och datorn.** `plattform.starta_barn()` startar `whisper-cli` utan konsolfönster
+  (`CREATE_NO_WINDOW`) och lägger processen i ett jobbobjekt med `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, så att den
+  dör när programmet dör, också med `TerminateProcess`, Aktivitetshanteraren eller utloggning (Windows
+  avslutar annars inte barnprocesser). `hall_vaken()` anropar `SetThreadExecutionState`. pystray svarar inte på
+  `WM_QUERYENDSESSION`, så vid utloggning avslutar Windows programmet utan att fråga; en transkribering som
+  pågick blir `avbruten` vid nästa start (`lagring.aterstall_avbrutna()`) och kan göras om med "Försök igen",
+  och en inspelning fortsätter i webbläsarfliken tills den stängs. Det senare är läst ur koden och inte provat
+  (se Inte provat än).
+- **Sökvägar med å, ä och ö.** `whisper-cli` på Windows läser argumenten i systemets teckentabell, medan
+  modellens sökväg tolkas som UTF-8. Därför körs den med `MODELLKATALOG` som arbetskatalog och relativa
+  sökvägar, och med alla argument i en svarsfil (`@args.txt`, UTF-8) så att prompten med å, ä och ö kommer
+  fram oförvanskad (`motor.cli_kommando()`). Den tillfälliga katalogen ligger under `MODELLKATALOG`, inte i
+  `%TEMP%`, och städas med `ignore_cleanup_errors=True`.
+- **Var saker ligger.** Inspelningar: `C:\Users\<namn>\AkashaProtokoll` (`~/AkashaProtokoll`). Programkatalogen:
+  `%LOCALAPPDATA%\Akasha Protokoll`, med `modeller\`, `installningar.env`, `forsta-start-visad` och
+  `logg\akasha-protokoll.log` (roterande, 2 MB, tre filer). På Windows ligger alltså loggen i
+  programkatalogen, till skillnad från Mac. Inställningsfilen läses som på Mac (UTF-8 med eller utan BOM,
+  eller UTF-16 med BOM, som Anteckningar kan spara) och en miljövariabel som redan är satt vinner. Filtyperna
+  för sidan sätts av programmet självt (`app.py`), inte av Windows register. Flytten från det gamla namnet körs
+  också på Windows, men ingen Windows-installation har haft det gamla namnet, så det finns inget att
+  flytta. En programkatalog med det gamla namnet (Akasha Meet) kan dock inte byta namn medan programmet
+  kör, eftersom loggfilen ligger i den.
+- **Kontrollerna i Actions.** Flödet kör, var och en så att alla körs även om en faller (steget Sammanfattning
+  faller jobbet om något föll): enhetstesterna; kontrollen av `whisper-cli` (`kontrollera_whisper_cli_windows.py`);
+  bygget med sina egna kontroller; `kontrollera.py` mot programmet uppackat ur zip-filen; och
+  `kontrollera_windows.py` (sökvägar och talare). Kontrollen av `whisper-cli` ser att alla 15 flaggor som
+  `motor.py` använder finns, och transkriberar testljudet (26 s) med den lilla testmodellen genom programmets
+  egen kod (`motor.cli_kommando()` och `motor._whispercpp()`), med svarsfilen, med modellkatalogen under en
+  mapp som heter `Åsa Ölund` och med prompten "Åsa Öberg, Göteborg". `kontrollera_pe.py` kontrollerar att alla
+  exe-, dll- och pyd-filer är x64 och hittar sina importer. Programmet kontrolleras uppackat ur zip-filen i
+  en mapp med å, ä, ö och mellanslag, med en hemkatalog som heter `Åsa Ölund`: `/health` svarar, typsnittet
+  skickas som `font/woff2`, inspelningsmappen med det gamla namnet flyttas, sherpa-onnx går att importera,
+  motorn är whisper.cpp, röstmodellen hämtas genom programmet, en uppladdning tas emot och ljudet avkodas
+  och `whisper-cli` startas (jobbet faller som väntat, eftersom kontrollen inte har någon riktig
+  taligenkänningsmodell), loggen har raderna `win: startar`, `win: beslut starta`, `win: ikonen visas` och
+  `win: tjansten svarar, oppnar webblasaren`, en andra start avslutar sig själv med kod 0 (`win: kopia finns
+  redan`) medan den första fortsätter svara, och efter `TerminateProcess` är porten ledig och ingen
+  `whisper-cli.exe` kvar. `kontrollera_windows.py` laddar röstmodellen från
+  `…\Åsa Ölund\AppData\Local\Akasha Protokoll\modeller\talare\…`, ger ett röstavtryck (192 tal) och delar upp
+  testljudet med två talare. Enhetstesterna körs också på Windows vid varje push (487 tester); bland dem
+  barnprocessen som dör vid `TerminateProcess`, en kopia åt gången, datorn som hålls vaken och svarsfilen med
+  en modellkatalog under `Åsa Ölund`.
+- **Vad kontrollen inte visar.** Att SmartScreen, Smart App Control eller Defender släpper igenom ett
+  nedladdat, osignerat program. Att en riktig KB-Whisper-modell transkriberar på Windows, och hur lång tid
+  det tar. Hur rutorna, menyn och notisen ser ut, om ikonen syns vid klockan (loggraden `win: ikonen visas`
+  säger bara att anropet gick igenom på byggmaskinen), och att inget svart fönster blinkar förbi.
+  Mikrofonen i webbläsaren på Windows, "Visa i Utforskaren", ett riktigt konto med å, ä eller ö i namnet,
+  och utloggning medan programmet kör. Hämtningen av KB-Whisper (1,5 GB) har inte gjorts på Windows.
+- **Uppmätt på byggmaskinen (körningarna 1–3 av flödet).** Maskinen var Windows Server 2025 (10.0.26100),
+  Visual Studio 2026 (18.12) med MSVC 19.52.37029, CMake 4.5.0 och Python 3.12.10, med 2 kärnor och 8 GB
+  minne. whisper.cpp byggdes på 5 min 22 s, och hela flödet tog 7 min 49 s och 9 min 16 s när whisper.cpp
+  byggdes och 2 min 54 s ur cachen. Programmet är 180,7 MB uppackat (288 filer), zip-filen är 70 589 058 byte och
+  `Akasha Protokoll.exe` är 8,1 MB. Störst är `av.libs` (70,1 MB, FFmpeg i PyAV), `sherpa_onnx` (23,3 MB),
+  `numpy.libs` (21,2 MB), `whisper` (12,3 MB inklusive C-runtimen) och `PIL` (11,3 MB). Alla 201 exe-, dll- och
+  pyd-filer är x64 och hittar alla sina 1 088 importer. `/health` svarade efter 3,1–3,5 s, röstmodellen hämtades
+  genom programmet på 4,2–5,0 s, och transkriberingen av testljudet (26 s) med den lilla testmodellen tog
+  4,1 s och gav 42 ord med ordtider från DTW. Siffrorna är från byggmaskinen och säger inget om hur snabbt KB-Whisper
+  medium är på en vanlig dator.
 
 ## Talaruppdelningen
 
@@ -454,8 +562,12 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 **Inte provat än:**
 
 - programmet på en riktig Mac: tider för en längre inspelning (inte mätta) och avslut mitt i en transkribering (Gatekeeper, övertagande, första start, hämtning, en kort transkribering och loggfilen är provade, se ovan);
-- faster-whisper och transkribering på Windows (CI installerar inte faster-whisper);
-- första start på Windows, och hämtning på ett företagsnät med proxy;
+- Windows-programmet på en riktig Windows-dator: SmartScreen, Smart App Control och Defender med ett nedladdat
+  program, en riktig transkribering med KB-Whisper och hur lång tid den tar, rutorna, menyn och notisen (och att
+  inget svart fönster blinkar förbi), mikrofonen i webbläsaren, "Visa i Utforskaren", ett riktigt konto med å, ä
+  eller ö i namnet och utloggning medan programmet kör (det som är provat står under Programmet (Windows));
+- faster-whisper på Windows (CI installerar inte faster-whisper, och programmet har det inte med);
+- hämtning på ett företagsnät med proxy;
 - ett riktigt Google Meet-möte eller en Slack-huddle, där Chromes flikväljare och
   "Dela även flikljud" används på riktigt;
 - inspelning med avbrott och räddningsfil i Safari och Edge (provat i Chromium);

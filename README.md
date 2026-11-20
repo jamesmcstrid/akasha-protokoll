@@ -6,7 +6,8 @@ Du får texten uppdelad per talare och kan byta "Talare 1" och "Talare 2" mot ri
 - **Allt stannar på datorn.** Tal till text och talaruppdelning görs lokalt. Inget skickas till
   någon molntjänst. Internet används bara en gång, för att hämta modellerna.
 - **Svensk taligenkänning** med [KB-Whisper](https://huggingface.co/KBLab/kb-whisper-medium) från
-  Kungliga biblioteket. På Mac med Apple Silicon används grafikprocessorn (Metal).
+  Kungliga biblioteket. På Mac med Apple Silicon används grafikprocessorn (Metal). Windows-programmet
+  använder processorn.
 - **Möten i rummet och digitalt.** Med datorns mikrofon, eller Google Meet och Slack i Chrome.
 - **Inspelningen tappas inte.** Ljudet sparas på disken var femte sekund under mötet. Svarar inte Akasha Protokoll en stund sparas ljudet i webbläsarfliken under tiden.
 
@@ -23,7 +24,9 @@ Akasha Protokoll är ett program som du öppnar som vilket annat som helst. Sjä
 
 1. Öppna **Akasha Protokoll** i Program. Webbläsaren öppnas på sidan av sig själv. Har du installerat från
    Terminal går du i stället till **http://127.0.0.1:8611** i Chrome (eller Safari). Spara gärna
-   sidan som bokmärke.
+   sidan som bokmärke. På Windows startar du **Akasha Protokoll.exe** i den uppackade mappen (se
+   [Som program (prov, Windows)](#som-program-prov-windows)). Webbläsaren öppnas på sidan när programmet
+   har startat.
 2. Välj **Hur spelas mötet in?** och **Hur många pratar?**. Skriv gärna namn och facktermer som
    sägs i mötet under **Svårstavade ord**, så stavas de rätt.
 3. Tryck **Spela in**. När mötet är slut trycker du **Stoppa och transkribera**. Du kan också
@@ -102,6 +105,9 @@ På en MacBook Air med Apple Silicon tog ett möte på 1 timme och 24 minuter 12
 transkribera och dela upp per talare, alltså drygt 8 minuter per timme möte. Medan texten tas
 fram visar sidan ungefär hur lång tid som är kvar.
 
+På Windows är tiden inte mätt. Programmet har inte transkriberat något med KB-Whisper på en Windows-dator
+än, så här står ingen siffra förrän det är gjort. Sidan visar ändå ungefär hur lång tid som är kvar.
+
 ## Installera
 
 ### Som program (prov, Mac med Apple Silicon)
@@ -146,7 +152,7 @@ att hämta dem. Flytta mappen till hemkatalogen först om du vill slippa hämta 
 
 ### Från Akasha Meet till Akasha Protokoll
 
-Programmet hette tidigare Akasha Meet. Har du det installerat:
+Programmet hette tidigare Akasha Meet. Det här avsnittet gäller Mac. Har du det installerat:
 
 1. Avsluta Akasha Meet med **⌘Q**.
 2. Ladda ned Akasha Protokoll och öppna det enligt stegen ovan. Första gången behövs **Öppna ändå**
@@ -164,7 +170,50 @@ Programmet hette tidigare Akasha Meet. Har du det installerat:
 Har du installerat från Terminal flyttar `bash mac/installera.sh` mapparna på samma sätt när du kör
 den igen.
 
+### Som program (prov, Windows)
+
+Windows-programmet är nytt. Det har bara byggts och kontrollerats på en byggmaskin i GitHub Actions
+(Windows Server 2025), inte provats på en vanlig Windows-dator, och det är ännu inte signerat. Räkna med
+att något kan behöva rättas, och berätta vad du ser. Stegen nedan är därför kortare än för Mac: de
+fylls på, med bilder, när programmet har provats på en riktig dator. Programmet är byggt för
+64-bitars Windows (x64). Vilka versioner av Windows det fungerar på är inte provat.
+
+1. Öppna repot på GitHub (du måste vara inloggad), gå till **Actions → Windows-app**, välj den senaste
+   gröna körningen och ladda ned **Akasha-Protokoll-windows-x64.zip** under **Artifacts**. Filen sparas
+   bara i sju dagar i Actions. Är den borta behövs en ny körning.
+2. Högerklicka på zip-filen och välj **Extrahera alla…**. Följ rutan som öppnas. Mappen **Akasha Protokoll**
+   som då skapas är programmet: lägg den där den får ligga kvar. Starta inte programmet inifrån
+   zip-filen. Det behöver filerna i mappen bredvid sig.
+3. Öppna mappen **Akasha Protokoll** och dubbelklicka på **Akasha Protokoll.exe**. Första gången brukar
+   Windows varna för program som det inte känner igen, särskilt filer som hämtats från internet. Den här
+   varningen beror på att programmet inte är signerat. Rutan har en länk för mer information, och efter
+   den en knapp för att köra programmet ändå. Vad rutan och knapparna heter på svenska är inte sett än och
+   skrivs hit när programmet har provats. Ser du ingen sådan knapp, se Felsökning nedan.
+4. Ikonen kommer upp vid klockan och sidan öppnas av sig själv, så snart programmet har startat.
+   Sidan erbjuder att hämta modellerna (cirka 1,6 GB, bara första gången). Att hämta modellerna är
+   inte provat på Windows än.
+
+**Igång och avsluta på Windows:** när Akasha Protokoll är igång finns en ikon vid klockan, längst ned i
+aktivitetsfältet. Syns den inte, klicka på pilen **^** vid klockan: Windows lägger ofta nya ikoner där.
+Håll muspekaren över ikonen för att se om programmet startar ("Akasha Protokoll startar…") eller är
+igång ("Akasha Protokoll är igång"). Första gången visas också en notis: "Akasha Protokoll är igång. Du hittar
+det bland ikonerna vid klockan." Vänsterklicka på ikonen för att öppna sidan igen, eller högerklicka och välj
+**Öppna Akasha Protokoll i webbläsaren**. Avsluta genom att högerklicka på ikonen och välja
+**Avsluta Akasha Protokoll**. Pågår en inspelning, en transkribering eller en hämtning frågar programmet
+först om du vill avsluta ändå. Knapparna i rutan (*Ja*, *Nej*) följer Windows språk, och *Nej* är förvald.
+Svarar du *Ja* avbryts en transkribering (du kan göra om den med **Försök igen**), en hämtning fortsätter
+där den slutade nästa gång, och en inspelning fortsätter i webbläsaren och sparas i fliken tills du öppnar
+Akasha Protokoll igen, så stäng inte fliken. Det du redan spelat in ligger kvar. Dubbelklickar du på
+**Akasha Protokoll.exe** igen medan programmet är igång öppnas sidan i det som redan körs, och det startar
+ingen annan kopia. Loggar du ut eller stänger av datorn är det avsett att programmet avslutas utan att
+fråga, med samma följder som om du svarade *Ja*. Hur ikonen, menyn och rutorna ser ut, och vad som händer
+vid utloggning, är inte provat på en riktig Windows-dator än.
+
+Ingen har haft det gamla namnet Akasha Meet på Windows, så avsnittet nedan om att byta namn gäller bara Mac.
+
 ### Från Terminal
+
+Det här avsnittet gäller Mac. För Windows finns än så länge bara programmet ovan.
 
 Kräver: en Mac (helst Apple Silicon), [Homebrew](https://brew.sh) och cirka 4 GB ledigt utrymme.
 Repot är privat, så du behöver läsrätt till det och en SSH-nyckel kopplad till ditt GitHub-konto.
@@ -208,9 +257,11 @@ kvar tills du tar bort dem själv.
 
 ## Var hamnar inspelningarna?
 
-I mappen `~/AkashaProtokoll` i din hemkatalog. Bara ditt konto kommer åt mappen. För varje inspelning
-finns ljudet, en `.md` med texten och en `.json` med uppgifterna. **Radera** i listan tar bort alla
-tre. Det gäller både programmet och installationen från Terminal.
+I mappen `~/AkashaProtokoll` i din hemkatalog. På Windows är det `C:\Users\<namn>\AkashaProtokoll`. På
+Mac kommer bara ditt konto åt mappen. På Windows ärver mappen rättigheterna från din användarmapp, och
+programmet ändrar dem inte. För varje inspelning finns ljudet, en `.md` med texten och en `.json` med
+uppgifterna. **Radera** i listan tar bort alla tre. Det gäller både programmet och installationen från
+Terminal.
 
 Mappen ligger medvetet inte i Dokument eller på Skrivbordet, eftersom de ofta synkas till iCloud.
 Vill du ha den någon annanstans anger du `DATAKATALOG` i inställningarna (se nedan).
@@ -227,6 +278,8 @@ Vill du ha den någon annanstans anger du `DATAKATALOG` i inställningarna (se n
   ändrar något kräver en särskild header som en främmande sida inte får skicka.
 - Ingen språkmodell skriver om eller sammanfattar texten. Det whisper hör är det som står.
 - Programmet är ännu inte signerat och kontrollerat av Apple. Därför varnar macOS första gången du öppnar det.
+- Windows-programmet är inte heller signerat. Windows kan därför varna första gången du startar det, och en
+  del datorer, till exempel jobbdatorer, kan stoppa det helt (se Felsökning).
 
 ## Inställningar
 
@@ -235,18 +288,28 @@ Allt har standardvärden. I programmet ligger inställningarna i filen `installn
 (Format → Gör till ren text), en inställning per rad, till exempel `MODELL=large`, och avsluta och
 öppna Akasha Protokoll igen. Mappen hittar du i Finder med Gå → Gå till mapp…
 
+**På Windows** ligger filen i `%LOCALAPPDATA%\Akasha Protokoll`, vanligen
+`C:\Users\<namn>\AppData\Local\Akasha Protokoll`. Skriv `%LOCALAPPDATA%\Akasha Protokoll` i Utforskarens
+adressfält och tryck Enter, så öppnas mappen. Filen `installningar.env` finns inte från början. Skapa den
+med Anteckningar, en inställning per rad, till exempel `MODELL=large`. Välj Arkiv → Spara som, skriv
+`installningar.env` som filnamn, välj kodningen **UTF-8**, och välj **Alla filer** som filtyp så att Windows
+inte lägger till `.txt` efter namnet (namnen i rutan kan skilja mellan Windows-versioner, och det är inte
+provat). Högerklicka på ikonen vid klockan, välj **Avsluta Akasha Protokoll** och starta programmet igen.
+Modellerna ligger i mappen `modeller` bredvid filen.
+
 Har filen ett fel, till exempel en rad som inte går att förstå eller fel sorts text, säger
-programmet till när det startar och använder standardvärdet för just det.
+programmet till när det startar och använder standardvärdet för just det. På Windows kommer rutan
+**Inställningsfilen har fel**, och den frågar om du vill öppna mappen med inställningsfilen.
 
 Har du installerat från Terminal gör du det i `.env`, som skapas vid installationen.
 Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`.
 
 | Inställning | Standard | Vad |
 |---|---|---|
-| `MOTOR` | `auto` | `auto` väljer whisper.cpp med Metal på Apple Silicon och faster-whisper på processorn annars. Går att tvinga med `whispercpp` eller `faster` (starta om Akasha Protokoll; sidan erbjuder att hämta det som saknas). `faster` går inte i programmet, där följer faster-whisper inte med |
+| `MOTOR` | `auto` | `auto` väljer whisper.cpp med Metal på Apple Silicon, och whisper.cpp på processorn i Windows-programmet, som har en egen `whisper-cli.exe` med sig. I övrigt väljs faster-whisper på processorn. Går att tvinga med `whispercpp` eller `faster` (starta om Akasha Protokoll; sidan erbjuder att hämta det som saknas). `faster` går inte i programmet, varken på Mac eller Windows: faster-whisper följer inte med |
 | `MODELL` | `medium` | `large` gör färre fel men tar längre tid och behöver 1,1 GB till (3,1 GB utan Apple Silicon). Starta om Akasha Protokoll efter att du ändrat. Sidan erbjuder då att hämta modellen |
 | `ORDLISTA` | tom | Ord som alltid ska stavas rätt, till exempel företagets namn |
-| `DATAKATALOG` | `~/AkashaProtokoll` | Var inspelningar och texter sparas |
+| `DATAKATALOG` | `~/AkashaProtokoll` (på Windows `C:\Users\<namn>\AkashaProtokoll`) | Var inspelningar och texter sparas |
 | `PORT` | `8611` | Webbsidans port |
 | `TALARE_TROSKEL` | `0.6` | Två röster som liknar varandra mer än så räknas som samma person (0–1) |
 | `MAX_MB` | `1024` | Största fil som går att ladda upp |
@@ -255,25 +318,30 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 
 | Problem | Gör så här |
 |---|---|
-| Sidan öppnas inte | Programmet: avsluta och öppna Akasha Protokoll igen. Loggen finns i `~/Library/Logs/Akasha Protokoll/akasha-protokoll.log` (öppnas med appen Konsol). Från Terminal: `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`, och loggen `~/AkashaProtokoll/akasha-protokoll.log` |
+| Sidan öppnas inte | Mac-programmet: avsluta och öppna Akasha Protokoll igen. Loggen finns i `~/Library/Logs/Akasha Protokoll/akasha-protokoll.log` (öppnas med appen Konsol). Från Terminal: `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`, och loggen `~/AkashaProtokoll/akasha-protokoll.log` |
 | "Operation not permitted" i loggen, eller installationen säger att mappen ligger fel | Mappen med Akasha Protokoll ligger där macOS inte låter bakgrundstjänster läsa (Hämtade filer, Dokument, Skrivbord, iCloud Drive). Flytta den till hemkatalogen, ta bort mappen `venv` i den, och kör `bash mac/installera.sh` igen. Modellerna och .env följer med. |
 | "Akasha Protokoll svarar inte" | Programmet har avslutats eller stannat. Öppna Akasha Protokoll igen. Från Terminal: tjänsten startar av sig själv när du loggar in, så logga ut och in igen, eller kör `launchctl kickstart -k gui/$(id -u)/local.akasha-meet` i Terminal. Det du redan spelat in ligger kvar. Sidan märker själv när Akasha Protokoll är igång igen. |
+| Windows: sidan öppnas inte, eller sidan säger att Akasha Protokoll inte svarar | Titta efter ikonen vid klockan, kanske bakom pilen **^**. Finns den inte har programmet avslutats: starta **Akasha Protokoll.exe** igen. Det du redan spelat in ligger kvar. Finns ikonen, högerklicka och välj **Öppna Akasha Protokoll i webbläsaren**. Håller programmet på att starta och du startar det en gång till väntar den andra kopian högst 30 sekunder och öppnar sedan sidan. Svarar programmet inte alls visas rutan **Akasha Protokoll startar redan**: vänta en stund och försök igen, och hjälper det inte, starta om datorn. Loggen ligger i `%LOCALAPPDATA%\Akasha Protokoll\logg\akasha-protokoll.log` (öppnas i Anteckningar) |
+| Windows: programmet startar inte, eller Windows säger att en fil saknas | Kontrollera att du har packat upp hela zip-filen med **Extrahera alla…** och att du startar **Akasha Protokoll.exe** i den uppackade mappen, inte inifrån zip-filen. Flytta inte bara `.exe`-filen: mappen `_internal` måste ligga bredvid den |
+| Windows varnar när du startar programmet | Programmet är inte signerat, så Windows (SmartScreen) brukar varna första gången. Rutan har en länk för mer information och därefter en knapp för att köra ändå. Namnen på dem är inte sedda än och skrivs hit när programmet har provats på en riktig Windows-dator |
+| Windows blockerar programmet och det finns ingen knapp för att köra ändå | Det kan bero på Smart App Control (i Windows 11) eller på regler på en jobbdator. Inget av det är provat här. Skriv ned vad rutan säger och säg till. Försök inte ta dig runt reglerna på en jobbdator: fråga IT om de kan godkänna programmet. Det lyssnar bara på `127.0.0.1` och använder internet bara för att hämta modellerna |
+| Windows-säkerhet (Defender) säger att filen är ett hot, eller tar bort den | Program som byggs med samma verktyg som det här flaggas ibland av virusskydd, oftast felaktigt (uppgift ur forum, inte från Microsoft; det har inte hänt här än). Skriv ned vad Windows-säkerhet säger (hotets namn och filen), återställ filen under Skyddshistorik bara om du har hämtat den från repots egen sida, och säg till |
 | "Akasha Protokoll" öppnades inte, eller "är skadat" | Se steg 3–6 under Som program: Klar, sedan Öppna ändå under Integritet och säkerhet → Säkerhet. Säger macOS att programmet är skadat, kör `xattr -dr com.apple.quarantine "/Applications/Akasha Protokoll.app"` i Terminal. |
-| "Akasha Protokoll kan inte starta" (port 8611) | Ett annat program använder porten. Avsluta det, eller ange en annan port med `PORT=` i inställningarna. |
-| "Akasha Protokoll startade inte" | Tryck **Visa loggen** och läs de sista raderna, eller skicka dem till den som hjälper dig. Loggen innehåller inga inspelningar eller texter. |
+| "Akasha Protokoll kan inte starta" (port 8611) | Ett annat program använder porten. Avsluta det, eller ange en annan port med `PORT=` i inställningarna. På Windows kan porten också vara reserverad av systemet, till exempel när Hyper-V, WSL eller Docker används (inte provat här). `netsh interface ipv4 show excludedportrange protocol=tcp` i Kommandotolken visar reserverade intervall. Välj då en annan port, till exempel `PORT=8612` i `installningar.env`. |
+| "Akasha Protokoll startade inte" | Tryck **Visa loggen** och läs de sista raderna, eller skicka dem till den som hjälper dig. På Windows frågar rutan om du vill öppna mappen med loggen: svara *Ja* och öppna `akasha-protokoll.log`. Loggen innehåller inga inspelningar eller texter. |
 | "Inte redo" uppe till höger | Håll muspekaren över texten för att se orsaken. Det är något som en hämtning inte kan rätta, till exempel en inställning i `.env` eller `installningar.env`. |
 | "Modellerna behöver hämtas" uppe till höger | Tryck **Hämta nu** i rutan överst på sidan. Det görs bara en gång. |
 | Hämtningen säger "Kunde inte nå Hugging Face" | Kontrollera att datorn är ansluten till internet och tryck **Försök igen**. Det som redan hämtats ligger kvar. |
-| Hämtningen fungerar inte på ett företagsnät (certifikatfel eller inget svar) | Lägg in nätets proxy i inställningarna, till exempel `HTTPS_PROXY=http://proxy.foretaget.se:8080`, och vid behov företagets certifikat med `REQUESTS_CA_BUNDLE=/sökväg/till/certifikat.pem`. Avsluta och öppna Akasha Protokoll igen (från Terminal: starta om tjänsten), och tryck **Försök igen**. Programmet använder Macens egna certifikat, så företagets certifikat behövs oftast inte. |
+| Hämtningen fungerar inte på ett företagsnät (certifikatfel eller inget svar) | Lägg in nätets proxy i inställningarna, till exempel `HTTPS_PROXY=http://proxy.foretaget.se:8080`, och vid behov företagets certifikat med `REQUESTS_CA_BUNDLE=/sökväg/till/certifikat.pem`. Avsluta och öppna Akasha Protokoll igen (från Terminal: starta om tjänsten), och tryck **Försök igen**. Programmet använder datorns egna certifikat (på Mac nyckelringen), så företagets certifikat behövs oftast inte. |
 | "Det får inte plats på disken" | Frigör utrymme och tryck **Försök igen**. Sidan visar hur mycket som behövs. |
 | "Kontrollsumman stämmer inte" | Filen har tagits bort. Tryck **Försök igen**. Händer det igen kan filen ha ändrats hos Hugging Face. |
 | `Bootstrap failed: 5` vid installation | Uppdatera (`git pull`) och kör `bash mac/installera.sh` igen. Hjälper inte det: Systeminställningar → Allmänt → Inloggningsobjekt, tillåt `bash` i bakgrunden |
-| "Fick inte tillgång till mikrofonen" | Tillåt mikrofonen för sidan i webbläsarens inställningar, och för webbläsaren i Systeminställningar → Integritet och säkerhet → Mikrofon |
+| "Fick inte tillgång till mikrofonen" | Tillåt mikrofonen för sidan i webbläsarens inställningar, och för webbläsaren i Systeminställningar → Integritet och säkerhet → Mikrofon. På Windows: kontrollera också att Windows släpper fram mikrofonen till webbläsaren, under Inställningar → Integritet och säkerhet → Mikrofon (namnen kan skilja mellan Windows-versioner, och mikrofonen i webbläsaren är inte provad på Windows) |
 | Texten är inte uppdelad per talare | Tryck **Transkribera igen** i listan och välj fler än 1 under "Hur många pratar?" |
 | Fel antal talare, eller "bara 1 röst gick att skilja åt" | Tryck **Transkribera igen** i listan och välj rätt antal. Ange inte fler än som pratar; är du osäker, välj **Vet inte – gissa**. Rösterna skiljs lättare åt om ni sitter på ungefär samma avstånd från datorn. Är ni många i rummet hjälper en konferensmikrofon mitt på bordet |
 | Du vill visa någon hur det gick, utan att dela texten | `bash halsokoll/sammanfatta.sh` skriver ut tider, talare och tecken på fel, men inga ord ur mötet. `bash halsokoll/talardiagnos.sh` visar varför det blev så många talare, och `bash halsokoll/jamfor.sh <id A> <id B>` jämför två transkriberingar av samma möte. Se [docs/TEKNIK.md](docs/TEKNIK.md) |
 | "Ljudet kan inte sparas på datorn" | Tryck Spara ljudet som fil och sedan Klar. Ladda upp filen med Ladda upp ljudfil och radera den ofullständiga inspelningen i listan. |
-| "Inget ljud hörs" under inspelningen | Kontrollera att rätt mikrofon är vald och inte avstängd: i webbläsarens inställningar och i Systeminställningar → Ljud → Ingång |
+| "Inget ljud hörs" under inspelningen | Kontrollera att rätt mikrofon är vald och inte avstängd: i webbläsarens inställningar och i Systeminställningar → Ljud → Ingång. På Windows: Inställningar → System → Ljud, under Indata |
 | Transkriberingen misslyckades | Öppna inspelningen och tryck **Försök igen** |
 | Mötesljudet saknas i ett digitalt möte | Kryssade du i **Dela även flikljud**? Det går bara i Chrome. Gör en ny inspelning |
 | Inspelningen fastnade på "Spelar in" | Tryck **Avsluta och transkribera** i listan |
@@ -285,7 +353,7 @@ Hur det fungerar inuti, hur talaruppdelningen utvärderades och vad som är test
 `venv/bin/python -m unittest discover -s tester`. `venv/bin/python tester/forsta_start.py` startar
 sidan som vid första start, med en låtsaskälla i stället för Hugging Face.
 
-Programmet för Mac byggs med `paketering/` och GitHub Actions (se [docs/TEKNIK.md](docs/TEKNIK.md)).
+Programmen för Mac och Windows byggs med `paketering/` och GitHub Actions (se [docs/TEKNIK.md](docs/TEKNIK.md)).
 `python app/start.py` startar tjänsten och webbläsaren utan programmet.
 
 ## Källor och licenser
@@ -294,8 +362,11 @@ Programmet för Mac byggs med `paketering/` och GitHub Actions (se [docs/TEKNIK.
 |---|---|
 | Akasha Protokoll (det här programmet), © 2026 Dennis Fredin | Apache-2.0, se [LICENSE](LICENSE) och [NOTICE](NOTICE) |
 | [KB-Whisper medium](https://huggingface.co/KBLab/kb-whisper-medium) (KBLab, Kungliga biblioteket) | Apache-2.0 |
-| [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (följer med programmet) | MIT |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (whisper.cpp följer med programmen för Mac och Windows) | MIT |
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2.0 |
+| [pystray](https://github.com/moses-palmer/pystray) (ikonen vid klockan; följer med Windows-programmet) | LGPL-3.0. Dess kod ligger som vanliga `.py`-filer i programmet, så att den går att byta ut |
+| [Pillow](https://github.com/python-pillow/Pillow) (bilden till ikonen; följer med Windows-programmet) | MIT-CMU |
+| Microsofts Visual C++-runtime (`MSVCP140.dll`, `VCOMP140.DLL`, `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`; följer med Windows-programmet) | Microsofts licensvillkor för Visual Studio. Filerna är tagna ur Visual Studios Redist-katalog |
 | [PyAV](https://github.com/PyAV-Org/PyAV) med FFmpeg, Python, Flask, numpy, PyObjC och de andra delarna i programmet | Var och en sin licens. En förteckning läggs till innan programmet släpps |
 | NeMo TitaNet small (NVIDIA), via sherpa-onnx | CC-BY-4.0 |
 | Typsnitten [Anton](https://github.com/googlefonts/AntonFont) och [Instrument Sans](https://github.com/Instrument/instrument-sans) (följer med programmet) | SIL Open Font License 1.1, se app/static/typsnitt/ |

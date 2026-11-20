@@ -7,3 +7,12 @@ This product includes the following fonts, licensed under the SIL Open Font Lice
 (see app/static/typsnitt/):
 - Anton, Copyright 2020 The Anton Project Authors (https://github.com/googlefonts/AntonFont.git)
 - Instrument Sans, Copyright 2022 The Instrument Sans Project Authors (https://github.com/Instrument/instrument-sans)
+
+This product also includes the following components, each under its own license (full texts are added before
+the program is released):
+- whisper.cpp (https://github.com/ggml-org/whisper.cpp), MIT License (in the Mac and Windows programs)
+- pystray (https://github.com/moses-palmer/pystray), LGPL-3.0 (in the Windows program; its code is included
+  as plain .py files so that it can be replaced)
+- Pillow (https://github.com/python-pillow/Pillow), MIT-CMU License (in the Windows program)
+- The Microsoft Visual C++ runtime (MSVCP140.dll, VCOMP140.DLL, VCRUNTIME140.dll, VCRUNTIME140_1.dll), under
+  Microsoft's license terms for Visual Studio (in the Windows program)
