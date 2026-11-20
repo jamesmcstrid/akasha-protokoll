@@ -423,29 +423,37 @@ progress { width: 120px; vertical-align: middle; accent-color: var(--spar-fyllt)
   @keyframes dialog-in { from { opacity: 0; transform: translateY(6px); } }
 }
 
-/* Knapparna i huvudet hamnar under rubriken nar fonstret ar smalt. */
-.visningshuvud { display: flex; justify-content: space-between; gap: 8px 12px; align-items: flex-start; flex-wrap: wrap; }
-.visningshuvud > div:first-child { flex: 1 1 240px; min-width: 0; }
-.visningshuvud .knappar { margin: 0; }
-.visningshuvud h2 { margin-bottom: 2px; }
-#v-info { margin: 0; }
-.rubrikform { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; }
+/* Den oppna inspelningen: delarna star med 32 px mellan sig. Knapparna i huvudet hamnar under rubriken nar fonstret ar smalt. */
+.visning { gap: var(--luft-5); }
+.visningshuvud { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.visningshuvud > div:first-child { flex: 1 1 320px; min-width: 0; }
+.visningshuvud .knappar { margin: 0; gap: 8px; }
+.visningshuvud h2 {
+  margin: 0; font-size: clamp(26px, 2.6vw, 36px); line-height: 1.15; font-weight: 700; letter-spacing: -0.02em;
+}
+#v-info { display: flex; flex-wrap: wrap; gap: 2px 18px; margin: 8px 0 0; font-size: 15px; }
+.rubrikform { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0; }
+.rubrikform label { font-size: 15px; font-weight: 600; }
 .rubrikform input { flex: 1; min-width: 200px; }
+.visning .varning { margin: 0; font-size: 16px; }
 audio { width: 100%; margin: 10px 0; }
 #v-status:empty { display: none; }
 .lagerad { display: flex; gap: 8px 14px; align-items: center; flex-wrap: wrap; }
-.lagerad .meddelande { margin: 10px 0; }
+.lagerad .meddelande { margin: 0; font-size: 17px; }
+/* Tom rad (ingen status, ingen knapp): ingen plats, sa att inte tva mellanrum staplas. */
+.lagerad:not(:has(#v-forsok:not([hidden]), #v-status:not(:empty))) { display: none; }
 
 /* Forloppet (modellhamtningen, och medan en inspelning transkriberas) */
-.forlopp { margin: 14px 0 6px; padding: 16px 18px; border-radius: var(--radie-ruta); background: var(--yta2); }
-.forlopp-steg { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.92rem; }
+.forlopp { margin: 0; padding: 16px 18px; border-radius: var(--radie-ruta); background: var(--yta2); }
+.forlopp-steg { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 15px; }
 .forlopp-steg li { color: var(--dampad); display: flex; align-items: center; gap: 10px; }
-.forlopp-steg li + li::before { content: "→"; color: var(--dampad); }
+.forlopp-steg li + li::before { content: ""; width: 16px; height: 1px; background: currentColor; color: var(--dampad); }
 .forlopp-steg .klart { color: var(--ok); }
 .forlopp-steg .pagar { color: var(--text); font-weight: 700; }
 .forlopp-stapel { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
 .forlopp-stapel > progress { flex: 1 1 200px; height: 10px; }
 .forlopp-stapel > .gang { flex: 1 1 200px; }
+.forlopp-stapel > span:last-child { font-weight: 700; }
 .procent { display: flex; gap: 14px; font-size: 14px; }
 .procent span:last-child { font-weight: 700; }
 .forlopp p { margin: 10px 0 0; font-size: 15px; }
@@ -480,36 +488,40 @@ audio { width: 100%; margin: 10px 0; }
 @media (prefers-reduced-motion: reduce) { .vandrare { animation: none; } }
 
 /* De tre stegen: vem ar vem, kontrollera, anvand */
-.steg { margin-top: 20px; }
+.steg { display: flex; flex-direction: column; gap: var(--luft-3); }
 .steg h3 {
-  display: flex; align-items: center; gap: 10px; margin: 0 0 10px;
-  font-family: var(--typ-text); font-size: 1.05rem; font-weight: 650; letter-spacing: -0.01em;
+  display: flex; align-items: center; gap: 12px; margin: 0;
+  font-family: var(--typ-text); font-size: 21px; line-height: 1.3; font-weight: 700; letter-spacing: -0.01em;
 }
 .stegnr {
-  display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; flex-shrink: 0; border-radius: 50%;
-  background: var(--primar); color: var(--primar-text); font-size: 0.85rem; font-weight: 700;
+  display: inline-grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 50%;
+  background: var(--steg-bg); color: var(--steg-text); font-size: 17px; font-weight: 700; letter-spacing: 0;
 }
+.steg .knappar { margin: 0; }
 /* Ett rutnat: tre talare far plats pa en rad i ett brett fonster, en per rad i ett smalt, och
    en fjarde hamnar under den forsta i stallet for att breda ut sig over hela raden. */
 .steg .namnrad {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
-  gap: 12px; margin: 0; position: relative; padding-bottom: 28px; /* plats for kvittot */
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: 14px; margin: 0; position: relative; padding-bottom: 28px; /* plats for kvittot */
 }
-.steg .namnrad .falt { min-width: 0; }
-.steg .namnrad input[type=text] { width: 100%; min-width: 0; }
 #v-atgarder { display: contents; }
-#v-kopierat { margin: 0; }
+#v-kopierat { margin: 0; font-size: 15px; }
 #v-kopierat:empty { display: none; }
 #v-kopierat.fel { color: var(--fel); }
-.namnrad { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin: 10px 0; padding: 14px; border-radius: 14px; background: var(--yta2); }
-.namnrad .falt { margin: 0; min-width: 150px; }
-.namnrad input[type=text] { background: var(--kort); }
-/* Etiketten och Lyssna-knappen pa samma rad. Knappen ar lika bred nar den visar "Stoppa". */
-.namnfalt-huvud { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
-.namnfalt-huvud label { min-width: 0; }
-.namnfalt-huvud .lyssna { flex: none; min-width: 5.6rem; padding: 4px 10px; white-space: nowrap; text-align: center; }
+/* Namnkortet: initialcirkel, etikett och falt, Lyssna-knapp. */
+.namnkort {
+  flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: var(--luft-2); margin: 0; padding: 14px;
+  border-radius: var(--radie-ruta); background: var(--yta2); min-width: 0;
+}
+.namnfalt { flex: 1 1 140px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.namnfalt label { font-size: 14px; font-weight: 600; color: var(--dampad); }
+.namnfalt input[type=text] { width: 100%; min-width: 0; font-weight: 600; background: var(--yta); }
+/* Lyssna-knappen: triangeln och fyrkanten ritas har. Lika bred nar den visar "Stoppa". */
+.lyssna { flex: none; min-height: 50px; min-width: 104px; }
+.lyssna::before { content: ""; width: 12px; height: 12px; background: currentColor; clip-path: polygon(15% 5%, 95% 50%, 15% 95%); }
+.lyssna.spelar::before { width: 10px; height: 10px; clip-path: none; }
 /* Kvittot ligger i rutans nedre kant, sa att inget hoppar nar "Sparat" kommer och gar. */
-.namn-kvitto { position: absolute; left: 14px; right: 14px; bottom: 6px; margin: 0; font-size: 0.85rem; line-height: 1.3; color: var(--ok); }
+.namn-kvitto { position: absolute; left: 14px; right: 14px; bottom: 6px; margin: 0; font-size: 14px; line-height: 1.3; color: var(--ok); }
 .namn-kvitto.fel { color: var(--fel); }
 
 .transkript { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
@@ -591,8 +603,20 @@ button.osaker-tecken:hover { box-shadow: inset 0 0 0 1.5px var(--varning-text); 
 .talarval .citat { margin: 0 0 6px; color: var(--dampad); font-style: italic; overflow-wrap: anywhere; }
 .talarval .knappar { margin: 6px 0 10px; }
 .talarval .liten { margin: 4px 0 0; }
-.t1 { color: var(--t1); } .t2 { color: var(--t2); } .t3 { color: var(--t3); }
-.t4 { color: var(--t4); } .t5 { color: var(--t5); } .t6 { color: var(--t6); }
+/* Talarna: ljushet och form, aldrig bara farg. 1 mork fylld, 2 lime, 3 ljus med kant; 4-6 samma i rundad fyrkant. */
+.t1, .t4 { --initial-bg: var(--t1-bg); --initial-text: var(--t1-text); --initial-kant: transparent; }
+.t2, .t5 { --initial-bg: var(--lime); --initial-text: var(--pa-lime); --initial-kant: var(--pa-lime); }
+.t3, .t6 { --initial-bg: var(--yta); --initial-text: var(--text); --initial-kant: var(--text); }
+.t1, .t2, .t3 { --initial-radie: 50%; }
+.t4, .t5, .t6 { --initial-radie: 28%; }
+/* Initialen: en gemensam regel. Storleken sitter i --ini och --ini-text. */
+.initial {
+  --ini: 50px; --ini-text: 19px;
+  display: flex; align-items: center; justify-content: center; flex: none; box-sizing: border-box;
+  width: var(--ini); height: var(--ini); border-radius: var(--initial-radie, 50%);
+  background: var(--initial-bg); color: var(--initial-text); border: 2px solid var(--initial-kant, transparent);
+  font-size: var(--ini-text); font-weight: 700; line-height: 1; letter-spacing: 0;
+}
 
 /* Pa datorbredd lamnar elefanten ingen plats at texten: rubriken far hela raden och elefanten ligger
    i hogerkanten, dar rubrikraden ar kortare an raden (annars bryts rubriken i tva rader). */

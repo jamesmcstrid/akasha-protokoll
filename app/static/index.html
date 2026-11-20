@@ -158,7 +158,7 @@
         <p id="meddelande" class="meddelande" role="status" aria-live="polite"></p>
       </section>
 
-      <section id="visning" class="blad" aria-labelledby="v-rubrik" hidden>
+      <section id="visning" class="blad visning" aria-labelledby="v-rubrik" hidden>
         <div class="visningshuvud">
           <div>
             <h2 id="v-rubrik" tabindex="-1"></h2>
@@ -183,7 +183,7 @@
         <div id="v-forlopp" class="forlopp" hidden>
           <ol id="v-forlopp-steg" class="forlopp-steg"></ol>
           <div id="v-forlopp-stapel" class="forlopp-stapel">
-            <progress id="v-forlopp-andel" max="1" value="0" aria-label="Framsteg"></progress>
+            <span class="gang"><progress id="v-forlopp-andel" max="1" value="0" aria-label="Framsteg"></progress></span>
             <span id="v-forlopp-procent"></span>
           </div>
           <p id="v-forlopp-text" class="dampad" role="status" aria-live="polite"></p>
@@ -191,7 +191,7 @@
 
         <div class="lagerad">
           <p id="v-status" class="meddelande"></p>
-          <button id="v-forsok" type="button" class="knapp primar" hidden>Försök igen</button>
+          <button id="v-forsok" type="button" class="knapp liten-knapp primar" hidden>Försök igen</button>
         </div>
 
         <div id="v-steg-namn" class="steg" hidden>

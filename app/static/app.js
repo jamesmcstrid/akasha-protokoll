@@ -113,6 +113,13 @@ function sattAndel(e, andel) {
   if (e) e.style.setProperty("--andel", String(andel));
 }
 
+// Talarens initial: forsta tecknet med versal, eller siffran for "Talare N".
+function initial(namn) {
+  const t = namn.trim();
+  const m = /^Talare (\d+)$/.exec(t);
+  return m ? m[1] : ([...t][0] || "?").toLocaleUpperCase("sv");
+}
+
 function tid(s) {
   s = Math.round(s || 0);
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sek = s % 60;
@@ -1212,7 +1219,7 @@ async function visa(id, tyst = false) {
   v.dataset.titel = m.titel || "";
   const res = m.resultat;
   // Datum, langd och antal talare. Vilken motor som anvants ar for den nyfikne: den star i title.
-  $("v-info").textContent = m.info || "";
+  $("v-info").replaceChildren(...(m.info_delar || []).map((d) => el("span", {}, d)));
   $("v-info").title = res && res.motor ? `Transkriberat med ${res.motor}` : "";
   if (byttId) {
     $("v-ljud").src = `/api/inspelningar/${id}/ljud`;
@@ -1305,6 +1312,7 @@ function renderaForlopp(m) {
   const andel = Math.max(0, Math.min(1, Number(f.andel) || 0));
   $("v-forlopp-stapel").hidden = koar;
   $("v-forlopp-andel").value = andel;
+  sattAndel($("v-forlopp-stapel").querySelector(".gang"), andel);
   sattText($("v-forlopp-procent"), `${Math.round(andel * 100)} %`);
   sattText($("v-forlopp-text"), koar ? "Väntar på att en annan transkribering ska bli klar."
     : fas === "transkriberar" ? tidKvar(andel, Number(f.sekunder)) : "");
@@ -1362,7 +1370,7 @@ function renderaNamn(m) {
     namnLage.sparade = { ...(m.namn || {}) };
   }
   const nyckel = `${m.id}:${nummer.join()}`;
-  if (rad.dataset.nyckel === nyckel) { uppdateraLyssnaKnappar(m); return; }
+  if (rad.dataset.nyckel === nyckel) { uppdateraInitialer(m); uppdateraLyssnaKnappar(m); return; }
   const sammaInspelning = (rad.dataset.nyckel || "").startsWith(`${m.id}:`);
   const skrivet = {};
   if (sammaInspelning) for (const f of rad.querySelectorAll("input[data-talare]")) skrivet[f.dataset.talare] = f.value;
@@ -1379,10 +1387,11 @@ function renderaNamn(m) {
       onblur: () => sparaNamn(nr),
       onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); sparaNamn(nr, true); } } });
     const lyssna = el("button", { type: "button", id: `lyssna-${nr}`, class: "knapp liten-knapp lyssna",
-      "data-talare": String(nr), onclick: (e) => vaxlaProv(nr, e.currentTarget) }, "▶ Lyssna");
-    // Lyssna-knappen star pa etikettens rad, sa att faltet far hela bredden.
-    rad.append(el("div", { class: "falt" }, el("div", { class: "namnfalt-huvud" },
-      el("label", { for: `namn-${nr}`, class: farg(nr) }, `Talare ${nr} heter`), lyssna), falt));
+      "data-talare": String(nr), onclick: (e) => vaxlaProv(nr, e.currentTarget) }, "Lyssna");
+    // Namnkortet: initialcirkeln (talarens form och ljushet), etikett och falt, och Lyssna-knappen.
+    rad.append(el("div", { class: "falt namnkort" },
+      el("span", { class: `initial ${farg(nr)}`, "aria-hidden": "true" }, initial(namnFor(m, nr))),
+      el("div", { class: "namnfalt" }, el("label", { for: `namn-${nr}` }, `Talare ${nr} heter`), falt), lyssna));
   }
   rad.append(el("p", { id: "v-namn-kvitto", class: "namn-kvitto", role: "status" }));
   uppdateraLyssnaKnappar(m);
@@ -1435,9 +1444,20 @@ function uppdateraNamnen(m) {
   for (const e of $("visning").querySelectorAll(".namn[data-talare]")) {
     const namn = namnFor(m, Number(e.dataset.talare));
     e.textContent = `${namn}:`;
+    e.dataset.initial = initial(namn);
     if (e.tagName === "BUTTON") e.setAttribute("aria-label", `${namn}, byt talare`);
   }
+  uppdateraInitialer(m);
   uppdateraLyssnaKnappar(m);
+}
+
+// Initialerna i namnkorten: som namnet i texten, utan att fallten byggs om.
+function uppdateraInitialer(m) {
+  for (const f of $("v-namn").querySelectorAll("input[data-talare]")) {
+    const i = f.closest(".namnkort").querySelector(".initial");
+    const ny = initial(namnFor(m, Number(f.dataset.talare)));
+    if (i.textContent !== ny) i.textContent = ny;
+  }
 }
 
 function uppdateraLyssnaKnappar(m) {
@@ -1446,7 +1466,8 @@ function uppdateraLyssnaKnappar(m) {
     const namn = namnFor(m, nr);
     const vem = namn === `Talare ${nr}` ? namn : `${namn} (Talare ${nr})`;
     const spelar = !!prov && prov.knapp === k;
-    k.textContent = spelar ? "■ Stoppa" : "▶ Lyssna";
+    k.textContent = spelar ? "Stoppa" : "Lyssna";
+    k.classList.toggle("spelar", spelar);
     k.setAttribute("aria-label", spelar ? `Stoppa provet på ${vem}` : `Lyssna på ${vem}`);
   }
 }
