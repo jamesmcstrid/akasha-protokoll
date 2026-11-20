@@ -487,6 +487,55 @@ class Installationsfilen(unittest.TestCase):
         for stycke in ("inte-var-fil.txt", "den framande filen", "_internal ar borta"):
             self.assertIn(stycke, kallkod)
 
+    def test_mutexprovet_raknar_varje_http_svar_som_att_programmet_kor(self):
+        import urllib.error
+        import kontrollera_installation as k
+
+        class Levande:
+            def poll(self):
+                return None
+
+        class Dod:
+            def poll(self):
+                return 1
+
+        def fel(kod):
+            return urllib.error.HTTPError("http://x/health", kod, "x", {}, None)
+
+        def oppna_med(handelser):
+            kvar = list(handelser)
+
+            def oppna(url):
+                h = kvar.pop(0)
+                if isinstance(h, BaseException):
+                    raise h
+                return h
+            return oppna
+
+        class Svar:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b"{}"
+
+        vila = lambda s: None  # noqa: E731
+        # 503 (modellerna saknas) raknas som igang, utan att vanta
+        self.assertEqual(k.vanta_pa_svar("u", Levande(), 5, oppna_med([fel(503)]), vila), 503)
+        self.assertEqual(k.vanta_pa_svar("u", Levande(), 5, oppna_med([Svar()]), vila), 200)
+        # anslutningsfel (porten inte oppen an) vantas ut, sedan ett svar
+        self.assertEqual(k.vanta_pa_svar("u", Levande(), 5, oppna_med([ConnectionRefusedError(), OSError(), fel(404)]), vila), 404)
+        # programmet har avslutats: inget svar, ingen vantan
+        self.assertIsNone(k.vanta_pa_svar("u", Dod(), 5, oppna_med([]), vila))
+        # tiden gar ut
+        self.assertIsNone(k.vanta_pa_svar("u", Levande(), 0, oppna_med([]), vila))
+        self.assertIn("sista raderna ur loggen", las("paketering", "kontrollera_installation.py"))
+
     def test_bygget_hittar_iscc_och_skriver_versionen(self):
         import bygg_installation as b
         funna, sokt = b.hitta_iscc({"ProgramFiles(x86)": "P86", "ProgramFiles": "P"}, finns=lambda s: s == os.path.join("P", "Inno Setup 6", "ISCC.exe"),

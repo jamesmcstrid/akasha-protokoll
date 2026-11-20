@@ -96,10 +96,28 @@ def vanta_tills_borta(sokvag, sekunder=90):
     return not os.path.exists(sokvag)
 
 
-def mutexprov(res, args, installation, katalog):
-    """Startar det installerade programmet och kor installationsfilen tyst igen: den ska se mutexen Local\\AkashaProtokoll."""
+def vanta_pa_svar(url, app, sekunder, oppna=None, vila=time.sleep):
+    """Vantar tills programmet svarar pa url med nagot HTTP-svar alls -> statuskoden, eller None (programmet avslutades eller
+    tiden gick ut). Ett felsvar som 503 (modellerna saknas i en tom hemkatalog) betyder att programmet kor."""
+    import urllib.error
     import urllib.request
 
+    oppna = oppna or (lambda u: urllib.request.urlopen(u, timeout=3))
+    slut = time.monotonic() + sekunder
+    while time.monotonic() < slut and app.poll() is None:
+        try:
+            with oppna(url) as r:
+                r.read()
+                return r.status
+        except urllib.error.HTTPError as e:  # en HTTPError ar en OSError, men ocksa ett svar: servern lever
+            return e.code
+        except OSError:
+            vila(1)
+    return None
+
+
+def mutexprov(res, args, installation, katalog):
+    """Startar det installerade programmet och kor installationsfilen tyst igen: den ska se mutexen Local\\AkashaProtokoll."""
     hem = os.path.join(args.hem, "mutexprov")
     lokal = os.path.join(hem, "AppData", "Local")
     temp = os.path.join(lokal, "Temp")
@@ -108,19 +126,19 @@ def mutexprov(res, args, installation, katalog):
                  TEMP=temp, TMP=temp, PORT=str(args.port + 1))
     app = subprocess.Popen([os.path.join(katalog, EXE)], env=miljo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
-        slut = time.monotonic() + 90
-        uppe = False
-        while time.monotonic() < slut and app.poll() is None:
-            try:
-                urllib.request.urlopen(f"http://127.0.0.1:{args.port + 1}/health", timeout=3).read()
-                uppe = True
-                break
-            except OSError:
-                time.sleep(1)
-        if not uppe:
-            res.fel(f"det installerade programmet svarade inte (port {args.port + 1}), mutexprovet kunde inte goras")
+        status = vanta_pa_svar(f"http://127.0.0.1:{args.port + 1}/health", app, 90)
+        if status is None:
+            logg = os.path.join(lokal, NAMN, "logg", "akasha-protokoll.log")
+            sista = ""
+            if os.path.isfile(logg):
+                with open(logg, encoding="utf-8", errors="replace") as f:
+                    sista = " | ".join(f.read().splitlines()[-15:])
+            res.fel(f"det installerade programmet svarade inte (port {args.port + 1}); "
+                    + (f"det avslutades med kod {app.poll()}" if app.poll() is not None else "det kor men svarar inte inom 90 s")
+                    + f"; sista raderna ur loggen {logg}: {sista or '(ingen logg)'}")
             return
-        res.ok("det installerade programmet kor (mutexen Local\\AkashaProtokoll ska finnas)")
+        print(f"INFO: /health svarade {status} (503 betyder att modellerna saknas i provets tomma hemkatalog: programmet kor anda)")
+        res.ok(f"det installerade programmet kor, /health gav {status} (mutexen Local\\AkashaProtokoll ska finnas)")
         logg = os.path.join(args.logg_katalog, "installation-mutexprov.log")
         kod = kor(kommandorad(installation, TYSTA + ["/CURRENTUSER"], DIR=katalog, LOG=logg), 120)
         visa_slut(logg, 25)
