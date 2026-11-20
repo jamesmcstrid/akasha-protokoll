@@ -174,26 +174,31 @@ let senastModeller = null; // /api/modeller
 let halsaPaVag = false; // ett /health-anrop ar pa vag
 let modellVersion = 0; // raknas upp varje gang ett riktigt svar fran /api/modeller tas emot
 
-// Etiketten uppe till hoger. Den andras inte medan nagot svar saknas eller svaren motsager varandra
+// Statusrutan har tva delar: laget (Redo, Inte redo ...) och detaljen (modellens namn).
+function sattTjanst(lage, detalj, title, klass) {
+  const t = $("tjanst");
+  sattText($("tjanst-lage"), lage);
+  sattText($("tjanst-detalj"), detalj);
+  t.title = title;
+  t.className = klass;
+}
+
+// Statusrutan uppe till hoger. Den andras inte medan nagot svar saknas eller svaren motsager varandra
 // ("Kontrollerar…" star kvar), sa att den aldrig blinkar rod nar inget ar fel. Rod visas bara nar
 // /health inte svarar, vid hinder, nar /api/modeller inte svarar eller av ett annat skal. Ger
 // tillbaka "fel" nar den visar rott (da ska orsaken ocksa meddelas). halsanNy: /health-svaret ar
 // nyare an modellsvaret, sa att en motsagelse da ar riktig och inte ett gammalt svar.
 function visaTjanst(halsanNy = false) {
-  const t = $("tjanst");
   const rod = (text, title) => {
-    t.textContent = text;
-    t.title = title;
-    t.className = "tjanst fel";
+    sattTjanst(text, "", title, "tjanst fel");
     return "fel";
   };
   const h = senastHalsa;
   if (h === false) return rod("Tjänsten svarar inte", "");
   if (h === null) return null; // inget svar an
   if (h.status === "ok") {
-    t.textContent = h.talare === "ok" ? `Redo · ${h.modell}` : `Redo · utan talaruppdelning`;
-    t.title = h.talare === "ok" ? "" : h.talare;
-    t.className = "tjanst ok";
+    if (h.talare === "ok") sattTjanst("Redo", h.modell, "", "tjanst ok");
+    else sattTjanst("Redo", "utan talaruppdelning", h.talare, "tjanst ok");
     return "ok";
   }
   const d = senastModeller;
@@ -201,14 +206,12 @@ function visaTjanst(halsanNy = false) {
   if (d === "fel") return rod("Inte redo", h.problem || ""); // sa att sidan inte fastnar pa "Kontrollerar…"
   if (d.hinder) return rod("Inte redo", d.hinder);
   if ((d.saknas || []).some((p) => p.id === "taligenkanning")) {
-    t.textContent = HAMTAR.has(d.hamtning.tillstand) ? "Hämtar modellerna…" : "Modellerna behöver hämtas";
-    t.title = "";
-    t.className = "tjanst vantar";
+    sattTjanst(HAMTAR.has(d.hamtning.tillstand) ? "Hämtar modellerna…" : "Modellerna behöver hämtas", "", "", "tjanst vantar");
     return "vantar";
   }
   if (d.redo === true && !halsanNy) {
     // Halsosvaret ar aldre an modellsvaret: be om ett nytt i stallet for att visa det gamla. Inte
-    // medan en hamtning pagar: da visar det nya svaret "Redo · utan talaruppdelning" mitt i
+    // medan en hamtning pagar: da visar det nya svaret "Redo, utan talaruppdelning" mitt i
     // hamtningen (taligenkanningen klar, rostmodellen kvar), och etiketten skulle blinka till.
     if (!halsaPaVag && !HAMTAR.has(d.hamtning.tillstand)) kollaTjanst();
     return null;

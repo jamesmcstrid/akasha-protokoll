@@ -10,12 +10,46 @@
   <link rel="stylesheet" href="/static/stil.css">
 </head>
 <body>
-  <header class="sidhuvud">
-    <div>
-      <h1><img src="/static/elefant.svg" alt="" class="logga" width="52" height="52">Akasha Meet</h1>
-      <p class="underrubrik">Mötestranskribering på din egen Mac. Inget lämnar datorn.</p>
+  <header class="hero">
+    <div class="hero-inre">
+      <div class="topprad">
+        <p class="varumarke">
+          <svg class="logga" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+            <path class="el-svans" d="M10.5 37 q-4.5 2 -3.5 7.5" fill="none" stroke-width="2.4" stroke-linecap="round"/>
+            <rect class="el-bak" x="17" y="43" width="7.5" height="13" rx="3.6"/>
+            <rect class="el-bak" x="37" y="43" width="7.5" height="13" rx="3.6"/>
+            <ellipse class="el-kropp" cx="29" cy="38" rx="19" ry="13.5"/>
+            <rect class="el-kropp" x="12" y="44" width="7.5" height="12" rx="3.6"/>
+            <rect class="el-kropp" x="31" y="44" width="7.5" height="12" rx="3.6"/>
+            <circle class="el-kropp" cx="46" cy="28" r="12"/>
+            <path class="el-snabel" d="M54.5 32 C 60 28.5, 61.5 20, 58.5 15 C 57 12.5, 53.5 13, 54.5 16" fill="none" stroke-width="5.5" stroke-linecap="round"/>
+            <path class="el-ora" d="M38.5 21.5 C 33 22, 31.5 31, 34 35.5 C 36 39, 42 38, 43 34 C 44 29, 43 22, 38.5 21.5 Z"/>
+            <circle class="el-oga" cx="50" cy="25" r="1.8"/>
+          </svg>
+          Akasha Meet
+        </p>
+        <p id="tjanst" class="tjanst" role="status"><svg class="ansikte" viewBox="0 0 64 60" aria-hidden="true" focusable="false"><ellipse class="an-hud" cx="13" cy="29" rx="12" ry="15"/><ellipse class="an-hud" cx="51" cy="29" rx="12" ry="15"/><ellipse class="an-hud" cx="32" cy="28" rx="15" ry="16"/><path class="an-snabel" d="M32 38 C 32 47, 31 53, 37 55" fill="none" stroke-width="7" stroke-linecap="round"/><circle class="an-oga" cx="26" cy="26" r="2.2"/><circle class="an-oga" cx="38" cy="26" r="2.2"/></svg><span id="tjanst-lage" class="tjanst-lage">Kontrollerar…</span> <span id="tjanst-detalj" class="tjanst-detalj"></span></p>
+      </div>
+      <div class="hero-rad">
+        <div class="hero-text">
+          <h1>Mötet blir text. Inget lämnar datorn.</h1>
+          <p class="underrubrik">Mötestranskribering på din egen Mac.</p>
+        </div>
+        <svg class="hero-elefant" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+          <path class="el-svans" d="M10.5 37 q-4.5 2 -3.5 7.5" fill="none" stroke-width="2.4" stroke-linecap="round"/>
+          <rect class="el-bak" x="17" y="43" width="7.5" height="13" rx="3.6"/>
+          <rect class="el-bak" x="37" y="43" width="7.5" height="13" rx="3.6"/>
+          <ellipse class="el-kropp" cx="29" cy="38" rx="19" ry="13.5"/>
+          <rect class="el-kropp" x="12" y="44" width="7.5" height="12" rx="3.6"/>
+          <rect class="el-kropp" x="31" y="44" width="7.5" height="12" rx="3.6"/>
+          <circle class="el-kropp" cx="46" cy="28" r="12"/>
+          <path class="el-snabel" d="M54.5 32 C 60 28.5, 61.5 20, 58.5 15 C 57 12.5, 53.5 13, 54.5 16" fill="none" stroke-width="5.5" stroke-linecap="round"/>
+          <path class="el-ora" d="M38.5 21.5 C 33 22, 31.5 31, 34 35.5 C 36 39, 42 38, 43 34 C 44 29, 43 22, 38.5 21.5 Z"/>
+          <circle class="el-oga" cx="50" cy="25" r="1.8"/>
+          <path class="el-mun" d="M51 31.5 q 1.6 1.4 3 0.2" fill="none" stroke-width="1.1" stroke-linecap="round"/>
+        </svg>
+      </div>
     </div>
-    <p id="tjanst" class="tjanst" role="status">Kontrollerar…</p>
   </header>
 
   <main>
