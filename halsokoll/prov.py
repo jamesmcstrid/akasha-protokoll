@@ -15,7 +15,7 @@ import uuid
 
 PORT = os.environ.get("PORT", "8611")
 BAS = f"http://127.0.0.1:{PORT}"
-HEADER = {"X-Akasha-Meet": "1"}
+HEADER = {"X-Akasha-Protokoll": "1"}
 TESTLJUD = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "testljud")
 fel = 0
 
@@ -128,7 +128,7 @@ def main():
         anrop("POST", f"/api/inspelningar/{id_}/radera")
 
     # 5. hela flodet som webbsidan: ladda upp, vanta, namnge, ladda ner, radera
-    kropp, h = multipart({"talare": "2", "titel": "Prov akasha-meet"}, "ljud", "tva-talare.m4a")
+    kropp, h = multipart({"talare": "2", "titel": "Prov akasha-protokoll"}, "ljud", "tva-talare.m4a")
     kod, svar = anrop("POST", "/api/inspelningar/fil", kropp, h)
     if not resultat(kod == 201, f"flode: uppladdning http {kod} {svar[:120]!r}"):
         return

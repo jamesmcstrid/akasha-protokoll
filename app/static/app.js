@@ -1,8 +1,8 @@
 "use strict";
 
 // Alla anrop som andrar nagot maste ha den har headern (skydd mot andra webbsidor).
-const HEADER = { "X-Akasha-Meet": "1" };
-const INGEN_TJANST = "Akasha Meet svarar inte. Öppna Akasha Meet igen om du har avslutat det, och försök sedan igen. Det som redan är sparat ligger kvar.";
+const HEADER = { "X-Akasha-Protokoll": "1" };
+const INGEN_TJANST = "Akasha Protokoll svarar inte. Öppna Akasha Protokoll igen om du har avslutat det, och försök sedan igen. Det som redan är sparat ligger kvar.";
 const DEL_MS = 5000; // webblasaren skickar ljudet till disken var femte sekund
 // Varning om inget ljud kommer in: ljudnivan (RMS) under -80 dBFS i 10 sekunder. En avstangd
 // eller fel vald mikrofon ger nollor eller nastan nollor (16-bitarsljudets minsta steg ar ca
@@ -168,7 +168,7 @@ function installningar() {
 // Bara hur man spelar in (mikrofon eller digitalt) sparas mellan besoken. Antal talare och namn
 // ar olika for varje mote: ett sparat "1 - dela inte upp" gjorde att nasta mote inte delades upp.
 function sparaVal() {
-  localStorage.setItem("akasha-meet-val", JSON.stringify({ kalla: $("kalla").value }));
+  localStorage.setItem("akasha-protokoll-val", JSON.stringify({ kalla: $("kalla").value }));
 }
 
 function hamtaVal() {
@@ -182,7 +182,8 @@ function hamtaVal() {
       "Gäller när du spelar in. Uppladdade filer påverkas inte. Digitala möten kan bara spelas in i Chrome.";
   }
   try {
-    const v = JSON.parse(localStorage.getItem("akasha-meet-val") || "{}");
+    // Valet sparades under det gamla namnet innan bytet till Akasha Protokoll: lasa det om det nya saknas.
+    const v = JSON.parse(localStorage.getItem("akasha-protokoll-val") || localStorage.getItem("akasha-meet-val") || "{}");
     if (v.kalla === "digitalt" && kanDelaFlik()) $("kalla").value = "digitalt";
   } catch { /* ignorera */ }
   visaKallaHjalp();
@@ -282,10 +283,10 @@ function stadaTjanstFel() {
   if (ar($("m-fel"))) sattText($("m-fel"), "");
   // Under en inspelning ger kon sitt eget besked nar allt ar sparat: da visas inte det allmanna.
   const koGerBesked = koInsp && !koInsp.fel && (koInsp.nere || koInsp.harVantat || koInsp.klarVantar);
-  const koKvittoKom = $("kvitto-status").textContent.startsWith("Akasha Meet svarar igen");
+  const koKvittoKom = $("kvitto-status").textContent.startsWith("Akasha Protokoll svarar igen");
   if (!koGerBesked && !koKvittoKom && (ar($("kvitto-fel")) || !$("kvitto-fel").textContent)) {
     const hadeFokus = $("kvitto").contains(document.activeElement);
-    kvitto("Akasha Meet svarar igen.");
+    kvitto("Akasha Protokoll svarar igen.");
     if (hadeFokus && fokusForeKvitto && fokusForeKvitto.isConnected) fokusForeKvitto.focus();
   }
 }
@@ -422,8 +423,8 @@ function renderaModeller(d) {
     lage === "talare"
       ? "Röstmodellen som delar upp texten per talare är inte hämtad. Utan den blir texten inte uppdelad per talare. Det görs bara en gång."
       : saknas.length > 1
-        ? "Innan du kan transkribera behöver Akasha Meet hämta modellerna som gör tal till text och delar upp texten per talare. Det görs bara en gång."
-        : "Innan du kan transkribera behöver Akasha Meet hämta modellen som gör tal till text. Det görs bara en gång.");
+        ? "Innan du kan transkribera behöver Akasha Protokoll hämta modellerna som gör tal till text och delar upp texten per talare. Det görs bara en gång."
+        : "Innan du kan transkribera behöver Akasha Protokoll hämta modellen som gör tal till text. Det görs bara en gång.");
 
   const lista = $("m-lista");
   const nyckel = JSON.stringify(saknas);
@@ -745,7 +746,7 @@ function uppdateraKo(insp) {
   const mangd = `${tid(sist - sistaSparad)} ljud`;
   if (insp.harVantat && !vantande.length && !insp.nere) {
     insp.harVantat = false;
-    if (!insp.stoppad && !insp.fel) kvitto("Akasha Meet svarar igen, och allt ljud är sparat.");
+    if (!insp.stoppad && !insp.fel) kvitto("Akasha Protokoll svarar igen, och allt ljud är sparat.");
   }
   const vantar = insp.nere || (insp.harVantat && (vantande.length > 0 || insp.klarVantar));
 
@@ -765,11 +766,11 @@ function uppdateraKo(insp) {
   } else if (vantar) {
     sort = !insp.stoppad ? "spelar" : vantande.length ? "vantar-ljud" : "vantar-klar";
     if (!insp.stoppad) {
-      text = "Akasha Meet svarar inte just nu. Inspelningen fortsätter, och ljudet sparas i den här fliken tills Akasha Meet är igång igen. Stäng inte fliken.";
+      text = "Akasha Protokoll svarar inte just nu. Inspelningen fortsätter, och ljudet sparas i den här fliken tills Akasha Protokoll är igång igen. Stäng inte fliken.";
     } else if (vantande.length) {
-      text = `Inspelningen är stoppad. ${mangd} väntar på att sparas, eftersom Akasha Meet inte svarar. Sidan försöker igen av sig själv och startar transkriberingen när allt har kommit fram. Stäng inte fliken. Vill du inte vänta kan du spara ljudet som en fil.`;
+      text = `Inspelningen är stoppad. ${mangd} väntar på att sparas, eftersom Akasha Protokoll inte svarar. Sidan försöker igen av sig själv och startar transkriberingen när allt har kommit fram. Stäng inte fliken. Vill du inte vänta kan du spara ljudet som en fil.`;
     } else {
-      text = "Inspelningen är stoppad och sparad. Transkriberingen startar när Akasha Meet svarar igen. Stäng inte fliken.";
+      text = "Inspelningen är stoppad och sparad. Transkriberingen startar när Akasha Protokoll svarar igen. Stäng inte fliken.";
     }
   }
   // Filen sparades tidigare men saknar slutet: en extra mening i lagen "vantar-ljud" och "fel-stoppad".
@@ -797,7 +798,7 @@ function sparaLjudSomFil(insp) {
   const d = new Date(insp.start);
   const p = (n) => String(n).padStart(2, "0");
   // Bara ASCII i filnamnet: ett namn med a, a eller o blev "download" i Chromium.
-  const namn = `Akasha Meet ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}.${p(d.getMinutes())}${insp.andelse}`;
+  const namn = `Akasha Protokoll ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}.${p(d.getMinutes())}${insp.andelse}`;
   const lank = el("a", { href: url, download: namn });
   document.body.append(lank);
   lank.click();
@@ -919,7 +920,7 @@ function slappEfterFil() {
   meddela("");
   kvitto(lageFel
     ? "Ladda upp filen du sparade med knappen Ladda upp ljudfil, och radera den ofullständiga inspelningen i listan."
-    : "Den ofullständiga inspelningen ligger kvar i listan. Ladda upp filen du sparade när Akasha Meet är igång igen, och radera den ofullständiga.");
+    : "Den ofullständiga inspelningen ligger kvar i listan. Ladda upp filen du sparade när Akasha Protokoll är igång igen, och radera den ofullständiga.");
   $("spela-in").focus();
   uppdateraLista();
 }

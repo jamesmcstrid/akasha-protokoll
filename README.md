@@ -1,4 +1,4 @@
-# <img src="app/static/elefant.svg" alt="" width="44" align="top"> Akasha Meet
+# <img src="app/static/elefant.svg" alt="" width="44" align="top"> Akasha Protokoll
 
 Transkribera möten lokalt på din egen dator. Spela in direkt i webbläsaren, eller ladda upp en ljudfil.
 Du får texten uppdelad per talare och kan byta "Talare 1" och "Talare 2" mot riktiga namn.
@@ -8,20 +8,20 @@ Du får texten uppdelad per talare och kan byta "Talare 1" och "Talare 2" mot ri
 - **Svensk taligenkänning** med [KB-Whisper](https://huggingface.co/KBLab/kb-whisper-medium) från
   Kungliga biblioteket. På Mac med Apple Silicon används grafikprocessorn (Metal).
 - **Möten i rummet och digitalt.** Med datorns mikrofon, eller Google Meet och Slack i Chrome.
-- **Inspelningen tappas inte.** Ljudet sparas på disken var femte sekund under mötet. Svarar inte Akasha Meet en stund sparas ljudet i webbläsarfliken under tiden.
+- **Inspelningen tappas inte.** Ljudet sparas på disken var femte sekund under mötet. Svarar inte Akasha Protokoll en stund sparas ljudet i webbläsarfliken under tiden.
 
-Akasha Meet är ett program som du öppnar som vilket annat som helst. Själva sidan visas i webbläsaren.
+Akasha Protokoll är ett program som du öppnar som vilket annat som helst. Själva sidan visas i webbläsaren.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/bilder/akasha-meet-mork.png">
-  <img src="docs/bilder/akasha-meet-ljus.png" alt="Akasha Meet i webbläsaren. Överst ett grönt fält med rubriken Mötet blir text. Inget lämnar datorn. och en elefant. Till vänster knappen Ny transkribering och listan med inspelningar, där en transkriberas just nu. Till höger ett transkriberat möte i tre steg: 1 Vem är vem? med namnen Anna och Jonas, 2 Kontrollera mot ljudet med en förklaring av markeringarna, ljudspelaren och replikerna, där en replik är markerad som osäker talare och två ord är understrukna som osäkra, och 3 Använd texten med knappar för att kopiera och ladda ner." width="760">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/bilder/akasha-protokoll-mork.png">
+  <img src="docs/bilder/akasha-protokoll-ljus.png" alt="Akasha Protokoll i webbläsaren. Överst ett grönt fält med rubriken Mötet blir text. Inget lämnar datorn. och en elefant. Till vänster knappen Ny transkribering och listan med inspelningar, där en transkriberas just nu. Till höger ett transkriberat möte i tre steg: 1 Vem är vem? med namnen Anna och Jonas, 2 Kontrollera mot ljudet med en förklaring av markeringarna, ljudspelaren och replikerna, där en replik är markerad som osäker talare och två ord är understrukna som osäkra, och 3 Använd texten med knappar för att kopiera och ladda ner." width="760">
 </picture>
 
 <sub>Exemplet är påhittat.</sub>
 
 ## Använda
 
-1. Öppna **Akasha Meet** i Program. Webbläsaren öppnas på sidan av sig själv. Har du installerat från
+1. Öppna **Akasha Protokoll** i Program. Webbläsaren öppnas på sidan av sig själv. Har du installerat från
    Terminal går du i stället till **http://127.0.0.1:8611** i Chrome (eller Safari). Spara gärna
    sidan som bokmärke.
 2. Välj **Hur spelas mötet in?** och **Hur många pratar?**. Skriv gärna namn och facktermer som
@@ -90,7 +90,7 @@ Google Meet, en Slack-huddle i Slack i Chrome (`app.slack.com`), Teams eller Zoo
   vald och att den inte är avstängd.
 - Medan texten tas fram somnar datorn inte av sig själv. Stänger du locket pausas
   transkriberingen och fortsätter när du öppnar det igen.
-- Svarar inte Akasha Meet under en inspelning fortsätter inspelningen, och ljudet sparas i fliken tills Akasha Meet är igång igen. Stäng inte fliken då. Trycker du Stoppa medan ljud väntar, startar transkriberingen när allt har kommit fram. Vill du inte vänta, tryck Spara ljudet som fil och sedan Klar, och ladda upp filen senare med Ladda upp ljudfil.
+- Svarar inte Akasha Protokoll under en inspelning fortsätter inspelningen, och ljudet sparas i fliken tills Akasha Protokoll är igång igen. Stäng inte fliken då. Trycker du Stoppa medan ljud väntar, startar transkriberingen när allt har kommit fram. Vill du inte vänta, tryck Spara ljudet som fil och sedan Klar, och ladda upp filen senare med Ladda upp ljudfil.
 - Om fliken stängs eller datorn startas om ligger inspelningen kvar i listan som "Spelar in".
   Tryck **Avsluta och transkribera**, så transkriberas det som hann sparas.
 - Kontrollera texten mot ljudet innan du använder den. Taligenkänning gör fel, särskilt på namn,
@@ -110,30 +110,30 @@ Programmet byggs i GitHub Actions och är ännu inte signerat av Apple. Det krä
 Silicon (M1 eller senare) och macOS 14 eller senare.
 
 1. Öppna repot på GitHub, gå till **Actions → Mac-app**, välj den senaste gröna körningen och ladda
-   ned **Akasha-Meet-mac-arm64.zip** under **Artifacts**.
-2. Öppna zip-filen i Hämtade filer om Safari inte redan har gjort det, och dra **Akasha Meet** till
+   ned **Akasha-Protokoll-mac-arm64.zip** under **Artifacts**.
+2. Öppna zip-filen i Hämtade filer om Safari inte redan har gjort det, och dra **Akasha Protokoll** till
    **Program**.
-3. Dubbelklicka på Akasha Meet. Första gången säger macOS att "Akasha Meet" öppnades inte, eftersom
+3. Dubbelklicka på Akasha Protokoll. Första gången säger macOS att "Akasha Protokoll" öppnades inte, eftersom
    Apple inte kunde verifiera att den är fri från sabotageprogram. Tryck **Klar**. (Den förvalda
    knappen är Flytta till papperskorgen; tryck inte på den.)
 4. Välj Apple-menyn > Systeminställningar och klicka på **Integritet och säkerhet** i sidofältet (du
-   kanske måste rulla nedåt). Under rubriken **Säkerhet** står "Akasha Meet" blockerades för att
+   kanske måste rulla nedåt). Under rubriken **Säkerhet** står "Akasha Protokoll" blockerades för att
    skydda din dator. Tryck **Öppna ändå** på den raden. (På en del versioner av macOS heter knappen
    där **Öppna**; tryck i så fall på den.) Knappen finns i omkring en timme efter att du försökte
    öppna appen. Saknas den, gör om steg 3.
-5. En ruta frågar Vill du öppna "Akasha Meet"? Tryck **Öppna ändå**.
+5. En ruta frågar Vill du öppna "Akasha Protokoll"? Tryck **Öppna ändå**.
 6. Bekräfta med Touch ID, eller tryck **Använd lösenord…** och ange ditt lösenord. Det behövs bara
-   första gången; sedan öppnas Akasha Meet med dubbelklick som andra program. Apple beskriver stegen
+   första gången; sedan öppnas Akasha Protokoll med dubbelklick som andra program. Apple beskriver stegen
    i
    [Öppna en Mac-app från en okänd utvecklare](https://support.apple.com/sv-se/guide/mac-help/mh40616/mac).
 7. Sidan öppnas och erbjuder att hämta modellerna (cirka 1,6 GB, bara första gången). Har du
    installerat från Terminal tidigare används de modeller du redan har (se nedan).
 
-Säger macOS i stället att programmet är skadat, eller syns ingen rad om Akasha Meet under Säkerhet
+Säger macOS i stället att programmet är skadat, eller syns ingen rad om Akasha Protokoll under Säkerhet
 direkt efter ett försök att öppna det, kör en gång i Terminal:
-`xattr -dr com.apple.quarantine "/Applications/Akasha Meet.app"` och öppna programmet igen.
+`xattr -dr com.apple.quarantine "/Applications/Akasha Protokoll.app"` och öppna programmet igen.
 
-**Igång och avsluta:** när Akasha Meet är igång har ikonen i Dock en prick under sig. Klicka på
+**Igång och avsluta:** när Akasha Protokoll är igång har ikonen i Dock en prick under sig. Klicka på
 ikonen för att öppna sidan igen. Avsluta med **⌘Q** eller genom att högerklicka på ikonen och välja
 **Avsluta**. Det du redan spelat in ligger kvar.
 
@@ -198,7 +198,7 @@ Vill du ha den någon annanstans anger du `DATAKATALOG` i inställningarna (se n
 ## Integritet och säkerhet
 
 - Tjänsten lyssnar bara på `127.0.0.1`. Ingen annan dator i nätverket kommer åt den.
-- Akasha Meet använder internet bara för att hämta modellerna, en gång: när du trycker **Hämta nu**
+- Akasha Protokoll använder internet bara för att hämta modellerna, en gång: när du trycker **Hämta nu**
   på sidan eller kör installationen. Filerna kommer från Hugging Face (huggingface.co), med låsta
   versioner, och varje fil kontrolleras med sha256 innan den används. Programmet följer bara
   vidarekopplingar till Hugging Faces egna adresser, över https. Inga inspelningar, texter eller
@@ -213,7 +213,7 @@ Vill du ha den någon annanstans anger du `DATAKATALOG` i inställningarna (se n
 Allt har standardvärden. I programmet ligger inställningarna i filen `installningar.env` i mappen
 `~/Library/Application Support/Akasha Meet`. Filen finns inte från början. Skapa den med TextEdit
 (Format → Gör till ren text), en inställning per rad, till exempel `MODELL=large`, och avsluta och
-öppna Akasha Meet igen. Mappen hittar du i Finder med Gå → Gå till mapp…
+öppna Akasha Protokoll igen. Mappen hittar du i Finder med Gå → Gå till mapp…
 
 Har filen ett fel, till exempel en rad som inte går att förstå eller fel sorts text, säger
 programmet till när det startar och använder standardvärdet för just det.
@@ -223,8 +223,8 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 
 | Inställning | Standard | Vad |
 |---|---|---|
-| `MOTOR` | `auto` | `auto` väljer whisper.cpp med Metal på Apple Silicon och faster-whisper på processorn annars. Går att tvinga med `whispercpp` eller `faster` (starta om Akasha Meet; sidan erbjuder att hämta det som saknas). `faster` går inte i programmet, där följer faster-whisper inte med |
-| `MODELL` | `medium` | `large` gör färre fel men tar längre tid och behöver 1,1 GB till (3,1 GB utan Apple Silicon). Starta om Akasha Meet efter att du ändrat. Sidan erbjuder då att hämta modellen |
+| `MOTOR` | `auto` | `auto` väljer whisper.cpp med Metal på Apple Silicon och faster-whisper på processorn annars. Går att tvinga med `whispercpp` eller `faster` (starta om Akasha Protokoll; sidan erbjuder att hämta det som saknas). `faster` går inte i programmet, där följer faster-whisper inte med |
+| `MODELL` | `medium` | `large` gör färre fel men tar längre tid och behöver 1,1 GB till (3,1 GB utan Apple Silicon). Starta om Akasha Protokoll efter att du ändrat. Sidan erbjuder då att hämta modellen |
 | `ORDLISTA` | tom | Ord som alltid ska stavas rätt, till exempel företagets namn |
 | `DATAKATALOG` | `~/AkashaMeet` | Var inspelningar och texter sparas |
 | `PORT` | `8611` | Webbsidans port |
@@ -235,16 +235,16 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 
 | Problem | Gör så här |
 |---|---|
-| Sidan öppnas inte | Programmet: avsluta och öppna Akasha Meet igen. Loggen finns i `~/Library/Logs/Akasha Meet/akasha-meet.log` (öppnas med appen Konsol). Från Terminal: `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`, och loggen `~/AkashaMeet/akasha-meet.log` |
-| "Operation not permitted" i loggen, eller installationen säger att mappen ligger fel | Mappen med Akasha Meet ligger där macOS inte låter bakgrundstjänster läsa (Hämtade filer, Dokument, Skrivbord, iCloud Drive). Flytta den till hemkatalogen, ta bort mappen `venv` i den, och kör `bash mac/installera.sh` igen. Modellerna och .env följer med. |
-| "Akasha Meet svarar inte" | Programmet har avslutats eller stannat. Öppna Akasha Meet igen. Från Terminal: tjänsten startar av sig själv när du loggar in, så logga ut och in igen, eller kör `launchctl kickstart -k gui/$(id -u)/local.akasha-meet` i Terminal. Det du redan spelat in ligger kvar. Sidan märker själv när Akasha Meet är igång igen. |
-| "Akasha Meet" öppnades inte, eller "är skadat" | Se steg 3–6 under Som program: Klar, sedan Öppna ändå under Integritet och säkerhet → Säkerhet. Säger macOS att programmet är skadat, kör `xattr -dr com.apple.quarantine "/Applications/Akasha Meet.app"` i Terminal. |
-| "Akasha Meet kan inte starta" (port 8611) | Ett annat program använder porten. Avsluta det, eller ange en annan port med `PORT=` i inställningarna. |
-| "Akasha Meet startade inte" | Tryck **Visa loggen** och läs de sista raderna, eller skicka dem till den som hjälper dig. Loggen innehåller inga inspelningar eller texter. |
+| Sidan öppnas inte | Programmet: avsluta och öppna Akasha Protokoll igen. Loggen finns i `~/Library/Logs/Akasha Meet/akasha-meet.log` (öppnas med appen Konsol). Från Terminal: `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`, och loggen `~/AkashaMeet/akasha-meet.log` |
+| "Operation not permitted" i loggen, eller installationen säger att mappen ligger fel | Mappen med Akasha Protokoll ligger där macOS inte låter bakgrundstjänster läsa (Hämtade filer, Dokument, Skrivbord, iCloud Drive). Flytta den till hemkatalogen, ta bort mappen `venv` i den, och kör `bash mac/installera.sh` igen. Modellerna och .env följer med. |
+| "Akasha Protokoll svarar inte" | Programmet har avslutats eller stannat. Öppna Akasha Protokoll igen. Från Terminal: tjänsten startar av sig själv när du loggar in, så logga ut och in igen, eller kör `launchctl kickstart -k gui/$(id -u)/local.akasha-meet` i Terminal. Det du redan spelat in ligger kvar. Sidan märker själv när Akasha Protokoll är igång igen. |
+| "Akasha Protokoll" öppnades inte, eller "är skadat" | Se steg 3–6 under Som program: Klar, sedan Öppna ändå under Integritet och säkerhet → Säkerhet. Säger macOS att programmet är skadat, kör `xattr -dr com.apple.quarantine "/Applications/Akasha Protokoll.app"` i Terminal. |
+| "Akasha Protokoll kan inte starta" (port 8611) | Ett annat program använder porten. Avsluta det, eller ange en annan port med `PORT=` i inställningarna. |
+| "Akasha Protokoll startade inte" | Tryck **Visa loggen** och läs de sista raderna, eller skicka dem till den som hjälper dig. Loggen innehåller inga inspelningar eller texter. |
 | "Inte redo" uppe till höger | Håll muspekaren över texten för att se orsaken. Det är något som en hämtning inte kan rätta, till exempel en inställning i `.env` eller `installningar.env`. |
 | "Modellerna behöver hämtas" uppe till höger | Tryck **Hämta nu** i rutan överst på sidan. Det görs bara en gång. |
 | Hämtningen säger "Kunde inte nå Hugging Face" | Kontrollera att datorn är ansluten till internet och tryck **Försök igen**. Det som redan hämtats ligger kvar. |
-| Hämtningen fungerar inte på ett företagsnät (certifikatfel eller inget svar) | Lägg in nätets proxy i inställningarna, till exempel `HTTPS_PROXY=http://proxy.foretaget.se:8080`, och vid behov företagets certifikat med `REQUESTS_CA_BUNDLE=/sökväg/till/certifikat.pem`. Avsluta och öppna Akasha Meet igen (från Terminal: starta om tjänsten), och tryck **Försök igen**. Programmet använder Macens egna certifikat, så företagets certifikat behövs oftast inte. |
+| Hämtningen fungerar inte på ett företagsnät (certifikatfel eller inget svar) | Lägg in nätets proxy i inställningarna, till exempel `HTTPS_PROXY=http://proxy.foretaget.se:8080`, och vid behov företagets certifikat med `REQUESTS_CA_BUNDLE=/sökväg/till/certifikat.pem`. Avsluta och öppna Akasha Protokoll igen (från Terminal: starta om tjänsten), och tryck **Försök igen**. Programmet använder Macens egna certifikat, så företagets certifikat behövs oftast inte. |
 | "Det får inte plats på disken" | Frigör utrymme och tryck **Försök igen**. Sidan visar hur mycket som behövs. |
 | "Kontrollsumman stämmer inte" | Filen har tagits bort. Tryck **Försök igen**. Händer det igen kan filen ha ändrats hos Hugging Face. |
 | `Bootstrap failed: 5` vid installation | Uppdatera (`git pull`) och kör `bash mac/installera.sh` igen. Hjälper inte det: Systeminställningar → Allmänt → Inloggningsobjekt, tillåt `bash` i bakgrunden |
@@ -272,7 +272,7 @@ Programmet för Mac byggs med `paketering/` och GitHub Actions (se [docs/TEKNIK.
 
 | Del | Licens |
 |---|---|
-| Akasha Meet (det här programmet), © 2026 Dennis Fredin | Apache-2.0, se [LICENSE](LICENSE) och [NOTICE](NOTICE) |
+| Akasha Protokoll (det här programmet), © 2026 Dennis Fredin | Apache-2.0, se [LICENSE](LICENSE) och [NOTICE](NOTICE) |
 | [KB-Whisper medium](https://huggingface.co/KBLab/kb-whisper-medium) (KBLab, Kungliga biblioteket) | Apache-2.0 |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (följer med programmet) | MIT |
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2.0 |

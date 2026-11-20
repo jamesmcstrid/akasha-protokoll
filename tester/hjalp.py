@@ -4,7 +4,7 @@ import shutil
 import sys
 import tempfile
 
-DATA = tempfile.mkdtemp(prefix="akasha-meet-test-")
+DATA = tempfile.mkdtemp(prefix="akasha-protokoll-test-")
 os.environ["DATAKATALOG"] = DATA
 os.environ["MODELLKATALOG"] = os.path.join(DATA, "inga-modeller")
 os.environ["MOTOR"] = "faster"

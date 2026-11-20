@@ -1,4 +1,4 @@
-"""Startar Akasha Meet som vid forsta start (inga modeller), med en falsk Hugging Face.
+"""Startar Akasha Protokoll som vid forsta start (inga modeller), med en falsk Hugging Face.
 
     python tester/forsta_start.py [--port 8622] [--katalog DIR] [--sekunder 8]
            [--fel avbrott|kontrollsumma|inget-nat|disk] [--bara-talare]

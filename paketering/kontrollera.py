@@ -22,7 +22,7 @@ ROT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROT, "app"))
 
 MAC = sys.platform == "darwin"
-HEADERS = {"X-Akasha-Meet": "1"}
+HEADERS = {"X-Akasha-Protokoll": "1"}
 TALARE_SAKNAS = "röstmodellen saknas. Hämta den på sidan."
 
 proc = None
@@ -147,8 +147,8 @@ def main():
 
     # 4. Sidan och dess skript.
     r = hamta("/")
-    kontrollera(r.status_code == 200 and "Akasha Meet" in r.text, "GET / ger 200 och innehåller Akasha Meet",
-                f"GET / gav {r.status_code} utan texten Akasha Meet")
+    kontrollera(r.status_code == 200 and "Akasha Protokoll" in r.text, "GET / ger 200 och innehåller Akasha Protokoll",
+                f"GET / gav {r.status_code} utan texten Akasha Protokoll")
     r = hamta("/static/app.js")
     kontrollera(r.status_code == 200, f"GET /static/app.js ger 200 ({len(r.content)} byte)",
                 f"GET /static/app.js gav {r.status_code}")
@@ -226,7 +226,7 @@ def main():
                 f"avkodningen misslyckades: {jobbfel}")
 
     # 9. Loggfilen.
-    rad = f"Akasha Meet: http://127.0.0.1:{args.port}"
+    rad = f"Akasha Protokoll: http://127.0.0.1:{args.port}"
     text = open(logg, encoding="utf-8", errors="replace").read() if os.path.isfile(logg) else None
     kontrollera(text is not None and rad in text, f"loggfilen {logg} finns och innehåller '{rad}'",
                 f"loggfilen {logg} saknas eller saknar raden '{rad}'")

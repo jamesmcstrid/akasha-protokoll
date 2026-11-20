@@ -347,7 +347,7 @@ class TestGamlaModellkataloger(Tillfallig):
             anrop.append(p)
             return riktig(p)
         with self._hem(), mock.patch("os.path.isdir", spion), \
-                self.assertLogs("akasha-meet", level="INFO") as lg:
+                self.assertLogs("akasha-protokoll", level="INFO") as lg:
             resultat = plattform.gamla_modellkataloger()
         self.assertEqual(resultat, [])
         self.assertFalse([p for p in anrop if str(p).startswith(skyddad)], anrop)

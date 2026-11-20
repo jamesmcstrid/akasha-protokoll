@@ -1,6 +1,6 @@
-# Akasha Meet: teknik och tester
+# Akasha Protokoll: teknik och tester
 
-Hur Akasha Meet fungerar inuti, hur talaruppdelningen gick till och vad som är testat.
+Hur Akasha Protokoll fungerar inuti, hur talaruppdelningen gick till och vad som är testat.
 Användning och installation står i [README](../README.md).
 
 ## Hur det fungerar
@@ -43,7 +43,7 @@ venv/bin/python -m unittest discover -s tester
 ## Webbsidan och API:t
 
 Webbsidan är en enda sida utan ramverk: `app/static/index.html`, `app.js` och `stil.css`. Den
-pratar med tjänsten via JSON. Allt som ändrar något är `POST` och kräver headern `X-Akasha-Meet: 1`.
+pratar med tjänsten via JSON. Allt som ändrar något är `POST` och kräver headern `X-Akasha-Protokoll: 1`.
 
 | Anrop | Vad |
 |---|---|
@@ -58,7 +58,7 @@ pratar med tjänsten via JSON. Allt som ändrar något är `POST` och kräver he
 | `POST …/titel`, `…/namn`, `…/talare`, `…/talare/angra`, `…/radera` | Byt rubrik, spara talarnamn, rätta talare, ångra alla rättningar, radera |
 | `GET …/text.md`, `…/text.txt`, `…/ljud` | Nedladdningar. `?ladda_ner=1` på ljudet ger en fil att spara |
 
-När tjänsten inte svarar visar sidan "Akasha Meet svarar inte…" där felet hör hemma, etiketten blir "Tjänsten svarar inte", och sidan frågar var femte sekund tills tjänsten svarar igen.
+När tjänsten inte svarar visar sidan "Akasha Protokoll svarar inte…" där felet hör hemma, etiketten blir "Tjänsten svarar inte", och sidan frågar var femte sekund tills tjänsten svarar igen.
 
 Medan ett jobb pågår har inspelningen fältet `framsteg`: `fas` (`koar`, `transkriberar` eller
 `talare`), `andel` (0–1) och `sekunder`, hur länge den här fasen har pågått. Sidan räknar ut
@@ -132,12 +132,12 @@ använder samma modul genom API:t ovan.
 
 ## Programmet (Mac)
 
-Programmet är ett vanligt Mac-program, `Akasha Meet.app`, för Apple Silicon (macOS 14 eller senare).
+Programmet är ett vanligt Mac-program, `Akasha Protokoll.app`, för Apple Silicon (macOS 14 eller senare).
 Det ersätter inte terminalinstallationen: båda finns kvar och använder samma kod i `app/`.
 Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-26`.
 
 - **Hur det byggs.** PyInstaller 6.22.3 i katalogläge samlar Python, beroendena och deras inbyggda
-  bibliotek till ett `.app`-paket. En spec-fil, `paketering/akasha-meet.spec`, bygger både Mac-programmet
+  bibliotek till ett `.app`-paket. En spec-fil, `paketering/akasha-protokoll.spec`, bygger både Mac-programmet
   och provbygget på Linux (en vanlig katalog). `whisper-cli` byggs från källkod i GitHub Actions
   från en fast tagg av whisper.cpp, statiskt och med Metal, och läggs in i paketet så att den
   signeras med resten. Artefakten är en zip-fil som packas med `ditto`, för att behålla
@@ -151,8 +151,8 @@ Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-2
 - **Start och avslut.** `mac_app.py` är det tunna Mac-skalet: ikon i Dock, programmenyn och
   Dock-menyn. Allt annat ligger i `start.py`, som går att köra och testa på Linux: loggning, kontroll
   av inställningsfilen, om porten är ledig, tjänsten i en bakgrundstråd, att öppna webbläsaren och att
-  stänga ned. Vid start frågar `start.lage()` om porten är ledig, upptagen av en annan Akasha Meet
-  eller upptagen av något annat. En annan Akasha Meet gör att programmet bara öppnar sidan och
+  stänga ned. Vid start frågar `start.lage()` om porten är ledig, upptagen av en annan Akasha Protokoll
+  eller upptagen av något annat. En annan Akasha Protokoll gör att programmet bara öppnar sidan och
   avslutas, och något annat ger ett felmeddelande. Dubbelklick på ett program som redan är igång
   hanteras av macOS, som skickar "öppna igen" till det som körs. Vid ⌘Q frågar programmet först om
   det pågår en inspelning, en transkribering eller en hämtning (`start.pagar()`), och stänger sedan

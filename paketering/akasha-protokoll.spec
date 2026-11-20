@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller-spec for Akasha Meet. Samma fil bygger Mac-programmet (Akasha Meet.app) och
+# PyInstaller-spec for Akasha Protokoll. Samma fil bygger Mac-programmet (Akasha Protokoll.app) och
 # provbygget pa Linux (en vanlig katalog med start.py som startfil).
-#   pyinstaller --noconfirm --clean --distpath UT/dist --workpath UT/pyi paketering/akasha-meet.spec
+#   pyinstaller --noconfirm --clean --distpath UT/dist --workpath UT/pyi paketering/akasha-protokoll.spec
 # Miljovariablerna nedan satts bara av byggskripten; de ror inte app/.
 import os
 import sys
@@ -36,7 +36,7 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
-NAMN = "Akasha Meet" if MAC else "akasha-meet"
+NAMN = "Akasha Protokoll" if MAC else "akasha-protokoll"
 
 exe = EXE(
     pyz,
@@ -68,13 +68,13 @@ coll = COLLECT(
 if MAC:
     app = BUNDLE(
         coll,
-        name="Akasha Meet.app",
+        name="Akasha Protokoll.app",
         icon=IKON,
-        bundle_identifier="io.github.jamesmcstrid.akashameet",
+        bundle_identifier="io.github.jamesmcstrid.akashaprotokoll",
         version=VERSION,
         info_plist={
-            "CFBundleName": "Akasha Meet",
-            "CFBundleDisplayName": "Akasha Meet",
+            "CFBundleName": "Akasha Protokoll",
+            "CFBundleDisplayName": "Akasha Protokoll",
             "CFBundleShortVersionString": VERSION,
             "CFBundleVersion": BYGGNUMMER,
             "LSMinimumSystemVersion": "14.0",

@@ -71,7 +71,7 @@ class TestPaketerad(unittest.TestCase):
         with mock.patch.object(plattform, "ar_paketerad", lambda: True), \
              mock.patch.object(motor, "MOTOR", "whispercpp"), \
              mock.patch.object(plattform, "whisper_cli", lambda: None):
-            text = "whisper-cli saknas i programmet. Ladda ned Akasha Meet på nytt."
+            text = "whisper-cli saknas i programmet. Ladda ned Akasha Protokoll på nytt."
             self.assertEqual(motor.hinder(), text)
             with mock.patch.object(motor, "AKTIV", "whispercpp"):
                 self.assertEqual(motor.problem(), text)
@@ -101,7 +101,7 @@ class TestPaketerad(unittest.TestCase):
         with mock.patch.dict(sys.modules, {"sherpa_onnx": None}), \
              mock.patch.object(modeller, "saknade", lambda *a, **k: []):
             with mock.patch.object(plattform, "ar_paketerad", lambda: True):
-                self.assertEqual(talare.problem(), "sherpa-onnx saknas i programmet. Ladda ned Akasha Meet på nytt.")
+                self.assertEqual(talare.problem(), "sherpa-onnx saknas i programmet. Ladda ned Akasha Protokoll på nytt.")
             with mock.patch.object(plattform, "ar_paketerad", lambda: False):
                 self.assertEqual(talare.problem(), "sherpa-onnx saknas. Kör: bash mac/installera.sh")
 
@@ -148,7 +148,7 @@ class TestWhispercpp(unittest.TestCase):
         framsteg = []
         with mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
              mock.patch.object(motor.subprocess, "Popen", popen), \
-             self.assertLogs("akasha-meet", "INFO") as loggat:
+             self.assertLogs("akasha-protokoll", "INFO") as loggat:
             motor._whispercpp(np_tyst(), False, "", framsteg.append)
         self.assertEqual(framsteg, [0.1, 1.0])
         rader = [r for r in loggat.output if "whisper-cli: forsta framsteg efter" in r]
@@ -158,7 +158,7 @@ class TestWhispercpp(unittest.TestCase):
     def test_loggraden_visar_streck_om_inget_framsteg_kom(self):
         with mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
              mock.patch.object(motor.subprocess, "Popen", return_value=FalskProcess()), \
-             self.assertLogs("akasha-meet", "INFO") as loggat:
+             self.assertLogs("akasha-protokoll", "INFO") as loggat:
             with self.assertRaises(motor.MotorFel):
                 motor._whispercpp(np_tyst(), False, "", None)
         self.assertTrue(any("forsta framsteg efter - s," in r and "kod 1" in r for r in loggat.output),
@@ -169,7 +169,7 @@ class TestWhispercpp(unittest.TestCase):
              mock.patch.object(plattform, "ar_paketerad", lambda: True):
             with self.assertRaises(motor.MotorFel) as e:
                 motor._whispercpp(np_tyst(), False, "", None)
-        self.assertEqual(str(e.exception), "whisper-cli saknas i programmet. Ladda ned Akasha Meet på nytt.")
+        self.assertEqual(str(e.exception), "whisper-cli saknas i programmet. Ladda ned Akasha Protokoll på nytt.")
 
 
 class TestStoppa(unittest.TestCase):

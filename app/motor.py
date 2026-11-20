@@ -33,7 +33,7 @@ from modeller import CT2_MODELL, DTW, GGML_MODELL, STORLEKAR
 # faster-whisper ska aldrig hamta nagot sjalv: modellerna hamtas bara av modeller.py
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
-log = logging.getLogger("akasha-meet")
+log = logging.getLogger("akasha-protokoll")
 SR = 16000
 BEAM = 5
 PROGRESS_RE = re.compile(r"progress\s*=\s*(\d+)%")
@@ -89,7 +89,7 @@ class Avbruten(MotorFel):
 
 def _cli_saknas():
     if plattform.ar_paketerad():
-        return "whisper-cli saknas i programmet. Ladda ned Akasha Meet på nytt."
+        return "whisper-cli saknas i programmet. Ladda ned Akasha Protokoll på nytt."
     return f"{WHISPERCPP_BIN} saknas. Kör: brew install whisper-cpp"
 
 
@@ -244,7 +244,7 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
     cli = plattform.whisper_cli()
     if cli is None:
         raise MotorFel(_cli_saknas())
-    with tempfile.TemporaryDirectory(prefix="akasha-meet-") as katalog:
+    with tempfile.TemporaryDirectory(prefix="akasha-protokoll-") as katalog:
         wav = os.path.join(katalog, "ljud.wav")
         with open(wav, "wb") as f:
             f.write(wav_16k_mono(samples))

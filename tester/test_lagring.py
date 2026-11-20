@@ -74,7 +74,7 @@ class TestLagring(unittest.TestCase):
         lagring.aterstall_avbrutna()
         self.assertEqual(lagring.las(b["id"])["status"], "avbruten")
         self.assertEqual(lagring.las(b["id"])["fel"], lagring.AVBRUTEN)
-        self.assertEqual(lagring.AVBRUTEN, "Transkriberingen avbröts eftersom Akasha Meet avslutades. "
+        self.assertEqual(lagring.AVBRUTEN, "Transkriberingen avbröts eftersom Akasha Protokoll avslutades. "
                                            "Tryck Försök igen för att göra om den.")
         self.assertEqual(lagring.las(a["id"])["status"], "spelar_in")  # orord
         lagring.radera(a["id"])

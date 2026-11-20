@@ -65,7 +65,7 @@ def problem():
         import sherpa_onnx  # noqa: F401
     except ImportError:
         if plattform.ar_paketerad():
-            return "sherpa-onnx saknas i programmet. Ladda ned Akasha Meet på nytt."
+            return "sherpa-onnx saknas i programmet. Ladda ned Akasha Protokoll på nytt."
         return "sherpa-onnx saknas. Kör: bash mac/installera.sh"
     return None
 

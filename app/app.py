@@ -1,9 +1,9 @@
-"""Akasha Meet: transkribera moten lokalt. Webbsida och API pa http://127.0.0.1:PORT.
+"""Akasha Protokoll: transkribera moten lokalt. Webbsida och API pa http://127.0.0.1:PORT.
 
 Lyssnar ALLTID bara pa 127.0.0.1, sa ingen annan dator kommer at tjansten. Skydd mot att andra
 webbsidor i samma webblasare anropar den:
   - Host maste vara localhost eller 127.0.0.1 (stoppar DNS-rebinding).
-  - Allt som andrar nagot kraver headern X-Akasha-Meet: 1. En annan sajt kan bara skicka den
+  - Allt som andrar nagot kraver headern X-Akasha-Protokoll: 1. En annan sajt kan bara skicka den
     efter en CORS-forfragan, och sadana godkanner tjansten aldrig.
 
 Transkriberingar kors en i taget i en bakgrundstrad. Webbsidan fragar efter framsteg.
@@ -32,11 +32,11 @@ import rattning
 import talare
 from installningar import DATAKATALOG, MAX_MB, MODELL, ORDLISTA, PORT
 
-HEADER = "X-Akasha-Meet"
+HEADER = "X-Akasha-Protokoll"
 VARDAR = {"127.0.0.1", "localhost", "::1"}
 SR = motor.SR
 
-log = logging.getLogger("akasha-meet")
+log = logging.getLogger("akasha-protokoll")
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.config["MAX_CONTENT_LENGTH"] = MAX_MB * 1024 * 1024
 
@@ -556,7 +556,7 @@ def transkribera_direkt():
     data = fil.read()
     # En egen katalog i stallet for NamedTemporaryFile: Windows later inte en oppen temporar fil
     # oppnas igen med namnet, och avkodaren oppnar den.
-    with tempfile.TemporaryDirectory(prefix="akasha-meet-") as katalog:
+    with tempfile.TemporaryDirectory(prefix="akasha-protokoll-") as katalog:
         sokvag = os.path.join(katalog, "ljud" + (os.path.splitext(fil.filename or "")[1] or ".audio"))
         with open(sokvag, "wb") as f:
             f.write(data)
@@ -602,7 +602,7 @@ def main():
         log.warning("installningar: %s", text)
     forbered()
     server = skapa_server()
-    log.info("Akasha Meet: http://127.0.0.1:%s (motor %s, data i %s)", PORT, motor.AKTIV, DATAKATALOG)
+    log.info("Akasha Protokoll: http://127.0.0.1:%s (motor %s, data i %s)", PORT, motor.AKTIV, DATAKATALOG)
     if motor.problem():
         log.warning("motorn ar inte redo: %s", motor.problem())
     server.run()

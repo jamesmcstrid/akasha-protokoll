@@ -20,7 +20,7 @@ import modeller
 @unittest.skipUnless(os.environ.get("AKASHA_RIKTIG_HAMTNING") == "1", "nar natet: satt AKASHA_RIKTIG_HAMTNING=1")
 class TestRiktigHamtning(unittest.TestCase):
     def test_avbrott_och_fortsattning(self):
-        with tempfile.TemporaryDirectory(prefix="akasha-meet-riktig-") as katalog, \
+        with tempfile.TemporaryDirectory(prefix="akasha-protokoll-riktig-") as katalog, \
                 mock.patch.object(modeller, "MODELLKATALOG", katalog):
             fil = modeller.PAKET["talare"][0]  # det riktiga manifestet
             logg = []  # (status, varde, Range) for varje svar, ocksa omdirigeringarna

@@ -1,8 +1,8 @@
 #!/bin/bash
-# Bygger Akasha Meet.app med PyInstaller, kontrollerar paketet och packar det som en zip-fil.
+# Bygger Akasha Protokoll.app med PyInstaller, kontrollerar paketet och packar det som en zip-fil.
 #   bash paketering/bygg-mac.sh CLI          (kors fran repots rot, pa Mac, med byggets venv i build/venv)
-# CLI = den byggda whisper-cli (paketering/bygg-whisper-cli.sh). Resultat: dist/Akasha Meet.app,
-# dist/Akasha-Meet-mac-arm64.zip och en uppackad kopia i build/uppackad (den som kontrollera.py provar).
+# CLI = den byggda whisper-cli (paketering/bygg-whisper-cli.sh). Resultat: dist/Akasha Protokoll.app,
+# dist/Akasha-Protokoll-mac-arm64.zip och en uppackad kopia i build/uppackad (den som kontrollera.py provar).
 # AKASHA_VERSION och AKASHA_BYGGNUMMER (om satta) lases av spec-filen.
 set -euo pipefail
 trap 'echo "FEL: bygg-mac.sh stannade pa rad $LINENO: $BASH_COMMAND" >&2' ERR
@@ -36,8 +36,8 @@ echo "OK: ikonen build/app/ikon.icns ($(wc -c < build/app/ikon.icns | tr -d ' ')
 echo "== 2. PyInstaller"
 AKASHA_WHISPER_CLI="$CLI" AKASHA_IKON="$ROT/build/app/ikon.icns" \
   build/venv/bin/pyinstaller --noconfirm --clean --distpath dist --workpath build/app/pyi \
-  paketering/akasha-meet.spec 2>&1 | tee build/app/pyinstaller.log
-APP="dist/Akasha Meet.app"
+  paketering/akasha-protokoll.spec 2>&1 | tee build/app/pyinstaller.log
+APP="dist/Akasha Protokoll.app"
 [ -d "$APP" ] || { echo "FEL: PyInstaller gav inget $APP" >&2; exit 1; }
 echo "OK: PyInstaller gav $APP"
 
@@ -135,17 +135,17 @@ sed -n 1,15p build/app/storlekar.txt
 
 # 7. Zip-filen (ditto behaller korbarhet, symboliska lankar och signatur) och en uppackad kopia.
 echo "== 7. zip och uppackad kopia"
-ZIP="dist/Akasha-Meet-mac-arm64.zip"
+ZIP="dist/Akasha-Protokoll-mac-arm64.zip"
 rm -f "$ZIP"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 rm -rf build/uppackad
 mkdir -p build/uppackad
 ditto -x -k "$ZIP" build/uppackad
-UPPACKAD="build/uppackad/Akasha Meet.app"
+UPPACKAD="build/uppackad/Akasha Protokoll.app"
 [ -d "$UPPACKAD" ] || { echo "FEL: zip-filen gav inget $UPPACKAD vid uppackning. Innehall i build/uppackad:" >&2; ls build/uppackad >&2; exit 1; }
 codesign --verify --deep --strict --verbose=2 "$UPPACKAD"
 echo "OK: codesign --verify --deep --strict godkande den uppackade kopian"
-[ -x "$UPPACKAD/Contents/MacOS/Akasha Meet" ] || { echo "FEL: den uppackade kopian saknar korbar Contents/MacOS/Akasha Meet" >&2; exit 1; }
+[ -x "$UPPACKAD/Contents/MacOS/Akasha Protokoll" ] || { echo "FEL: den uppackade kopian saknar korbar Contents/MacOS/Akasha Protokoll" >&2; exit 1; }
 ls -l "$ZIP"
 echo "OK: $ZIP ar $(wc -c < "$ZIP" | tr -d ' ') byte"
 

@@ -17,7 +17,7 @@ import plattform
 import talare
 from falsk_hf import FalskHF, falska_paket, session_med
 
-H = {"X-Akasha-Meet": "1"}
+H = {"X-Akasha-Protokoll": "1"}
 ORD = [(0.0, 0.5, " Hej"), (0.5, 1.0, " Bo."), (1.5, 2.0, " Hej"), (2.0, 2.5, " Anna.")]
 
 

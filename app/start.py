@@ -21,7 +21,7 @@ import urllib.request
 
 import plattform
 
-log = logging.getLogger("akasha-meet")
+log = logging.getLogger("akasha-protokoll")
 
 # --- texter till anvandaren (B2 och B7 i planen) ---------------------------------------------
 
@@ -31,12 +31,12 @@ VISA_LOGGEN = "Visa loggen"
 
 INSTALLNINGSFEL_RUBRIK = "Inställningsfilen har fel"
 INSTALLNINGSFEL_TEXT = "\n\n".join([
-    "\n".join(["Akasha Meet startar ändå och använder standardvärdet för det som inte gick att läsa:",
+    "\n".join(["Akasha Protokoll startar ändå och använder standardvärdet för det som inte gick att läsa:",
                "{problem}"]),
     "\n".join(["Filen:", "{fil}"]),
 ])
 
-TA_OVER_RUBRIK = "Akasha Meet är redan installerat från Terminal"
+TA_OVER_RUBRIK = "Akasha Protokoll är redan installerat från Terminal"
 TA_OVER_TEXT = "\n\n".join([
     "Den gamla installationen är igång i bakgrunden och använder samma adress. Programmet kan ta över: "
     "den gamla stängs av och startar inte längre när du loggar in. Inspelningar och modeller ligger "
@@ -47,22 +47,22 @@ TA_OVER_JA = "Använd programmet"
 TA_OVER_NEJ = "Avbryt"
 
 TA_OVER_MISSLYCKADES_RUBRIK = "Den gamla installationen gick inte att stänga av"
-TA_OVER_MISSLYCKADES_TEXT = "Kör bash mac/avinstallera.sh i Terminal och öppna sedan Akasha Meet igen."
+TA_OVER_MISSLYCKADES_TEXT = "Kör bash mac/avinstallera.sh i Terminal och öppna sedan Akasha Protokoll igen."
 
-UPPTAGEN_RUBRIK = "Akasha Meet kan inte starta"
+UPPTAGEN_RUBRIK = "Akasha Protokoll kan inte starta"
 UPPTAGEN_TEXT = "\n".join([
-    "Ett annat program använder redan port {port}, som Akasha Meet behöver. Avsluta det programmet "
-    "och öppna Akasha Meet igen. Du kan också välja en annan port med raden PORT= i inställningsfilen:",
+    "Ett annat program använder redan port {port}, som Akasha Protokoll behöver. Avsluta det programmet "
+    "och öppna Akasha Protokoll igen. Du kan också välja en annan port med raden PORT= i inställningsfilen:",
     "{fil}",
 ])
 
-STARTADE_INTE_RUBRIK = "Akasha Meet startade inte"
+STARTADE_INTE_RUBRIK = "Akasha Protokoll startade inte"
 STARTADE_INTE_TEXT = "\n".join([
-    "Något gick fel när Akasha Meet startade. Det som hände står i loggen:",
+    "Något gick fel när Akasha Protokoll startade. Det som hände står i loggen:",
     "{logg}",
 ])
 
-AVSLUTA_RUBRIK = "Vill du avsluta Akasha Meet?"
+AVSLUTA_RUBRIK = "Vill du avsluta Akasha Protokoll?"
 AVSLUTA_INLEDNING = {
     "inspelning": "en inspelning tas emot",
     "transkribering": "en transkribering pågår",
@@ -70,9 +70,9 @@ AVSLUTA_INLEDNING = {
 }
 AVSLUTA_MENING = {
     "inspelning": "Inspelningen fortsätter i webbläsaren, och ljudet sparas i fliken tills du öppnar "
-                  "Akasha Meet igen. Stäng inte fliken.",
+                  "Akasha Protokoll igen. Stäng inte fliken.",
     "transkribering": "Transkriberingen avbryts. Du kan göra om den med Försök igen när du har öppnat "
-                      "Akasha Meet igen.",
+                      "Akasha Protokoll igen.",
     "hamtning": "Hämtningen av modellerna stoppas. Det som redan är hämtat ligger kvar, och nästa gång "
                 "fortsätter den där den slutade.",
 }
@@ -161,7 +161,7 @@ def avsluta_text(vad):
     else:
         lista = ", ".join(inledning[:-1]) + " och " + inledning[-1]
     meningar = " ".join(AVSLUTA_MENING[v] for v in _ORDNING if v in vad)
-    return f"Akasha Meet arbetar fortfarande: {lista}.\n\n{meningar}"
+    return f"Akasha Protokoll arbetar fortfarande: {lista}.\n\n{meningar}"
 
 
 # --- loggning ----------------------------------------------------------------------------------
@@ -206,7 +206,7 @@ def stall_in_loggning():
 # --- port och tjanst ---------------------------------------------------------------------------
 
 def lage(port=None, tidsgrans=1.0):
-    """'akasha' (en Akasha Meet svarar), 'ledig' eller 'annat' (nagot annat anvander porten)."""
+    """'akasha' (en Akasha Protokoll svarar), 'ledig' eller 'annat' (nagot annat anvander porten)."""
     port = port or aktuell_port()
     # Bind forst: lyckas det lyssnar ingen pa porten, och inget natanrop behovs. Windows vagrar
     # en anslutning till en stangd port forst efter cirka 2 s, sa att fraga forst gav "annat"
@@ -267,12 +267,12 @@ class Tjanst:
             raise StartFel(UPPTAGEN_TEXT.format(port=self.port, fil=plattform.installningsfil())) from e
         self.trad = threading.Thread(target=self.server.run, name="waitress", daemon=True)
         self.trad.start()
-        log.info("Akasha Meet: http://127.0.0.1:%s (motor %s, data i %s)", self.port, motor.AKTIV, app.DATAKATALOG)
+        log.info("Akasha Protokoll: http://127.0.0.1:%s (motor %s, data i %s)", self.port, motor.AKTIV, app.DATAKATALOG)
         if motor.problem():
             log.warning("motorn ar inte redo: %s", motor.problem())
 
     def vanta(self, sekunder=30):
-        """Sant nar tjansten svarar som en Akasha Meet."""
+        """Sant nar tjansten svarar som en Akasha Protokoll."""
         slut = time.monotonic() + sekunder
         while True:
             if lage(self.port) == "akasha":
@@ -303,7 +303,7 @@ class Tjanst:
             self.trad.join(5)
             if self.trad.is_alive():
                 log.warning("servertraden stannade inte inom 5 s")
-        log.info("Akasha Meet avslutas")
+        log.info("Akasha Protokoll avslutas")
 
 
 def _skriv(*delar):

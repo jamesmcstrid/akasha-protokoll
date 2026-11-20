@@ -14,9 +14,9 @@ import sys
 import time
 import webbrowser
 
-log = logging.getLogger("akasha-meet")
+log = logging.getLogger("akasha-protokoll")
 
-NAMN = "Akasha Meet"
+NAMN = "Akasha Protokoll"
 GAMMAL_ETIKETT = "local.akasha-meet"  # launchd-tjansten fran mac/installera.sh
 
 FIL_GICK_INTE = "Filen gick inte att läsa ({orsak}). Inga inställningar ur den används."

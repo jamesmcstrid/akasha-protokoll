@@ -20,7 +20,7 @@ def las(*delar):
 
 class Paketering(unittest.TestCase):
     def test_filerna_gar_att_kompilera(self):
-        for delar in (("app", "mac_app.py"), ("paketering", "akasha-meet.spec"), ("paketering", "kontrollera.py")):
+        for delar in (("app", "mac_app.py"), ("paketering", "akasha-protokoll.spec"), ("paketering", "kontrollera.py")):
             compile(las(*delar), "/".join(delar), "exec")  # inte importerad: PyObjC finns bara pa Mac
 
     def test_typsnitten_stilmallen_pekar_pa_finns_med_sina_licenser(self):
@@ -76,7 +76,7 @@ class Paketering(unittest.TestCase):
                             self.assertFalse((under.module or "").startswith("faster_whisper"), nod.name)
 
     def test_start_har_texterna_i_b2_och_b7_ordagrant(self):
-        self.assertEqual(start.TA_OVER_RUBRIK, "Akasha Meet är redan installerat från Terminal")
+        self.assertEqual(start.TA_OVER_RUBRIK, "Akasha Protokoll är redan installerat från Terminal")
         self.assertEqual(
             start.TA_OVER_TEXT,
             "Den gamla installationen är igång i bakgrunden och använder samma adress. Programmet kan ta över: "
@@ -86,32 +86,32 @@ class Paketering(unittest.TestCase):
         self.assertEqual((start.TA_OVER_JA, start.TA_OVER_NEJ), ("Använd programmet", "Avbryt"))
         self.assertEqual(start.TA_OVER_MISSLYCKADES_RUBRIK, "Den gamla installationen gick inte att stänga av")
         self.assertEqual(start.TA_OVER_MISSLYCKADES_TEXT,
-                         "Kör bash mac/avinstallera.sh i Terminal och öppna sedan Akasha Meet igen.")
-        self.assertEqual(start.UPPTAGEN_RUBRIK, "Akasha Meet kan inte starta")
+                         "Kör bash mac/avinstallera.sh i Terminal och öppna sedan Akasha Protokoll igen.")
+        self.assertEqual(start.UPPTAGEN_RUBRIK, "Akasha Protokoll kan inte starta")
         self.assertEqual(
             start.UPPTAGEN_TEXT,
-            "Ett annat program använder redan port {port}, som Akasha Meet behöver. Avsluta det programmet "
-            "och öppna Akasha Meet igen. Du kan också välja en annan port med raden PORT= i inställningsfilen:\n{fil}")
-        self.assertEqual(start.STARTADE_INTE_RUBRIK, "Akasha Meet startade inte")
+            "Ett annat program använder redan port {port}, som Akasha Protokoll behöver. Avsluta det programmet "
+            "och öppna Akasha Protokoll igen. Du kan också välja en annan port med raden PORT= i inställningsfilen:\n{fil}")
+        self.assertEqual(start.STARTADE_INTE_RUBRIK, "Akasha Protokoll startade inte")
         self.assertEqual(start.STARTADE_INTE_TEXT,
-                         "Något gick fel när Akasha Meet startade. Det som hände står i loggen:\n{logg}")
+                         "Något gick fel när Akasha Protokoll startade. Det som hände står i loggen:\n{logg}")
         self.assertEqual(start.VISA_LOGGEN, "Visa loggen")
         self.assertEqual(start.OK, "OK")
         self.assertEqual(start.INSTALLNINGSFEL_RUBRIK, "Inställningsfilen har fel")
         self.assertEqual(
             start.INSTALLNINGSFEL_TEXT,
-            "Akasha Meet startar ändå och använder standardvärdet för det som inte gick att läsa:\n{problem}"
+            "Akasha Protokoll startar ändå och använder standardvärdet för det som inte gick att läsa:\n{problem}"
             "\n\nFilen:\n{fil}")
         self.assertEqual(start.VISA_FILEN, "Visa filen")
-        self.assertEqual(start.AVSLUTA_RUBRIK, "Vill du avsluta Akasha Meet?")
+        self.assertEqual(start.AVSLUTA_RUBRIK, "Vill du avsluta Akasha Protokoll?")
         self.assertEqual(start.AVSLUTA_INLEDNING, {"inspelning": "en inspelning tas emot",
                                                    "transkribering": "en transkribering pågår",
                                                    "hamtning": "modellerna hämtas"})
         self.assertEqual(start.AVSLUTA_MENING, {
             "inspelning": "Inspelningen fortsätter i webbläsaren, och ljudet sparas i fliken tills du öppnar "
-                          "Akasha Meet igen. Stäng inte fliken.",
+                          "Akasha Protokoll igen. Stäng inte fliken.",
             "transkribering": "Transkriberingen avbryts. Du kan göra om den med Försök igen när du har öppnat "
-                              "Akasha Meet igen.",
+                              "Akasha Protokoll igen.",
             "hamtning": "Hämtningen av modellerna stoppas. Det som redan är hämtat ligger kvar, och nästa gång "
                         "fortsätter den där den slutade."})
         self.assertEqual((start.AVSLUTA_NEJ, start.AVSLUTA_JA), ("Avbryt", "Avsluta ändå"))
@@ -131,11 +131,11 @@ class Paketering(unittest.TestCase):
     def test_mac_app_har_inga_dialogtexter(self):
         # Dialogtexterna ligger i start.py. Menyrubrikerna (B3) ar de enda svenska texterna har.
         text = las("app", "mac_app.py")
-        for konstant in ("Vill du avsluta", "Inställningsfilen har fel", "Använd programmet", "Akasha Meet startade inte"):
+        for konstant in ("Vill du avsluta", "Inställningsfilen har fel", "Använd programmet", "Akasha Protokoll startade inte"):
             self.assertNotIn(konstant, text)
 
     def test_specen_har_info_plist_med_principalklass_och_ad_hoc(self):
-        spec = las("paketering", "akasha-meet.spec")
+        spec = las("paketering", "akasha-protokoll.spec")
         self.assertIn("NSPrincipalClass", spec)
         self.assertIn('"LSMinimumSystemVersion": "14.0"', spec)
         self.assertIn("codesign_identity=None", spec)

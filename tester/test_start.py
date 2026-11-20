@@ -50,7 +50,7 @@ class Stadning(unittest.TestCase):
         self.excepthook = sys.excepthook
         self.trad_excepthook = threading.excepthook
         self.problem_loggade = start._problem_loggade
-        self.katalog = tempfile.mkdtemp(prefix="akasha-meet-start-")
+        self.katalog = tempfile.mkdtemp(prefix="akasha-protokoll-start-")
         p = mock.patch.object(plattform, "loggkatalog", lambda: os.path.join(self.katalog, "logg"))
         p.start()
         self.addCleanup(p.stop)
@@ -311,7 +311,7 @@ class TestLoggning(Stadning):
         self.assertEqual(sokvag, start.loggfil())
         self.assertEqual(start.stall_in_loggning(), sokvag)
         self.assertEqual(len(logging.getLogger().handlers), antal + 1)
-        logging.getLogger("akasha-meet").info("hej fran provet")
+        logging.getLogger("akasha-protokoll").info("hej fran provet")
         with open(sokvag, encoding="utf-8") as f:
             self.assertIn("INFO hej fran provet", f.read())
         self.assertIsNot(sys.excepthook, self.excepthook)  # ohanterade fel hamnar i loggen
@@ -415,7 +415,7 @@ class TestPagar(unittest.TestCase):
 
     def test_fel_ger_tom_lista(self):
         with mock.patch.object(lagring, "lista", side_effect=RuntimeError("trasigt")), \
-             self.assertLogs("akasha-meet", "ERROR"):
+             self.assertLogs("akasha-protokoll", "ERROR"):
             self.assertEqual(start.pagar(), [])
 
 
@@ -423,21 +423,21 @@ class TestTexter(Stadning):
     def test_avsluta_text(self):
         self.assertEqual(
             start.avsluta_text(["transkribering"]),
-            "Akasha Meet arbetar fortfarande: en transkribering pågår.\n\n"
-            "Transkriberingen avbryts. Du kan göra om den med Försök igen när du har öppnat Akasha Meet igen.")
+            "Akasha Protokoll arbetar fortfarande: en transkribering pågår.\n\n"
+            "Transkriberingen avbryts. Du kan göra om den med Försök igen när du har öppnat Akasha Protokoll igen.")
         self.assertEqual(
             start.avsluta_text(["inspelning", "transkribering"]),
-            "Akasha Meet arbetar fortfarande: en inspelning tas emot och en transkribering pågår.\n\n"
-            "Inspelningen fortsätter i webbläsaren, och ljudet sparas i fliken tills du öppnar Akasha Meet igen. "
+            "Akasha Protokoll arbetar fortfarande: en inspelning tas emot och en transkribering pågår.\n\n"
+            "Inspelningen fortsätter i webbläsaren, och ljudet sparas i fliken tills du öppnar Akasha Protokoll igen. "
             "Stäng inte fliken. "
-            "Transkriberingen avbryts. Du kan göra om den med Försök igen när du har öppnat Akasha Meet igen.")
+            "Transkriberingen avbryts. Du kan göra om den med Försök igen när du har öppnat Akasha Protokoll igen.")
         self.assertEqual(
             start.avsluta_text(["inspelning", "transkribering", "hamtning"]),
-            "Akasha Meet arbetar fortfarande: en inspelning tas emot, en transkribering pågår och "
+            "Akasha Protokoll arbetar fortfarande: en inspelning tas emot, en transkribering pågår och "
             "modellerna hämtas.\n\n"
-            "Inspelningen fortsätter i webbläsaren, och ljudet sparas i fliken tills du öppnar Akasha Meet igen. "
+            "Inspelningen fortsätter i webbläsaren, och ljudet sparas i fliken tills du öppnar Akasha Protokoll igen. "
             "Stäng inte fliken. "
-            "Transkriberingen avbryts. Du kan göra om den med Försök igen när du har öppnat Akasha Meet igen. "
+            "Transkriberingen avbryts. Du kan göra om den med Försök igen när du har öppnat Akasha Protokoll igen. "
             "Hämtningen av modellerna stoppas. Det som redan är hämtat ligger kvar, och nästa gång fortsätter "
             "den där den slutade.")
 
@@ -445,11 +445,11 @@ class TestTexter(Stadning):
         with mock.patch.object(plattform, "installningsfil", lambda: "/x/installningar.env"):
             self.assertEqual(
                 start.installningsfel_text(["A", "B"]),
-                "Akasha Meet startar ändå och använder standardvärdet för det som inte gick att läsa:\n"
+                "Akasha Protokoll startar ändå och använder standardvärdet för det som inte gick att läsa:\n"
                 "– A\n– B\n\nFilen:\n/x/installningar.env")
 
     def test_dialogtexterna_ordagrant(self):
-        self.assertEqual(start.TA_OVER_RUBRIK, "Akasha Meet är redan installerat från Terminal")
+        self.assertEqual(start.TA_OVER_RUBRIK, "Akasha Protokoll är redan installerat från Terminal")
         self.assertEqual(
             start.TA_OVER_TEXT,
             "Den gamla installationen är igång i bakgrunden och använder samma adress. Programmet kan ta över: "
@@ -459,24 +459,24 @@ class TestTexter(Stadning):
         self.assertEqual((start.TA_OVER_JA, start.TA_OVER_NEJ), ("Använd programmet", "Avbryt"))
         self.assertEqual(start.TA_OVER_MISSLYCKADES_RUBRIK, "Den gamla installationen gick inte att stänga av")
         self.assertEqual(start.TA_OVER_MISSLYCKADES_TEXT,
-                         "Kör bash mac/avinstallera.sh i Terminal och öppna sedan Akasha Meet igen.")
-        self.assertEqual(start.UPPTAGEN_RUBRIK, "Akasha Meet kan inte starta")
+                         "Kör bash mac/avinstallera.sh i Terminal och öppna sedan Akasha Protokoll igen.")
+        self.assertEqual(start.UPPTAGEN_RUBRIK, "Akasha Protokoll kan inte starta")
         self.assertEqual(
             start.UPPTAGEN_TEXT.format(port=8611, fil="/f"),
-            "Ett annat program använder redan port 8611, som Akasha Meet behöver. Avsluta det programmet och "
-            "öppna Akasha Meet igen. Du kan också välja en annan port med raden PORT= i inställningsfilen:\n/f")
-        self.assertEqual(start.STARTADE_INTE_RUBRIK, "Akasha Meet startade inte")
+            "Ett annat program använder redan port 8611, som Akasha Protokoll behöver. Avsluta det programmet och "
+            "öppna Akasha Protokoll igen. Du kan också välja en annan port med raden PORT= i inställningsfilen:\n/f")
+        self.assertEqual(start.STARTADE_INTE_RUBRIK, "Akasha Protokoll startade inte")
         self.assertEqual(start.STARTADE_INTE_TEXT.format(logg="/l"),
-                         "Något gick fel när Akasha Meet startade. Det som hände står i loggen:\n/l")
+                         "Något gick fel när Akasha Protokoll startade. Det som hände står i loggen:\n/l")
         self.assertEqual((start.VISA_LOGGEN, start.VISA_FILEN, start.OK), ("Visa loggen", "Visa filen", "OK"))
         self.assertEqual(start.INSTALLNINGSFEL_RUBRIK, "Inställningsfilen har fel")
         self.assertEqual((start.AVSLUTA_RUBRIK, start.AVSLUTA_NEJ, start.AVSLUTA_JA),
-                         ("Vill du avsluta Akasha Meet?", "Avbryt", "Avsluta ändå"))
+                         ("Vill du avsluta Akasha Protokoll?", "Avbryt", "Avsluta ändå"))
 
 
 class TestHelaStarten(unittest.TestCase):
     def forbered(self):
-        katalog = tempfile.mkdtemp(prefix="akasha-meet-hel-")
+        katalog = tempfile.mkdtemp(prefix="akasha-protokoll-hel-")
         self.addCleanup(shutil.rmtree, katalog, ignore_errors=True)
         self.katalog = katalog
         self.port = ledig_port()
@@ -518,7 +518,7 @@ class TestHelaStarten(unittest.TestCase):
         self.assertEqual(start.lage(self.port), "ledig")
         with open(os.path.join(self.katalog, "xdg", "akasha-meet", "logg", "akasha-meet.log"),
                   encoding="utf-8") as f:
-            self.assertIn("Akasha Meet avslutas", f.read())
+            self.assertIn("Akasha Protokoll avslutas", f.read())
 
 
 if __name__ == "__main__":

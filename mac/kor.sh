@@ -1,5 +1,5 @@
 #!/bin/bash
-# Startar Akasha Meet. Anropas av launchd (se local.akasha-meet.plist), men gar ocksa att kora
+# Startar Akasha Protokoll. Anropas av launchd (se local.akasha-meet.plist), men gar ocksa att kora
 # for hand: bash mac/kor.sh   (stoppa med Ctrl-C)
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"

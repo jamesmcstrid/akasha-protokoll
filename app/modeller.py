@@ -24,7 +24,7 @@ import requests
 
 from installningar import MODELL, MODELLKATALOG
 
-log = logging.getLogger("akasha-meet")
+log = logging.getLogger("akasha-protokoll")
 
 
 @dataclass(frozen=True)

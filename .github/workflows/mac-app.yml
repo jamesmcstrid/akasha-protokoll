@@ -65,12 +65,12 @@ jobs:
       - name: Kontrollera programmet (uppackat ur zip-filen)
         run: |
           build/venv/bin/python paketering/kontrollera.py \
-            --program "build/uppackad/Akasha Meet.app/Contents/MacOS/Akasha Meet" \
+            --program "build/uppackad/Akasha Protokoll.app/Contents/MacOS/Akasha Protokoll" \
             --hem "$RUNNER_TEMP/hem" --port 8611 \
             --vantad-motor whispercpp --vantat-jobbfel whisper-cli --riktig-rostmodell
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/Akasha-Meet-mac-arm64.zip
+          path: dist/Akasha-Protokoll-mac-arm64.zip
           archive: false
           retention-days: 7
       - name: Samla loggar
@@ -79,7 +79,7 @@ jobs:
           mkdir -p build/loggar
           cp -R "$RUNNER_TEMP/hem/Library/Logs" build/loggar/ 2>/dev/null || true
           cp "$RUNNER_TEMP/hem/program-utskrift.log" build/app/pyinstaller.log build/app/*.txt build/loggar/ 2>/dev/null || true
-          cp build/app/pyi/akasha-meet/warn-*.txt build/loggar/ 2>/dev/null || true
+          cp build/app/pyi/akasha-protokoll/warn-*.txt build/loggar/ 2>/dev/null || true
       - uses: actions/upload-artifact@v7
         if: always()
         with:

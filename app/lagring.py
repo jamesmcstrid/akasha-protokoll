@@ -19,7 +19,7 @@ from installningar import DATAKATALOG
 ID_RE = re.compile(r"^\d{8}-\d{6}(-\d{1,3})?$")
 ANDELSER = {".webm", ".m4a", ".mp4", ".mp3", ".wav", ".ogg", ".oga", ".opus", ".aac", ".flac", ".mov"}
 PAGAENDE = {"koar", "transkriberar", "talare"}
-AVBRUTEN = "Transkriberingen avbröts eftersom Akasha Meet avslutades. Tryck Försök igen för att göra om den."
+AVBRUTEN = "Transkriberingen avbröts eftersom Akasha Protokoll avslutades. Tryck Försök igen för att göra om den."
 
 _las = threading.RLock()
 

@@ -14,7 +14,7 @@ import tempfile
 
 ROT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-TMP = tempfile.mkdtemp(prefix="akasha-meet-las-json-")
+TMP = tempfile.mkdtemp(prefix="akasha-protokoll-las-json-")
 os.environ["DATAKATALOG"] = TMP
 os.environ["MODELLKATALOG"] = os.path.join(TMP, "inga-modeller")
 os.environ["MOTOR"] = "faster"  # motor.py laser installningarna vid import; motorn kors inte har

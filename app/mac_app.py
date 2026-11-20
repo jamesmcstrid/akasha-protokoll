@@ -1,4 +1,4 @@
-"""Akasha Meet som Mac-program: ikon i Dock, meny och Avsluta. Tjansten, sidan och allt annat
+"""Akasha Protokoll som Mac-program: ikon i Dock, meny och Avsluta. Tjansten, sidan och allt annat
 ar desamma som annars (start.py). Har finns bara det som ar Mac.
 
 Ett Python-undantag som lamnar en metod som Cocoa anropar blir ett Objective-C-undantag och kan
@@ -23,7 +23,7 @@ from PyObjCTools import AppHelper
 import plattform
 import start
 
-log = logging.getLogger("akasha-meet")
+log = logging.getLogger("akasha-protokoll")
 
 _delegat = None  # en referens, annars kan delegaten stadas bort
 
@@ -213,13 +213,13 @@ def bygg_meny(delegat):
             r.setTarget_(mal)
         meny.addItem_(r)
 
-    rad("Om Akasha Meet", "orderFrontStandardAboutPanel:", "")
+    rad("Om Akasha Protokoll", "orderFrontStandardAboutPanel:", "")
     meny.addItem_(NSMenuItem.separatorItem())
-    rad("Öppna Akasha Meet i webbläsaren", "oppna:", "o", delegat)
+    rad("Öppna Akasha Protokoll i webbläsaren", "oppna:", "o", delegat)
     meny.addItem_(NSMenuItem.separatorItem())
-    rad("Göm Akasha Meet", "hide:", "h")
+    rad("Göm Akasha Protokoll", "hide:", "h")
     meny.addItem_(NSMenuItem.separatorItem())
-    rad("Avsluta Akasha Meet", "terminate:", "q")
+    rad("Avsluta Akasha Protokoll", "terminate:", "q")
     holder.setSubmenu_(meny)
     NSApp.setMainMenu_(huvud)
 

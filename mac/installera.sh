@@ -1,5 +1,5 @@
 #!/bin/bash
-# Installerar Akasha Meet for inloggad anvandare. Gar att kora igen (t.ex. efter git pull).
+# Installerar Akasha Protokoll for inloggad anvandare. Gar att kora igen (t.ex. efter git pull).
 #   bash mac/installera.sh
 #
 # Gor: venv med beroenden, valjer motor, hamtar modellerna (cirka 1,6 GB, bara forsta gangen),
@@ -34,14 +34,14 @@ if [ -n "$SKYDDAD" ]; then
   FINNS=""
   if [ -f "$HOME/akasha-meet/mac/installera.sh" ]; then
     PULL=""; [ -d "$HOME/akasha-meet/.git" ] && PULL=" && git pull"
-    FINNS="Det finns redan en Akasha Meet-mapp i $HOME/akasha-meet. Kor installationen darifran i stallet:
+    FINNS="Det finns redan en Akasha Protokoll-mapp i $HOME/akasha-meet. Kor installationen darifran i stallet:
   cd \"$HOME/akasha-meet\"$PULL && bash mac/installera.sh
 
 "
     RUBRIK="Eller flytta den har mappen:"
   fi
   cat <<TEXT
-FEL: Akasha Meet ligger i $VERKLIG.
+FEL: Akasha Protokoll ligger i $VERKLIG.
 macOS later inte bakgrundstjanster lasa i den mappen ($SKYDDAD), sa tjansten skulle inte
 kunna starta harifran. Inget har installerats eller hamtats an.
 
@@ -98,11 +98,11 @@ chmod 700 "$DATA"   # motesinspelningar: bara du kommer at dem
 LOGG="$DATA/akasha-meet.log"
 
 TJANST="gui/$UIDN/$ETIKETT"
-# Ar programmet (Akasha Meet.app) igang pa porten utan att launchd-tjansten finns ska vi inte lagga
+# Ar programmet (Akasha Protokoll.app) igang pa porten utan att launchd-tjansten finns ska vi inte lagga
 # in den: annars kraschar tjansten om och om igen pa den upptagna porten, medan vantan nedan far
 # svar fran programmet och sager "Klart".
 if ! launchctl print "$TJANST" >/dev/null 2>&1 && curl -s -o /dev/null "http://127.0.0.1:$PORT/health"; then
-  echo "FEL: Akasha Meet (programmet) ar igang pa port $PORT. Avsluta det forst (Akasha Meet > Avsluta Akasha Meet) och kor skriptet igen."; exit 1
+  echo "FEL: Akasha Protokoll (programmet) ar igang pa port $PORT. Avsluta det forst (Akasha Protokoll > Avsluta Akasha Protokoll) och kor skriptet igen."; exit 1
 fi
 
 # Loggen fylls pa av launchd over tid. Vi minns hur lang den ar nu, sa att vi i slutet bara
@@ -145,7 +145,7 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 if curl -s "http://127.0.0.1:$PORT/health" | grep -q '"status": *"ok"'; then
-  echo "Klart. Akasha Meet: http://127.0.0.1:$PORT  (motor: $AKTIV, inspelningar i $DATA)"
+  echo "Klart. Akasha Protokoll: http://127.0.0.1:$PORT  (motor: $AKTIV, inspelningar i $DATA)"
   command -v open >/dev/null && open "http://127.0.0.1:$PORT"
 else
   # || true: inget har far avbryta skriptet (set -e) innan forklaringen ar skriven
