@@ -130,6 +130,43 @@ class Paketering(unittest.TestCase):
         self.assertIn("codesign_identity=None", spec)
         self.assertIn("faster_whisper", spec)  # i excludes
 
+    def delegatens_metoder(self):
+        trad = ast.parse(las("app", "mac_app.py"))
+        klass = next(n for n in trad.body if isinstance(n, ast.ClassDef) and n.name == "Delegat")
+        return {n.name: n for n in klass.body if isinstance(n, ast.FunctionDef)}
+
+    def test_delegat_init_anvander_objc_super(self):
+        init = self.delegatens_metoder()["init"]
+        anrop = [n for n in ast.walk(init) if isinstance(n, ast.Call)]
+        # objc.super(Delegat, self)
+        objc_super = [n for n in anrop if isinstance(n.func, ast.Attribute) and n.func.attr == "super"
+                      and isinstance(n.func.value, ast.Name) and n.func.value.id == "objc"]
+        self.assertEqual(len(objc_super), 1)
+        self.assertEqual([getattr(a, "id", None) for a in objc_super[0].args], ["Delegat", "self"])
+        # inget super() utan argument
+        self.assertEqual([n for n in anrop if isinstance(n.func, ast.Name) and n.func.id == "super"], [])
+
+    def test_metoder_som_cocoa_anropar_har_try_utanfor_allt(self):
+        metoder = self.delegatens_metoder()
+        for namn in ("applicationDidFinishLaunching_", "applicationShouldHandleReopen_hasVisibleWindows_",
+                     "applicationDockMenu_", "applicationShouldTerminate_", "applicationWillTerminate_",
+                     "oppna_", "startad", "startfel"):
+            with self.subTest(namn):
+                kropp = metoder[namn].body
+                if isinstance(kropp[0], ast.Expr) and isinstance(getattr(kropp[0], "value", None), ast.Constant) \
+                        and isinstance(kropp[0].value.value, str):
+                    kropp = kropp[1:]  # docstring
+                self.assertEqual(len(kropp), 1, f"{namn} ska bara ha ett try som yttersta sats")
+                self.assertIsInstance(kropp[0], ast.Try)
+                self.assertTrue(any(isinstance(h.type, ast.Name) and h.type.id == "Exception"
+                                    for h in kropp[0].handlers), f"{namn} saknar except Exception")
+
+    def test_mac_app_har_loggraderna_for_mac_korningen(self):
+        text = las("app", "mac_app.py")
+        for rad in ("mac: startar", "mac: beslut %s", "mac: tjansten svarar, oppnar webblasaren",
+                    "mac: tjansten svarade inte inom 30 s", "mac: avslutar", "mac: applicationWillTerminate"):
+            self.assertIn(f'"{rad}"', text)
+
 
 if __name__ == "__main__":
     unittest.main()

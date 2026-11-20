@@ -1,6 +1,10 @@
 """Akasha Meet som Mac-program: ikon i Dock, meny och Avsluta. Tjansten, sidan och allt annat
 ar desamma som annars (start.py). Har finns bara det som ar Mac.
 
+Ett Python-undantag som lamnar en metod som Cocoa anropar blir ett Objective-C-undantag och kan
+avsluta programmet utan rad i loggen. Darfor har varje sadan metod hela sin kropp i try/except
+med en loggrad och ett sakert svar. Raderna "mac: ..." visar i loggen hur langt skalet kom.
+
 Alla texter till anvandaren ligger i start.py. Pa modulnivan importeras bara AppKit/Foundation/
 PyObjCTools, plattform och start: ingen av dem laser installningar nar den importeras, sa att
 loggningen (start.stall_in_loggning) hinner stallas in fore allt som gor det.
@@ -37,7 +41,7 @@ def fraga(rubrik, text, knappar):
 
 class Delegat(NSObject):
     def init(self):
-        self = super().init()
+        self = objc.super(Delegat, self).init()
         if self is None:
             return None
         self.tjanst = None
@@ -48,8 +52,8 @@ class Delegat(NSObject):
         try:
             self.borja()
         except Exception:
-            log.exception("starten misslyckades")
-            self.startade_inte()
+            log.exception("mac: applicationDidFinishLaunching_")
+            self.startade_inte_sakert()
 
     @objc.python_method
     def borja(self):
@@ -58,6 +62,7 @@ class Delegat(NSObject):
                              [start.OK, start.VISA_FILEN]) == 1:
             plattform.visa_fil(plattform.installningsfil())  # rutan avslutar aldrig programmet
         beslut = start.forbered()
+        log.info("mac: beslut %s", beslut)
         if beslut == "ta_over":
             if fraga(start.TA_OVER_RUBRIK, start.TA_OVER_TEXT, [start.TA_OVER_JA, start.TA_OVER_NEJ]) != 0:
                 return self.avsluta()
@@ -102,16 +107,26 @@ class Delegat(NSObject):
 
     @objc.python_method
     def startad(self, ok):
-        if ok:
-            self.redo = True
-            plattform.oppna_webblasare(start.url())  # forst nu, nar tjansten svarar
-        else:
-            self.startade_inte()
+        try:
+            if ok:
+                self.redo = True
+                log.info("mac: tjansten svarar, oppnar webblasaren")
+                plattform.oppna_webblasare(start.url())  # forst nu, nar tjansten svarar
+            else:
+                log.info("mac: tjansten svarade inte inom 30 s")
+                self.startade_inte()
+        except Exception:
+            log.exception("mac: startad")
+            self.startade_inte_sakert()
 
     @objc.python_method
     def startfel(self, text):
-        fraga(start.UPPTAGEN_RUBRIK, text, [start.OK])
-        self.avsluta()
+        try:
+            fraga(start.UPPTAGEN_RUBRIK, text, [start.OK])
+            self.avsluta()
+        except Exception:
+            log.exception("mac: startfel")
+            self.avsluta()
 
     @objc.python_method
     def startade_inte(self):
@@ -120,37 +135,69 @@ class Delegat(NSObject):
             plattform.visa_fil(start.loggfil())
         self.avsluta()
 
+    @objc.python_method
+    def startade_inte_sakert(self):
+        """Rutan "startade inte" far aldrig sjalv stoppa avslutet: gar den fel loggas det och programmet avslutas."""
+        try:
+            self.startade_inte()
+        except Exception:
+            log.exception("mac: startade_inte")
+            self.avsluta()
+
     def oppna_(self, _avsandare):
-        if self.redo:
-            plattform.oppna_webblasare(start.url())
+        try:
+            if self.redo:
+                plattform.oppna_webblasare(start.url())
+        except Exception:
+            log.exception("mac: oppna_")
 
     def applicationShouldHandleReopen_hasVisibleWindows_(self, _app, _synliga):
-        self.oppna_(None)
-        return False
+        try:
+            self.oppna_(None)
+            return False
+        except Exception:
+            log.exception("mac: applicationShouldHandleReopen_hasVisibleWindows_")
+            return False
 
     def applicationDockMenu_(self, _app):
-        meny = NSMenu.alloc().init()
-        rad = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Öppna i webbläsaren", "oppna:", "")
-        rad.setTarget_(self)
-        meny.addItem_(rad)
-        return meny
+        try:
+            meny = NSMenu.alloc().init()
+            rad = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Öppna i webbläsaren", "oppna:", "")
+            rad.setTarget_(self)
+            meny.addItem_(rad)
+            return meny
+        except Exception:
+            log.exception("mac: applicationDockMenu_")
+            return None  # Dock visar da bara sina egna rader
 
     def applicationShouldTerminate_(self, _app):
-        if not self.redo:
-            return NSTerminateNow
-        vad = start.pagar()
-        if not vad:
-            return NSTerminateNow
-        svar = fraga(start.AVSLUTA_RUBRIK, start.avsluta_text(vad), [start.AVSLUTA_NEJ, start.AVSLUTA_JA])
-        return NSTerminateNow if svar == 1 else NSTerminateCancel
+        try:
+            if not self.redo:
+                return NSTerminateNow
+            vad = start.pagar()
+            if not vad:
+                return NSTerminateNow
+            svar = fraga(start.AVSLUTA_RUBRIK, start.avsluta_text(vad), [start.AVSLUTA_NEJ, start.AVSLUTA_JA])
+            return NSTerminateNow if svar == 1 else NSTerminateCancel
+        except Exception:
+            log.exception("mac: applicationShouldTerminate_")
+            return NSTerminateNow  # programmet ska alltid ga att avsluta
 
     def applicationWillTerminate_(self, _notis):
-        if self.tjanst is not None:
-            self.tjanst.stang()
+        try:
+            log.info("mac: applicationWillTerminate")
+            if self.tjanst is not None:
+                self.tjanst.stang()
+        except Exception:
+            log.exception("mac: applicationWillTerminate_")
 
     @objc.python_method
     def avsluta(self):
-        NSApp.terminate_(None)
+        log.info("mac: avslutar")
+        try:
+            NSApp.terminate_(None)
+        except Exception:
+            log.exception("mac: avsluta")
 
 
 def bygg_meny(delegat):
@@ -180,6 +227,7 @@ def bygg_meny(delegat):
 def main():
     global _delegat
     start.stall_in_loggning()
+    log.info("mac: startar")
     app = NSApplication.sharedApplication()
     _delegat = Delegat.alloc().init()
     app.setDelegate_(_delegat)
