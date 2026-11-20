@@ -1,4 +1,5 @@
 """Starten: portkontroll, tjansten i en trad, loggfil, fragan fore avslut. Riktiga socketar pa 127.0.0.1."""
+import gc
 import http.server
 import io
 import json
@@ -7,6 +8,7 @@ import os
 import shutil
 import signal
 import socket
+import socketserver
 import subprocess
 import sys
 import tempfile
@@ -14,6 +16,7 @@ import threading
 import time
 import unittest
 import urllib.request
+import warnings
 from unittest import mock
 
 import hjalp
@@ -81,10 +84,20 @@ class FalskHalsa(http.server.BaseHTTPRequestHandler):
         pass
 
 
+class Testserver(http.server.HTTPServer):
+    """HTTPServer utan namnuppslag: server_bind() anropar annars socket.getfqdn(), som tog
+    cirka 35 s forsta gangen pa GitHubs Mac-maskin. Namnet anvands inte av testerna."""
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = "127.0.0.1"
+        self.server_port = self.server_address[1]
+
+
 class TestLage(unittest.TestCase):
     def server(self, kod, kropp, typ="application/json"):
         klass = type("H", (FalskHalsa,), {"kod": kod, "kropp": kropp, "typ": typ})
-        srv = http.server.HTTPServer(("127.0.0.1", 0), klass)
+        srv = Testserver(("127.0.0.1", 0), klass)
         t = threading.Thread(target=srv.serve_forever, daemon=True)
         t.start()
         self.addCleanup(t.join, 5)
@@ -110,9 +123,17 @@ class TestLage(unittest.TestCase):
         self.assertEqual(start.lage(s.getsockname()[1]), "annat")
         self.assertLess(time.monotonic() - t0, 2)
 
-    def test_akasha_med_200_och_503(self):
+    def test_testservern_slar_inte_upp_namn(self):
+        with mock.patch.object(socket, "getfqdn", side_effect=AssertionError("getfqdn anropades")):
+            port = self.server(200, json.dumps({"motor": "faster", "datakatalog": "/x"}).encode())
+            self.assertEqual(start.lage(port), "akasha")
+
+    def test_akasha_med_200(self):
         svar = json.dumps({"motor": "faster", "datakatalog": "/x"}).encode()
         self.assertEqual(start.lage(self.server(200, svar)), "akasha")
+
+    def test_akasha_med_503(self):
+        svar = json.dumps({"motor": "faster", "datakatalog": "/x"}).encode()
         self.assertEqual(start.lage(self.server(503, svar)), "akasha")
 
     def test_annat_svar_ar_annat(self):
@@ -254,9 +275,16 @@ class TestTjanst(Stadning):
         s.listen(5)
         port = s.getsockname()[1]
         with mock.patch.object(akasha, "forbered"):
-            with self.assertRaises(start.StartFel) as e:
-                start.Tjanst(port=port).starta()
-        self.assertIn(str(port), str(e.exception))
+            # Kand lacka i waitress 3.0.0: create_server() stadar inte pipe och socket nar bind
+            # misslyckas, sa objektet nar aldrig var kod. Varningen doljs bara har, runt starta().
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", ResourceWarning)
+                with self.assertRaises(start.StartFel) as e:
+                    start.Tjanst(port=port).starta()
+                meddelande = str(e.exception)
+                del e  # undantaget haller traceback och ramar, och med dem det halvskapade servern
+                gc.collect()
+        self.assertIn(str(port), meddelande)
 
     def test_gamla_modeller_tas_bara_in_nar_programmet_ar_paketerat(self):
         for paketerad in (False, True):
