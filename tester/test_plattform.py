@@ -673,6 +673,37 @@ class TestWhisperCliRelativ(Tillfallig):
             self.assertIsNone(plattform.whisper_cli())
 
 
+class TestIkonfil(Tillfallig):
+    def test_paketerad_ikon_png_i_meipass(self):
+        fil = os.path.join(self.katalog, "ikon.png")
+        with mock.patch.object(sys, "frozen", True, create=True), \
+             mock.patch.object(sys, "_MEIPASS", self.katalog, create=True):
+            self.assertIsNone(plattform.ikonfil())  # filen saknas
+            with open(fil, "wb") as f:
+                f.write(b"x")
+            self.assertEqual(plattform.ikonfil(), fil)
+
+    def test_fran_kallkod_ar_bilden_i_paketering(self):
+        with mock.patch.object(plattform, "ar_paketerad", return_value=False):
+            sokvag = plattform.ikonfil()
+        self.assertEqual(os.path.basename(sokvag), "ikon-1024.png")
+        self.assertEqual(os.path.basename(os.path.dirname(sokvag)), "paketering")
+
+
+class TestForstaStart(TillfalligtHem):
+    def test_sant_en_gang(self):
+        self.assertTrue(plattform.forsta_start_visad())
+        self.assertTrue(os.path.isfile(os.path.join(plattform.programkatalog(), "forsta-start-visad")))
+        self.assertFalse(plattform.forsta_start_visad())
+
+    def test_skrivfel_ger_falskt_och_loggas(self):
+        with mock.patch.object(plattform, "programkatalog", return_value=os.path.join(self.katalog, "fil")):
+            with open(os.path.join(self.katalog, "fil"), "w") as f:
+                f.write("x")  # en fil i stallet for en katalog: makedirs kan inte lyckas
+            with self.assertLogs("akasha-protokoll", "WARNING"):
+                self.assertFalse(plattform.forsta_start_visad())
+
+
 class TestHallVaken(unittest.TestCase):
     def test_caffeinate_med_w(self):
         process = mock.Mock()
