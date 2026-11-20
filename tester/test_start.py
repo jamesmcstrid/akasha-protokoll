@@ -147,14 +147,23 @@ class TestForbered(unittest.TestCase):
 
 
 class FalskServer:
+    """Det Tjanst.stang() ror vid pa en waitress-server: task_dispatcher, trigger och _map."""
+
     def __init__(self):
         self.stangd = False
+        self.anrop = []
+        self._map = {}
+        self.task_dispatcher = mock.Mock()
+        self.trigger = mock.Mock()
+        self.trigger.pull_trigger.side_effect = self._dra
+
+    def _dra(self, funktion):
+        self.anrop.append("pull_trigger")
+        funktion()  # i waitress kor servertraden den; har finns ingen
+        self.stangd = True
 
     def run(self):
         pass
-
-    def close(self):
-        self.stangd = True
 
 
 class TestTjanst(Stadning):
@@ -180,6 +189,63 @@ class TestTjanst(Stadning):
         self.stoppa.assert_called_once()
         self.assertEqual(start.lage(port), "ledig")
         t.stang()  # far anropas igen
+
+    def test_stang_utan_undantag_i_tradar(self):
+        """Felet pa macOS (Bad file descriptor i waitress-traden och i en hanterartrad) var en
+        kapplopning mellan stang() och en forfragan pa vag. Pa Linux gar testet igenom aven med
+        den gamla koden (close() fran en annan trad); det ar enhetstesterna pa macOS som faller den."""
+        for varv in range(10):
+            with self.subTest(varv=varv):
+                self._stang_med_forfragningar_pa_vag()
+
+    def _stang_med_forfragningar_pa_vag(self):
+        insamlade = []
+        gammal = threading.excepthook
+        threading.excepthook = lambda args: insamlade.append(
+            f"{args.thread.name if args.thread else '?'}: {args.exc_type.__name__}: {args.exc_value}")
+        try:
+            port = ledig_port()
+            t = start.Tjanst(port=port)
+            t.starta()
+            try:
+                self.assertTrue(t.vanta(10))
+                oppnare = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+                def hamta(sokvag):
+                    try:
+                        with oppnare.open(f"http://127.0.0.1:{port}{sokvag}", timeout=10) as r:
+                            r.read()
+                    except OSError:
+                        pass  # ett avbrutet svar vid stangningen ar tillatet; undantag i traden ar det inte
+
+                klienter = [threading.Thread(target=hamta, args=(sokvag,), name="klient" + sokvag)
+                            for sokvag in ("/health", "/api/modeller")]
+                for k in klienter:
+                    k.start()
+                time.sleep(0.05)
+            finally:
+                t.stang()
+            for k in klienter:
+                k.join(15)
+            self.assertFalse(any(k.is_alive() for k in klienter))
+            self.assertFalse(t.trad.is_alive())
+            self.assertEqual(start.lage(port), "ledig")
+            self.assertEqual(insamlade, [])
+        finally:
+            threading.excepthook = gammal
+
+    def test_stang_anropar_dispatcher_fore_trigger_och_stanger_kartan_inifran(self):
+        falsk = FalskServer()
+        falsk.task_dispatcher.shutdown.side_effect = lambda **kw: falsk.anrop.append("shutdown")
+        t = start.Tjanst(port=1234)
+        t.server = falsk
+        with mock.patch("waitress.wasyncore.close_all") as close_all:
+            t.stang()
+            falsk.task_dispatcher.shutdown.assert_called_once_with(cancel_pending=True, timeout=5)
+            self.assertEqual(falsk.anrop, ["shutdown", "pull_trigger"])
+            close_all.assert_called_once_with(falsk._map)
+        self.assertIsNone(t.server)
+        self.stoppa.assert_called_once()
 
     def test_upptagen_port_ger_startfel_med_portnumret(self):
         s = socket.socket()

@@ -284,15 +284,25 @@ class Tjanst:
     def stang(self):
         """Stanger servern och stoppar whisper-cli. Far anropas flera ganger."""
         import motor
+        from waitress import wasyncore
 
-        if self.server is not None:
+        server, self.server = self.server, None
+        if server is not None:
             try:
-                self.server.close()
+                # 1. Hanterartradarna gor klart sina svar medan triggern annu ar oppen.
+                server.task_dispatcher.shutdown(cancel_pending=True, timeout=5)
+                # 2. Allt stangs inifran servertraden: dar valtar select() pa socketarna, och att
+                #    stanga dem fran en annan trad gav "Bad file descriptor" pa macOS. Nar kartan
+                #    ar tom tar loopen slut av sig sjalv. server._map ar waitress interna karta
+                #    (versionen ar last till 3.0.0 i requirements.txt).
+                server.trigger.pull_trigger(lambda: wasyncore.close_all(server._map))
             except Exception:
                 log.exception("kunde inte stanga servern")
         motor.stoppa()
         if self.trad is not None:
             self.trad.join(5)
+            if self.trad.is_alive():
+                log.warning("servertraden stannade inte inom 5 s")
         log.info("Akasha Meet avslutas")
 
 
