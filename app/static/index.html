@@ -52,192 +52,193 @@
     </div>
   </header>
 
-  <main>
-    <section id="modeller" class="kort" aria-labelledby="m-rubrik" hidden>
-      <h2 id="m-rubrik" tabindex="-1"></h2>
-      <p id="m-intro"></p>
-      <ul id="m-lista" class="modell-lista"></ul>
-      <p id="m-kalla" class="dampad liten">Filerna hämtas från Hugging Face (huggingface.co), där KBLab och andra delar sina modeller. Varje fil kontrolleras mot en kontrollsumma innan den används, så att den är exakt den som ska användas.</p>
-      <p id="m-natet" class="tips">Det här är den enda gången Akasha Meet använder internet. Inga inspelningar eller texter skickas någonstans, varken nu eller senare.</p>
-      <p id="m-disk" class="dampad liten"></p>
-      <div id="m-forlopp" class="forlopp" hidden>
-        <div class="forlopp-stapel">
-          <progress id="m-andel" max="1" value="0" aria-label="Hämtat"></progress>
-          <span id="m-procent"></span>
+  <main class="arbetsyta">
+    <div class="yta">
+      <section id="modeller" class="blad" aria-labelledby="m-rubrik" hidden>
+        <h2 id="m-rubrik" tabindex="-1"></h2>
+        <p id="m-intro"></p>
+        <ul id="m-lista" class="modell-lista"></ul>
+        <p id="m-kalla" class="dampad liten">Filerna hämtas från Hugging Face (huggingface.co), där KBLab och andra delar sina modeller. Varje fil kontrolleras mot en kontrollsumma innan den används, så att den är exakt den som ska användas.</p>
+        <p id="m-natet" class="tips">Det här är den enda gången Akasha Meet använder internet. Inga inspelningar eller texter skickas någonstans, varken nu eller senare.</p>
+        <p id="m-disk" class="dampad liten"></p>
+        <div id="m-forlopp" class="forlopp" hidden>
+          <div class="forlopp-stapel">
+            <progress id="m-andel" max="1" value="0" aria-label="Hämtat"></progress>
+            <span id="m-procent"></span>
+          </div>
+          <p id="m-forlopp-text" class="dampad" role="status" aria-live="polite"></p>
         </div>
-        <p id="m-forlopp-text" class="dampad" role="status" aria-live="polite"></p>
-      </div>
-      <p id="m-fel" class="meddelande fel" role="alert"></p>
-      <div class="knappar">
-        <button id="m-hamta" type="button" class="knapp primar"></button>
-        <button id="m-inte-nu" type="button" class="knapp" hidden>Inte nu</button>
-        <button id="m-stoppa" type="button" class="knapp" hidden>Stoppa hämtningen</button>
-      </div>
-      <p id="m-pagar" class="dampad liten" hidden>Du kan stänga sidan under tiden. Hämtningen fortsätter så länge Akasha Meet är igång. Avbryts den fortsätter nästa försök där det slutade.</p>
-    </section>
-
-    <section id="ny" class="kort" aria-labelledby="ny-rubrik">
-      <h2 id="ny-rubrik" tabindex="-1">Ny transkribering</h2>
-
-      <div class="falt">
-        <label for="titel">Rubrik <span class="valfritt">(valfritt)</span></label>
-        <input id="titel" type="text" maxlength="200" placeholder="t.ex. Avstämning med Anna" autocomplete="off">
-      </div>
-
-      <div class="falt-rad">
-        <div class="falt">
-          <label for="kalla">Hur spelas mötet in?</label>
-          <select id="kalla" aria-describedby="kalla-hjalp">
-            <option value="rum" selected>Med mikrofonen (samma rum eller högtalare)</option>
-            <option value="digitalt">Digitalt i Chrome (t.ex. Google Meet eller Slack)</option>
-          </select>
-          <p id="kalla-hjalp" class="hjalp">Gäller när du spelar in. Uppladdade filer påverkas inte.</p>
-        </div>
-        <div class="falt">
-          <label for="talare">Hur många pratar?</label>
-          <select id="talare">
-            <option value="1">1 – dela inte upp</option>
-            <option value="2" selected>2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-            <option value="auto">Vet inte – gissa</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="falt">
-        <label for="ord">Svårstavade ord <span class="valfritt">(valfritt)</span></label>
-        <input id="ord" type="text" maxlength="500" placeholder="t.ex. Hagström, ISO 9001" autocomplete="off"
-          aria-describedby="ord-hjalp">
-        <p id="ord-hjalp" class="hjalp">Namn och facktermer som sägs i mötet. Hjälper programmet att stava dem rätt.</p>
-      </div>
-
-      <p id="digital-hjalp" class="tips" hidden>
-        Tryck <strong>Spela in</strong> och välj fliken med mötet. Kryssa i
-        <strong>Dela även flikljud</strong>. Räkna med dig själv i antalet. Dina repliker får namnet Du.
-        Säg till de andra att du spelar in.
-      </p>
-
-      <div class="knappar">
-        <button id="spela-in" type="button" class="knapp primar">● Spela in</button>
-        <button id="stoppa" type="button" class="knapp stopp" hidden>■ Stoppa och transkribera</button>
-        <button id="valj-fil" type="button" class="knapp">Ladda upp ljudfil…</button>
-        <input id="fil" type="file" accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg,.flac,.mp4,.mov" hidden>
-      </div>
-      <p class="lov">Be alltid om lov innan du spelar in någon.</p>
-
-      <div id="inspelningspanel" class="inspelningspanel" hidden>
-        <div class="panelrad">
-          <span class="pricka" aria-hidden="true"></span>
-          <span id="klocka" class="klocka">00:00</span>
-          <span class="niva">
-            <label for="niva">Ljudnivå</label>
-            <meter id="niva" min="0" max="1" value="0"></meter>
-          </span>
-          <span id="sparat" class="dampad"></span>
-        </div>
-        <p id="tyst-varning" class="varning tyst-varning" role="alert" hidden></p>
-        <p class="dampad liten">Låt fliken vara öppen och datorn vaken under mötet. Ljudet sparas på datorn
-          var femte sekund. Svarar inte Akasha Meet sparas ljudet i fliken under tiden och skickas när
-          Akasha Meet är igång igen.</p>
-      </div>
-
-      <div id="ko" class="ko varning" hidden>
-        <p id="ko-text" role="status" aria-live="polite"></p>
+        <p id="m-fel" class="meddelande fel" role="alert"></p>
         <div class="knappar">
-          <button id="ko-spara-fil" type="button" class="knapp">Spara ljudet som fil</button>
-          <button id="ko-klar" type="button" class="knapp" hidden>Klar</button>
+          <button id="m-hamta" type="button" class="knapp primar"></button>
+          <button id="m-inte-nu" type="button" class="knapp" hidden>Inte nu</button>
+          <button id="m-stoppa" type="button" class="knapp" hidden>Stoppa hämtningen</button>
         </div>
-      </div>
+        <p id="m-pagar" class="dampad liten" hidden>Du kan stänga sidan under tiden. Hämtningen fortsätter så länge Akasha Meet är igång. Avbryts den fortsätter nästa försök där det slutade.</p>
+      </section>
 
-      <p id="meddelande" class="meddelande" role="status" aria-live="polite"></p>
-    </section>
+      <section id="ny" class="blad" aria-labelledby="ny-rubrik">
+        <h2 id="ny-rubrik" tabindex="-1">Ny transkribering</h2>
 
-    <section id="visning" class="kort" aria-labelledby="v-rubrik" hidden>
-      <div class="visningshuvud">
-        <div>
-          <h2 id="v-rubrik"></h2>
-          <p id="v-info" class="dampad"></p>
+        <div class="falt">
+          <label for="titel">Rubrik <span class="valfritt">(valfritt)</span></label>
+          <input id="titel" type="text" maxlength="200" placeholder="t.ex. Avstämning med Anna" autocomplete="off">
         </div>
-        <div class="knappar">
-          <button id="v-till-nedladdning" type="button" class="knapp liten-knapp" hidden>Till nedladdning ↓</button>
-          <button id="v-byt-rubrik" type="button" class="knapp liten-knapp" aria-expanded="false"
-            aria-controls="v-rubrikform">Byt rubrik</button>
-          <button id="v-stang" type="button" class="knapp liten-knapp">Stäng</button>
-        </div>
-      </div>
-      <form id="v-rubrikform" class="rubrikform" hidden>
-        <label for="v-titel">Ny rubrik</label>
-        <input id="v-titel" type="text" maxlength="200" autocomplete="off">
-        <button type="submit" class="knapp liten-knapp primar">Spara</button>
-        <button id="v-rubrik-avbryt" type="button" class="knapp liten-knapp">Avbryt</button>
-      </form>
-      <p id="v-varning" class="varning" hidden></p>
 
-      <!-- Medan jobbet pagar: var i forloppet det ar. -->
-      <div id="v-forlopp" class="forlopp" hidden>
-        <ol id="v-forlopp-steg" class="forlopp-steg"></ol>
-        <div id="v-forlopp-stapel" class="forlopp-stapel">
-          <progress id="v-forlopp-andel" max="1" value="0" aria-label="Framsteg"></progress>
-          <span id="v-forlopp-procent"></span>
-        </div>
-        <p id="v-forlopp-text" class="dampad" role="status" aria-live="polite"></p>
-      </div>
-
-      <div class="lagerad">
-        <p id="v-status" class="meddelande"></p>
-        <button id="v-forsok" type="button" class="knapp primar" hidden>Försök igen</button>
-      </div>
-
-      <div id="v-steg-namn" class="steg" hidden>
-        <h3><span class="stegnr" aria-hidden="true"></span>Vem är vem?</h3>
-        <div id="v-namn" class="namnrad" hidden></div>
-      </div>
-
-      <div id="v-steg-kontroll" class="steg">
-        <h3 id="v-kontroll-rubrik"><span class="stegnr" aria-hidden="true"></span>Kontrollera mot ljudet</h3>
-        <div id="v-forklaring" class="forklaring" hidden>
-          <ul id="v-osakert" class="forklaring-lista"></ul>
-          <div id="v-rattad" class="rattad" hidden>
-            <span>Talarna har rättats för hand.</span>
-            <button id="v-angra" type="button" class="knapp liten-knapp">Ångra alla rättningar</button>
+        <div class="falt-rad">
+          <div class="falt">
+            <label for="kalla">Hur spelas mötet in?</label>
+            <select id="kalla" aria-describedby="kalla-hjalp">
+              <option value="rum" selected>Med mikrofonen (samma rum eller högtalare)</option>
+              <option value="digitalt">Digitalt i Chrome (t.ex. Google Meet eller Slack)</option>
+            </select>
+            <p id="kalla-hjalp" class="hjalp">Gäller när du spelar in. Uppladdade filer påverkas inte.</p>
+          </div>
+          <div class="falt">
+            <label for="talare">Hur många pratar?</label>
+            <select id="talare">
+              <option value="1">1 – dela inte upp</option>
+              <option value="2" selected>2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="auto">Vet inte – gissa</option>
+            </select>
           </div>
         </div>
-        <!-- Foljer med nar man bladdrar, sa att ljudet och nasta osakra alltid gar att na. -->
-        <div id="v-kontrollrad" class="kontrollrad">
-          <audio id="v-ljud" controls preload="none"></audio>
-          <button id="v-backa" type="button" class="knapp liten-knapp" title="Backa 5 sekunder">Backa 5 s</button>
-          <button id="v-nasta-osakra" type="button" class="knapp liten-knapp" aria-describedby="v-osakra-lage"
-            hidden>Nästa osäkra talare</button>
-          <span id="v-osakra-lage" class="osakra-lage" role="status" hidden></span>
-        </div>
-        <div id="v-text" class="transkript"></div>
-      </div>
 
-      <div id="v-steg-anvand" class="steg">
-        <h3 id="v-anvand-rubrik" tabindex="-1"><span class="stegnr" aria-hidden="true"></span>Använd texten</h3>
+        <div class="falt">
+          <label for="ord">Svårstavade ord <span class="valfritt">(valfritt)</span></label>
+          <input id="ord" type="text" maxlength="500" placeholder="t.ex. Hagström, ISO 9001" autocomplete="off"
+            aria-describedby="ord-hjalp">
+          <p id="ord-hjalp" class="hjalp">Namn och facktermer som sägs i mötet. Hjälper programmet att stava dem rätt.</p>
+        </div>
+
+        <p id="digital-hjalp" class="tips" hidden>
+          Tryck <strong>Spela in</strong> och välj fliken med mötet. Kryssa i
+          <strong>Dela även flikljud</strong>. Räkna med dig själv i antalet. Dina repliker får namnet Du.
+          Säg till de andra att du spelar in.
+        </p>
+
         <div class="knappar">
-          <span id="v-atgarder" hidden>
-            <button id="v-kopiera" type="button" class="knapp">Kopiera texten</button>
-            <a id="v-txt" class="knapp" href="#">Ladda ner som text (.txt)</a>
-            <a id="v-md" class="knapp" href="#">Ladda ner som Markdown (.md)</a>
-          </span>
-          <a id="v-ljudfil" class="knapp" href="#">Ladda ner ljudet</a>
+          <button id="spela-in" type="button" class="knapp primar">● Spela in</button>
+          <button id="stoppa" type="button" class="knapp stopp" hidden>■ Stoppa och transkribera</button>
+          <button id="valj-fil" type="button" class="knapp">Ladda upp ljudfil…</button>
+          <input id="fil" type="file" accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg,.flac,.mp4,.mov" hidden>
         </div>
-        <p id="v-kopierat" class="dampad liten" role="status" aria-live="polite"></p>
-      </div>
-    </section>
+        <p class="lov">Be alltid om lov innan du spelar in någon.</p>
 
-    <section class="kort" aria-labelledby="lista-rubrik">
+        <div id="inspelningspanel" class="inspelningspanel" hidden>
+          <div class="panelrad">
+            <span class="pricka" aria-hidden="true"></span>
+            <span id="klocka" class="klocka">00:00</span>
+            <span class="niva">
+              <label for="niva">Ljudnivå</label>
+              <meter id="niva" min="0" max="1" value="0"></meter>
+            </span>
+            <span id="sparat" class="dampad"></span>
+          </div>
+          <p id="tyst-varning" class="varning tyst-varning" role="alert" hidden></p>
+          <p class="dampad liten">Låt fliken vara öppen och datorn vaken under mötet. Ljudet sparas på datorn
+            var femte sekund. Svarar inte Akasha Meet sparas ljudet i fliken under tiden och skickas när
+            Akasha Meet är igång igen.</p>
+        </div>
+
+        <div id="ko" class="ko varning" hidden>
+          <p id="ko-text" role="status" aria-live="polite"></p>
+          <div class="knappar">
+            <button id="ko-spara-fil" type="button" class="knapp">Spara ljudet som fil</button>
+            <button id="ko-klar" type="button" class="knapp" hidden>Klar</button>
+          </div>
+        </div>
+
+        <p id="meddelande" class="meddelande" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="visning" class="blad" aria-labelledby="v-rubrik" hidden>
+        <div class="visningshuvud">
+          <div>
+            <h2 id="v-rubrik"></h2>
+            <p id="v-info" class="dampad"></p>
+          </div>
+          <div class="knappar">
+            <button id="v-till-nedladdning" type="button" class="knapp liten-knapp" hidden>Till nedladdning ↓</button>
+            <button id="v-byt-rubrik" type="button" class="knapp liten-knapp" aria-expanded="false"
+              aria-controls="v-rubrikform">Byt rubrik</button>
+            <button id="v-stang" type="button" class="knapp liten-knapp">Stäng</button>
+          </div>
+        </div>
+        <form id="v-rubrikform" class="rubrikform" hidden>
+          <label for="v-titel">Ny rubrik</label>
+          <input id="v-titel" type="text" maxlength="200" autocomplete="off">
+          <button type="submit" class="knapp liten-knapp primar">Spara</button>
+          <button id="v-rubrik-avbryt" type="button" class="knapp liten-knapp">Avbryt</button>
+        </form>
+        <p id="v-varning" class="varning" hidden></p>
+
+        <!-- Medan jobbet pagar: var i forloppet det ar. -->
+        <div id="v-forlopp" class="forlopp" hidden>
+          <ol id="v-forlopp-steg" class="forlopp-steg"></ol>
+          <div id="v-forlopp-stapel" class="forlopp-stapel">
+            <progress id="v-forlopp-andel" max="1" value="0" aria-label="Framsteg"></progress>
+            <span id="v-forlopp-procent"></span>
+          </div>
+          <p id="v-forlopp-text" class="dampad" role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="lagerad">
+          <p id="v-status" class="meddelande"></p>
+          <button id="v-forsok" type="button" class="knapp primar" hidden>Försök igen</button>
+        </div>
+
+        <div id="v-steg-namn" class="steg" hidden>
+          <h3><span class="stegnr" aria-hidden="true"></span>Vem är vem?</h3>
+          <div id="v-namn" class="namnrad" hidden></div>
+        </div>
+
+        <div id="v-steg-kontroll" class="steg">
+          <h3 id="v-kontroll-rubrik"><span class="stegnr" aria-hidden="true"></span>Kontrollera mot ljudet</h3>
+          <div id="v-forklaring" class="forklaring" hidden>
+            <ul id="v-osakert" class="forklaring-lista"></ul>
+            <div id="v-rattad" class="rattad" hidden>
+              <span>Talarna har rättats för hand.</span>
+              <button id="v-angra" type="button" class="knapp liten-knapp">Ångra alla rättningar</button>
+            </div>
+          </div>
+          <!-- Foljer med nar man bladdrar, sa att ljudet och nasta osakra alltid gar att na. -->
+          <div id="v-kontrollrad" class="kontrollrad">
+            <audio id="v-ljud" controls preload="none"></audio>
+            <button id="v-backa" type="button" class="knapp liten-knapp" title="Backa 5 sekunder">Backa 5 s</button>
+            <button id="v-nasta-osakra" type="button" class="knapp liten-knapp" aria-describedby="v-osakra-lage"
+              hidden>Nästa osäkra talare</button>
+            <span id="v-osakra-lage" class="osakra-lage" role="status" hidden></span>
+          </div>
+          <div id="v-text" class="transkript"></div>
+        </div>
+
+        <div id="v-steg-anvand" class="steg">
+          <h3 id="v-anvand-rubrik" tabindex="-1"><span class="stegnr" aria-hidden="true"></span>Använd texten</h3>
+          <div class="knappar">
+            <span id="v-atgarder" hidden>
+              <button id="v-kopiera" type="button" class="knapp">Kopiera texten</button>
+              <a id="v-txt" class="knapp" href="#">Ladda ner som text (.txt)</a>
+              <a id="v-md" class="knapp" href="#">Ladda ner som Markdown (.md)</a>
+            </span>
+            <a id="v-ljudfil" class="knapp" href="#">Ladda ner ljudet</a>
+          </div>
+          <p id="v-kopierat" class="dampad liten" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+    </div>
+
+    <section class="inspelningar" aria-labelledby="lista-rubrik">
       <h2 id="lista-rubrik">Inspelningar</h2>
       <p class="dampad liten">Sparas i <code id="datakatalog">~/AkashaMeet</code> på den här datorn.</p>
       <ul id="lista" class="lista"></ul>
       <p id="tom" class="dampad">Inga inspelningar än.</p>
+      <p id="natet" class="dampad liten natet">Akasha Meet använder internet bara för att hämta modellerna, en gång. Inspelningar och texter lämnar aldrig datorn.</p>
     </section>
-
-    <p id="natet" class="dampad liten natet">Akasha Meet använder internet bara för att hämta modellerna, en gång. Inspelningar och texter lämnar aldrig datorn.</p>
   </main>
 
   <!-- Kvitton och fel for listan och visningen. Fast nederst i fonstret, sa att de syns dar man
