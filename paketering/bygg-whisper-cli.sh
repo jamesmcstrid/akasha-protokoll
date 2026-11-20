@@ -16,7 +16,21 @@ mkdir -p "$UT"
 
 echo "== Hamtar whisper.cpp $VERSION"
 git clone --quiet --depth 1 --branch "$VERSION" https://github.com/ggml-org/whisper.cpp.git "$UT/src"
-echo "whisper.cpp $VERSION = $(git -C "$UT/src" rev-parse HEAD)"
+# Raden "warning: refs/tags/... is not a commit!" vid kloningen ar vantad (taggen ar annoterad och
+#   klonas grunt) och betyder inget.
+# Taggen far inte flyttas i tysthet: commiten ar last till det som byggdes och kontrollerades i
+#   Mac-korning 1. Ny version: lagg till en rad har (cache-nyckeln i flodet foljer med skriptet).
+case "$VERSION" in
+  v1.9.5) VANTAD=d1be6fde11ac6e0407606b4e42fe72d34add8037 ;;   # uppmatt i Mac-korning 1
+  *) VANTAD="" ;;
+esac
+FAKTISK="$(git -C "$UT/src" rev-parse HEAD)"
+echo "whisper.cpp $VERSION = $FAKTISK"
+if [ -n "$VANTAD" ] && [ "$FAKTISK" != "$VANTAD" ]; then
+  echo "FEL: taggen $VERSION pekar pa $FAKTISK, vantade $VANTAD" >&2
+  exit 1
+fi
+[ -n "$VANTAD" ] || echo "OBS: $VERSION ar inte last till en commit i bygg-whisper-cli.sh"
 
 # Statiskt (BUILD_SHARED_LIBS=OFF): inga libwhisper/libggml-dylib som skulle behova ligga bredvid
 #   programmet; hos anvandaren finns inget Homebrew.

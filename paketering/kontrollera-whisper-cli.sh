@@ -13,6 +13,9 @@ PYTHON="${2:?ange Pythonen i byggets venv}"
 CLI="$(cd "$(dirname "$CLI")" && pwd)/$(basename "$CLI")"
 [ -x "$CLI" ] || { echo "FEL: $CLI ar inte korbar" >&2; exit 1; }
 PYTHON="$(cd "$(dirname "$PYTHON")" && pwd)/$(basename "$PYTHON")"
+# macOS har inget timeout-kommando: samma sak med byggets Python. Gar tiden ut blir det ett Python-fel
+# (slutkod 1) i stderr, som den som anropar tar med i sin utskrift.
+med_tidsgrans() { "$PYTHON" -c 'import subprocess, sys; sys.exit(subprocess.run(sys.argv[2:], timeout=float(sys.argv[1])).returncode)' "$@"; }
 ARB="$(mktemp -d "${TMPDIR:-/tmp}/kontrollera-whisper-cli.XXXXXX")"
 echo "Kontrollerar $CLI, arbetskatalog $ARB"
 file "$CLI"
@@ -103,5 +106,55 @@ echo "OK: whisper-cli transkriberade testljudet pa $((T1 - T0)) s, $(wc -c < "$A
 # 7. JSON-filen tolkas som motor.py gor.
 echo "== 7. JSON tolkad med app/motor.py"
 "$PYTHON" "$ROT/paketering/las_whisper_json.py" "$ARB/ut.json"
+
+# 8. DTW-forvalen som app/modeller.py anvander (medium och large.v3) ska kanna igen av den har
+#    versionen. De stora modellerna behovs inte: forvalet tolkas av whisper-cli oavsett modell, och
+#    huvudena for medium och large passar inte tiny-modellen (resultatet sager inget om kvaliteten).
+echo "== 8. DTW-forval"
+FORVAL="$("$PYTHON" -c 'import sys; sys.path.insert(0, sys.argv[1]); import modeller; print(" ".join(sorted(set(modeller.DTW_PER_STORLEK.values()))))' "$ROT/app")" || FORVAL=""
+if [ -z "$FORVAL" ]; then
+  echo "FEL: kunde inte lasa DTW-forvalen ur app/modeller.py (modeller.DTW_PER_STORLEK), kan inte avgora om de kanns igen" >&2
+  exit 1
+fi
+echo "Forval ur app/modeller.py: $FORVAL"
+
+# 8a. Ett pahittat forval: visar hur den har versionen sager ifran om ett forval inte finns.
+echo "--- 8a. okant forval (--dtw finns-inte)"
+KOD=0
+med_tidsgrans 120 "$CLI" -m "$ARB/tiny.bin" -f "$ARB/en.wav" -l sv -d 3000 -np --dtw finns-inte 2> "$ARB/okant.txt" > /dev/null || KOD=$?
+echo "kod $KOD"
+tail -n 5 "$ARB/okant.txt"
+grep -i dtw "$ARB/okant.txt" > "$ARB/okant-dtw.txt" || true
+if [ ! -s "$ARB/okant-dtw.txt" ]; then
+  echo "FEL: kan inte avgora om DTW-forvalen kanns igen: whisper-cli sa ingenting om dtw for ett pahittat forval (se okant.txt-raderna ovan), sa jamforelsen har inget att jamfora mot" >&2
+  exit 1
+fi
+echo "Rader om dtw vid okant forval:"
+cat "$ARB/okant-dtw.txt"
+
+# 8b. Varje riktigt forval: ingen av dtw-raderna ovan far finnas ordagrant i utskriften. Namnet pa det
+#     pahittade forvalet byts ocksa mot forvalets eget i raderna (annars skulle ett felmeddelande som
+#     namner forvalet, "unknown ... 'medium'", aldrig vara lika med "unknown ... 'finns-inte'").
+for f in $FORVAL; do
+  echo "--- 8b. forval $f"
+  KOD=0
+  med_tidsgrans 120 "$CLI" -m "$ARB/tiny.bin" -f "$ARB/en.wav" -l sv -d 3000 -np -ml 1 -sow --dtw "$f" -nfa -ojf -oj -of "$ARB/dtw-$f" 2> "$ARB/dtw-$f.txt" > /dev/null || KOD=$?
+  echo "kod $KOD"
+  tail -n 5 "$ARB/dtw-$f.txt"
+  if [ -s "$ARB/dtw-$f.json" ]; then echo "JSON-filen blev till (information, ingen kontroll)"; else echo "ingen JSON-fil (information, ingen kontroll)"; fi
+  # Utan en enda rad fran whisper.cpp har kommandot inte kommit igang (till exempel tidsgrans), och da
+  # saknas det mesta som jamforelsen ska bygga pa.
+  if ! grep -q 'whisper_' "$ARB/dtw-$f.txt"; then
+    echo "FEL: kan inte avgora om DTW-forvalet $f kanns igen: whisper-cli gav inga whisper_-rader (kod $KOD), se raderna ovan" >&2
+    exit 1
+  fi
+  { cat "$ARB/okant-dtw.txt"; sed "s/finns-inte/$f/g" "$ARB/okant-dtw.txt"; } > "$ARB/mall-$f.txt"
+  if grep -n -x -F -f "$ARB/mall-$f.txt" "$ARB/dtw-$f.txt" > "$ARB/lika-$f.txt"; then
+    echo "FEL: forvalet $f kanns inte igen: en dtw-rad som for ett pahittat forval (namnet utbytt) finns i utskriften:" >&2
+    cat "$ARB/lika-$f.txt" >&2
+    exit 1
+  fi
+  echo "OK: forvalet $f kanns igen (ingen dtw-rad fran det pahittade forvalet finns i utskriften)"
+done
 
 echo "KONTROLL AV WHISPER-CLI: OK"
