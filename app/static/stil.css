@@ -221,21 +221,30 @@ h2 { margin: 0 0 14px; font-size: 1.2rem; font-weight: 650; }
   background: var(--yta); border: 1px solid var(--linje); border-radius: var(--radie-panel); padding: var(--blad-pad);
 }
 
+/* Avdelningsrubriken (Ny transkribering) i Anton. */
+.avd-rubrik {
+  margin: 0; font-family: var(--typ-rubrik); font-weight: 400; text-transform: uppercase;
+  font-size: 36px; line-height: 1.05; letter-spacing: 0.01em;
+}
 .falt { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-.falt-rad { display: flex; gap: 14px; flex-wrap: wrap; }
-.falt-rad .falt { min-width: 170px; }
-label { font-weight: 600; font-size: 0.92rem; }
+.falt-rutnat { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 18px; }
+.falt-rutnat .falt { margin: 0; min-width: 0; }
+label { font-weight: 600; font-size: 15px; }
 .valfritt { font-weight: 400; color: var(--dampad); }
 /* Hjalprad under ett falt. Bredd 0 + min-bredd 100 %: raden bryts efter faltet i stallet for att gora det bredare. */
-.hjalp { margin: 0; width: 0; min-width: 100%; font-size: 0.85rem; color: var(--dampad); }
-select:disabled { opacity: .6; cursor: not-allowed; }
+.hjalp { margin: 0; width: 0; min-width: 100%; font-size: 14px; color: var(--dampad); }
 input[type=text], select {
-  font: inherit; padding: 10px 12px; border: 1px solid var(--kant-reglage); border-radius: 12px;
-  background: var(--yta2); color: var(--text); transition: border-color .15s, box-shadow .15s;
+  font: inherit; min-height: 50px; padding: 0 16px; border: 1.5px solid var(--falt-kant); border-radius: var(--radie-ruta);
+  background: var(--falt-bg); color: var(--text);
 }
+select {
+  appearance: none; padding: 0 40px 0 14px;
+  background: var(--falt-bg) var(--pil) no-repeat right 16px center / 12px 8px;
+}
+select:disabled { opacity: .6; cursor: not-allowed; }
 /* Hel opacitet: med 80 % blev platshallaren for svag att lasa. */
 input[type=text]::placeholder { color: var(--dampad); opacity: 1; }
-input[type=text]:focus, select:focus { border-color: var(--vald-bg); }
+input[type=text]:focus, select:focus { border-color: var(--text); }
 /* En regel for allt som kan fa fokus, sa att nya knappar far markeringen utan att listas har.
    Heldragen kontur med lucka: syns mot kortet, mot --yta och runt den primara knappen. */
 :is(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
@@ -247,48 +256,64 @@ input[type=text]:focus, select:focus { border-color: var(--vald-bg); }
 
 .knappar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
 .knapp {
-  font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 12px; border: 1px solid var(--kant-reglage);
-  background: var(--yta2); color: var(--text); cursor: pointer; text-decoration: none; display: inline-block;
-  transition: background .15s, border-color .15s, transform .05s;
+  font: inherit; font-size: 16px; font-weight: 600; min-height: 50px; padding: 0 22px; border-radius: var(--radie-piller);
+  border: 1.5px solid var(--knapp-kant); background: var(--yta); color: var(--text); cursor: pointer;
+  text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background .15s, transform .05s;
 }
-.knapp:hover { border-color: var(--vald-bg); }
+.knapp:hover { background: var(--yta2); }
 .knapp:active { transform: translateY(1px); }
 .knapp:disabled { opacity: .45; cursor: not-allowed; }
-.primar { background: var(--primar); color: var(--primar-text); border-color: var(--primar); }
-.primar:hover { background: var(--primar-hover); border-color: var(--primar-hover); }
-#spela-in, #stoppa {
-  border-radius: 999px; padding: 13px 26px; font-size: 1.05rem;
-  box-shadow: 0 8px 20px var(--primar-skugga);
-}
-.stopp { background: var(--stopp); color: var(--stopp-text); border-color: var(--stopp); animation: ring 1.8s infinite; }
-@keyframes ring {
-  0% { box-shadow: 0 0 0 0 rgba(184, 50, 42, 0.45); }
-  70% { box-shadow: 0 0 0 14px rgba(184, 50, 42, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(184, 50, 42, 0); }
-}
-.liten-knapp { padding: 6px 12px; font-size: 0.85rem; border-radius: 10px; }
+.primar { background: var(--lime); color: var(--pa-lime); border: 2px solid var(--pa-lime); font-weight: 700; }
+.primar:hover { background: var(--lime-mork); }
+.liten-knapp { min-height: 44px; padding: 0 16px; font-size: 14px; }
 .fara { color: var(--fel); }
+/* Stora knappar i formularet: Spela in (lime, rod prick), Stoppa (morkt, fyrkant), Ladda upp. */
+.stor { min-height: 60px; padding: 0 28px; font-size: 18px; }
+.spela { padding: 0 34px; font-size: 20px; gap: 12px; }
+.spela::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: var(--rod-prick); }
+.stopp {
+  padding: 0 34px; font-size: 20px; font-weight: 700; gap: 12px; animation: ring 1.8s infinite;
+  background: var(--stopp-bg); color: var(--stopp-text); border-color: var(--stopp-bg);
+}
+.stopp:hover { background: var(--stopp-bg); }
+.stopp::before { content: ""; width: 12px; height: 12px; border-radius: 3px; background: var(--stopp-ikon); }
+@keyframes ring {
+  0% { box-shadow: 0 0 0 0 rgba(192, 38, 28, 0.45); }
+  70% { box-shadow: 0 0 0 14px rgba(192, 38, 28, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(192, 38, 28, 0); }
+}
 
-.lov { margin: 0 0 10px; }
-.inspelningspanel { margin: 12px 0; padding: 12px 16px; border-radius: 14px; background: var(--yta2); }
+/* Formularet: rubriken, faltrutnatet, tipset, knapparna, panelen och kon med 24 px mellan. */
+.formblad { gap: 24px; }
+.formblad > * { margin: 0; }
+.formblad .knappar { gap: 14px; }
+.formblad .meddelande { margin: 0; font-size: 16px; }
+
+.lov { margin: 0; font-size: 16px; color: var(--dampad); }
+.inspelningspanel { padding: 16px 18px; border-radius: var(--radie-ruta); background: var(--yta2); }
 .panelrad { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .niva { display: inline-flex; align-items: center; gap: 8px; }
-.niva label { font-size: 0.85rem; }
-.ko { margin: 12px 0; }
-.ko p { margin: 0 0 6px; }
-.tyst-varning { margin: 10px 0 0; font-weight: 600; border-left: 3px solid var(--varning-text); }
-.inspelningspanel .liten { margin: 8px 0 0; }
+.niva label { font-size: 14px; }
+#sparat { font-size: 14px; }
+.ko { font-size: 16px; font-weight: 400; }
+.ko p { margin: 0 0 10px; }
+.ko .knappar { margin: 0; gap: 10px; }
+.ko .knapp { min-height: 44px; padding: 0 16px; font-size: 14px; background: transparent; color: var(--varning-text); border-color: var(--varning-text); }
+.ko .knapp:hover { background: rgba(0, 0, 0, 0.06); }
+.tyst-varning { margin: 10px 0 0; font-weight: 600; }
+.inspelningspanel .liten { margin: 10px 0 0; }
 .pricka { width: 12px; height: 12px; border-radius: 50%; background: var(--rod-prick); animation: puls 1.2s infinite; }
 @keyframes puls { 50% { opacity: .3; } }
 @media (prefers-reduced-motion: reduce) { .pricka, .stopp { animation: none; } }
-.klocka { font-family: var(--typ-text); font-variant-numeric: tabular-nums; font-size: 1.5rem; font-weight: 650; }
-meter { width: 170px; height: 10px; border: 0; border-radius: 999px; background: var(--kant); }
-meter::-webkit-meter-bar { background: var(--kant); border: 0; border-radius: 999px; height: 10px; }
-meter::-webkit-meter-optimum-value { background: var(--ok); border-radius: 999px; }
-meter::-moz-meter-bar { background: var(--ok); border-radius: 999px; }
+.klocka { font-family: var(--typ-text); font-variant-numeric: tabular-nums; font-size: 28px; line-height: 1.2; font-weight: 700; }
+meter { width: 170px; height: 10px; border: 0; border-radius: 999px; background: var(--spar); }
+meter::-webkit-meter-bar { background: var(--spar); border: 0; border-radius: 999px; height: 10px; }
+meter::-webkit-meter-optimum-value { background: var(--spar-fyllt); border-radius: 999px; }
+meter::-moz-meter-bar { background: var(--spar-fyllt); border-radius: 999px; }
 
 .meddelande { min-height: 1.5em; margin: 10px 0; }
-.meddelande.fel { color: var(--fel); }
+.meddelande.fel { color: var(--fel); font-weight: 600; }
 /* Tom felrad i modellkortet: tar ingen plats, men finns kvar sa att role="alert" laser upp nasta fel. */
 #modeller .meddelande:empty { min-height: 0; margin: 0; }
 
@@ -316,11 +341,12 @@ meter::-moz-meter-bar { background: var(--ok); border-radius: 999px; }
   @keyframes kvitto-in { from { opacity: 0; transform: translateY(8px); } }
 }
 
-.varning { background: var(--varning-bg); color: var(--varning-text); padding: 10px 14px; border-radius: 12px; }
-.tips { margin: 2px 0 10px; padding: 10px 14px; border-radius: 12px; background: var(--yta2); border-left: 3px solid var(--vald-bg); font-size: 0.92rem; }
+.varning { background: var(--varning-bg); color: var(--varning-text); padding: 12px 16px; border-radius: var(--radie-ruta); }
+.tips { margin: 0; padding: 12px 16px; border-radius: var(--radie-ruta); background: var(--yta2); font-size: 15px; }
+.tips strong { font-weight: 700; }
 .dampad { color: var(--dampad); }
-.liten { font-size: 0.85rem; }
-code { font-size: 0.85em; background: var(--yta2); padding: 1px 6px; border-radius: 6px; }
+.liten { font-size: 14px; }
+code { font-size: 13px; background: var(--yta2); padding: 1px 6px; border-radius: 6px; }
 
 .lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .lista li {
@@ -388,20 +414,48 @@ audio { width: 100%; margin: 10px 0; }
 .lagerad { display: flex; gap: 8px 14px; align-items: center; flex-wrap: wrap; }
 .lagerad .meddelande { margin: 10px 0; }
 
-/* Forloppet medan inspelningen transkriberas */
-.forlopp { margin: 14px 0 6px; padding: 14px 16px; border-radius: 14px; background: var(--yta2); }
+/* Forloppet (modellhamtningen, och medan en inspelning transkriberas) */
+.forlopp { margin: 14px 0 6px; padding: 16px 18px; border-radius: var(--radie-ruta); background: var(--yta2); }
 .forlopp-steg { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.92rem; }
 .forlopp-steg li { color: var(--dampad); display: flex; align-items: center; gap: 10px; }
 .forlopp-steg li + li::before { content: "→"; color: var(--dampad); }
 .forlopp-steg .klart { color: var(--ok); }
 .forlopp-steg .pagar { color: var(--text); font-weight: 700; }
 .forlopp-stapel { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
-.forlopp-stapel progress { flex: 1 1 200px; height: 10px; }
-.forlopp p { margin: 8px 0 0; }
-.modell-lista { margin: 0 0 12px; padding-left: 1.2em; }
+.forlopp-stapel > progress { flex: 1 1 200px; height: 10px; }
+.forlopp-stapel > .gang { flex: 1 1 200px; }
+.procent { display: flex; gap: 14px; font-size: 14px; }
+.procent span:last-child { font-weight: 700; }
+.forlopp p { margin: 10px 0 0; font-size: 15px; }
+.modell-lista { margin: 0; padding-left: 1.2em; font-size: 16px; }
 .modell-lista li + li { margin-top: 6px; }
 .knapp[aria-disabled="true"] { opacity: .45; cursor: progress; }
 .natet { margin: 20px 0 0; }
+
+/* Modellkortet (forsta start): 14 px mellan delarna, rubriken i Instrument Sans. */
+.modellblad > * { margin: 0 0 14px; }
+.modellblad h2 { font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; }
+.modellblad .intro { max-width: 68ch; font-size: 17px; }
+.modellblad .knappar { margin: 6px 0 0; }
+.modellblad .pagar-rad { margin: 14px 0 0; }
+
+/* Den gaende elefanten: ett spar 8 px hogt langst ner i en ruta 34 px hog, elefanten star pa sparet vid --andel. */
+.gang { position: relative; display: block; height: 34px; }
+.gang progress {
+  position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 8px; margin: 0; border: 0;
+  appearance: none; border-radius: 999px; background: var(--spar); overflow: hidden; accent-color: var(--spar-fyllt);
+}
+.gang progress::-webkit-progress-bar { background: var(--spar); border-radius: 999px; }
+.gang progress::-webkit-progress-value { background: var(--spar-fyllt); border-radius: 999px; }
+.gang progress::-moz-progress-bar { background: var(--spar-fyllt); border-radius: 999px; }
+.vandrare {
+  position: absolute; bottom: 3px; width: 32px; height: 32px;
+  left: clamp(0px, calc(var(--andel, 0) * 100% - 18px), calc(100% - 32px));
+  --e-kropp: var(--vandrare); --e-bak: var(--vandrare-mork); --e-ora: var(--vandrare-ora);
+  animation: gunga 1.2s ease-in-out infinite;
+}
+@keyframes gunga { 50% { transform: translateY(-1px); } }
+@media (prefers-reduced-motion: reduce) { .vandrare { animation: none; } }
 
 /* De tre stegen: vem ar vem, kontrollera, anvand */
 .steg { margin-top: 20px; }

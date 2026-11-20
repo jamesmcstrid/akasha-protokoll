@@ -58,17 +58,17 @@
       Ny transkribering
     </button>
     <div class="yta">
-      <section id="modeller" class="blad" aria-labelledby="m-rubrik" hidden>
+      <section id="modeller" class="blad modellblad" aria-labelledby="m-rubrik" hidden>
         <h2 id="m-rubrik" tabindex="-1"></h2>
-        <p id="m-intro"></p>
+        <p id="m-intro" class="intro"></p>
         <ul id="m-lista" class="modell-lista"></ul>
         <p id="m-kalla" class="dampad liten">Filerna hämtas från Hugging Face (huggingface.co), där KBLab och andra delar sina modeller. Varje fil kontrolleras mot en kontrollsumma innan den används, så att den är exakt den som ska användas.</p>
         <p id="m-natet" class="tips">Det här är den enda gången Akasha Meet använder internet. Inga inspelningar eller texter skickas någonstans, varken nu eller senare.</p>
         <p id="m-disk" class="dampad liten"></p>
         <div id="m-forlopp" class="forlopp" hidden>
           <div class="forlopp-stapel">
-            <progress id="m-andel" max="1" value="0" aria-label="Hämtat"></progress>
-            <span id="m-procent"></span>
+            <span class="gang"><progress id="m-andel" max="1" value="0" aria-label="Hämtat"></progress></span>
+            <span id="m-procent" class="procent"></span>
           </div>
           <p id="m-forlopp-text" class="dampad" role="status" aria-live="polite"></p>
         </div>
@@ -78,18 +78,17 @@
           <button id="m-inte-nu" type="button" class="knapp" hidden>Inte nu</button>
           <button id="m-stoppa" type="button" class="knapp" hidden>Stoppa hämtningen</button>
         </div>
-        <p id="m-pagar" class="dampad liten" hidden>Du kan stänga sidan under tiden. Hämtningen fortsätter så länge Akasha Meet är igång. Avbryts den fortsätter nästa försök där det slutade.</p>
+        <p id="m-pagar" class="dampad liten pagar-rad" hidden>Du kan stänga sidan under tiden. Hämtningen fortsätter så länge Akasha Meet är igång. Avbryts den fortsätter nästa försök där det slutade.</p>
       </section>
 
-      <section id="ny" class="blad" aria-labelledby="ny-rubrik">
-        <h2 id="ny-rubrik" tabindex="-1">Ny transkribering</h2>
+      <section id="ny" class="blad formblad" aria-labelledby="ny-rubrik">
+        <h2 id="ny-rubrik" class="avd-rubrik" tabindex="-1">Ny transkribering</h2>
 
-        <div class="falt">
-          <label for="titel">Rubrik <span class="valfritt">(valfritt)</span></label>
-          <input id="titel" type="text" maxlength="200" placeholder="t.ex. Avstämning med Anna" autocomplete="off">
-        </div>
-
-        <div class="falt-rad">
+        <div class="falt-rutnat">
+          <div class="falt">
+            <label for="titel">Rubrik <span class="valfritt">(valfritt)</span></label>
+            <input id="titel" type="text" maxlength="200" placeholder="t.ex. Avstämning med Anna" autocomplete="off">
+          </div>
           <div class="falt">
             <label for="kalla">Hur spelas mötet in?</label>
             <select id="kalla" aria-describedby="kalla-hjalp">
@@ -110,13 +109,12 @@
               <option value="auto">Vet inte – gissa</option>
             </select>
           </div>
-        </div>
-
-        <div class="falt">
-          <label for="ord">Svårstavade ord <span class="valfritt">(valfritt)</span></label>
-          <input id="ord" type="text" maxlength="500" placeholder="t.ex. Hagström, ISO 9001" autocomplete="off"
-            aria-describedby="ord-hjalp">
-          <p id="ord-hjalp" class="hjalp">Namn och facktermer som sägs i mötet. Hjälper programmet att stava dem rätt.</p>
+          <div class="falt">
+            <label for="ord">Svårstavade ord <span class="valfritt">(valfritt)</span></label>
+            <input id="ord" type="text" maxlength="500" placeholder="t.ex. Hagström, ISO 9001" autocomplete="off"
+              aria-describedby="ord-hjalp">
+            <p id="ord-hjalp" class="hjalp">Namn och facktermer som sägs i mötet. Hjälper programmet att stava dem rätt.</p>
+          </div>
         </div>
 
         <p id="digital-hjalp" class="tips" hidden>
@@ -126,12 +124,12 @@
         </p>
 
         <div class="knappar">
-          <button id="spela-in" type="button" class="knapp primar">● Spela in</button>
-          <button id="stoppa" type="button" class="knapp stopp" hidden>■ Stoppa och transkribera</button>
-          <button id="valj-fil" type="button" class="knapp">Ladda upp ljudfil…</button>
+          <button id="spela-in" type="button" class="knapp primar stor spela">Spela in</button>
+          <button id="stoppa" type="button" class="knapp stopp stor" hidden>Stoppa och transkribera</button>
+          <button id="valj-fil" type="button" class="knapp stor">Ladda upp ljudfil…</button>
           <input id="fil" type="file" accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg,.flac,.mp4,.mov" hidden>
+          <p class="lov">Be alltid om lov innan du spelar in någon.</p>
         </div>
-        <p class="lov">Be alltid om lov innan du spelar in någon.</p>
 
         <div id="inspelningspanel" class="inspelningspanel" hidden>
           <div class="panelrad">

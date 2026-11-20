@@ -86,6 +86,33 @@ function el(tagg, attr = {}, ...barn) {
   return e;
 }
 
+// Som el(), men for SVG-element (andra namnrymd). Alla attribut satts med setAttribute.
+const SVG_NS = "http://www.w3.org/2000/svg";
+function svg(tagg, attr = {}, ...barn) {
+  const e = document.createElementNS(SVG_NS, tagg);
+  for (const [k, v] of Object.entries(attr)) if (v !== undefined && v !== null && v !== false) e.setAttribute(k, v);
+  for (const b of barn) if (b !== null && b !== undefined) e.append(b);
+  return e;
+}
+
+// Den gaende elefanten pa ett sparrelement (.gang). Fargerna kommer fran CSS-variablerna.
+function vandrare() {
+  const ben = (x, y, h, klass) => svg("rect", { class: klass, x, y, width: 7.5, height: h, rx: 3.6 });
+  return svg("svg", { class: "vandrare", viewBox: "0 0 64 64", "aria-hidden": "true", focusable: "false" },
+    ben(17, 43, 13, "el-bak"), ben(37, 43, 13, "el-bak"),
+    svg("ellipse", { class: "el-kropp", cx: 29, cy: 38, rx: 19, ry: 13.5 }),
+    ben(12, 44, 12, "el-kropp"), ben(31, 44, 12, "el-kropp"),
+    svg("circle", { class: "el-kropp", cx: 46, cy: 28, r: 12 }),
+    svg("path", { class: "el-snabel", d: "M54.5 32 C 60 28.5, 61.5 20, 58.5 15 C 57 12.5, 53.5 13, 54.5 16",
+      fill: "none", "stroke-width": 5.5, "stroke-linecap": "round" }),
+    svg("path", { class: "el-ora", d: "M38.5 21.5 C 33 22, 31.5 31, 34 35.5 C 36 39, 42 38, 43 34 C 44 29, 43 22, 38.5 21.5 Z" }));
+}
+
+// Andelen (0 till 1) som elefanten ska sta vid: CSS-variabeln --andel pa sparet.
+function sattAndel(e, andel) {
+  if (e) e.style.setProperty("--andel", String(andel));
+}
+
 function tid(s) {
   s = Math.round(s || 0);
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sek = s % 60;
@@ -416,7 +443,14 @@ function renderaModeller(d) {
   if (pagar) {
     const andel = h.totalt > 0 ? Math.max(0, Math.min(1, h.hamtat / h.totalt)) : 0;
     $("m-andel").value = andel;
-    sattText($("m-procent"), `${storlekText(h.hamtat)} av ${storlekText(h.totalt)} · ${Math.round(andel * 100)} %`);
+    sattAndel($("m-forlopp").querySelector(".gang"), andel);
+    // Tva delar (hamtat av totalt, procent), men bara nar texten har andrats.
+    const hamtat = `${storlekText(h.hamtat)} av ${storlekText(h.totalt)}`, procent = `${Math.round(andel * 100)} %`;
+    const procentRuta = $("m-procent");
+    if (procentRuta.dataset.nyckel !== `${hamtat}|${procent}`) {
+      procentRuta.dataset.nyckel = `${hamtat}|${procent}`;
+      procentRuta.replaceChildren(el("span", {}, hamtat), el("span", {}, procent));
+    }
     sattText($("m-forlopp-text"), `${h.tillstand === "kontrollerar" ? "Kontrollerar" : "Hämtar"}${h.fil ? ` ${h.fil}` : ""}.`
       + (h.kvar_s !== null && h.kvar_s !== undefined ? ` ${kvarText(h.kvar_s)}` : ""));
   }
@@ -1881,6 +1915,7 @@ window.addEventListener("beforeunload", (e) => {
   if (inspelning) { e.preventDefault(); e.returnValue = ""; }
 });
 
+for (const g of document.querySelectorAll(".forlopp-stapel .gang")) g.append(vandrare());
 hamtaVal();
 kollaTjanst();
 kollaModeller();
