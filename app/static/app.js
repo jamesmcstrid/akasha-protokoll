@@ -1221,6 +1221,7 @@ async function visa(id, tyst = false) {
   // Datum, langd och antal talare. Vilken motor som anvants ar for den nyfikne: den star i title.
   $("v-info").replaceChildren(...(m.info_delar || []).map((d) => el("span", {}, d)));
   $("v-info").title = res && res.motor ? `Transkriberat med ${res.motor}` : "";
+  spelarLangd = (res && res.langd_s) || null;
   if (byttId) {
     $("v-ljud").src = `/api/inspelningar/${id}/ljud`;
     $("v-kopierat").textContent = "";
@@ -1260,6 +1261,7 @@ async function visa(id, tyst = false) {
   if (byttId && !tyst) rulla(v, "start");
   if (PAGAENDE.has(m.status)) uppdateraLista();
   markeraVisad();
+  uppdateraSpelare();
 }
 
 // Vad som hant och vad man kan gora harnast, nar det inte finns nagon text att visa.
@@ -1470,6 +1472,78 @@ function uppdateraLyssnaKnappar(m) {
     k.classList.toggle("spelar", spelar);
     k.setAttribute("aria-label", spelar ? `Stoppa provet på ${vem}` : `Lyssna på ${vem}`);
   }
+}
+
+// --- spelaren -----------------------------------------------------------------------------
+
+// Den egna spelaren ligger ovanpa ljudelementet: den laser ljudets handelser och skriver till det pa samma satt
+// som resten av koden (currentTime, play, pause). Langden kommer fran servern (langd_s) tills ljudet sjalvt
+// kan ange en andlig langd.
+let spelarLangd = null;
+let spelarDrar = false;
+const HASTIGHETER = [1, 1.25, 1.5, 2];
+let hastighetIx = 0;
+
+function spelarLangdNu() {
+  const d = $("v-ljud").duration;
+  if (Number.isFinite(d) && d > 0) return d;
+  return spelarLangd && spelarLangd > 0 ? spelarLangd : null;
+}
+
+function hastighetText(h) { return `${String(h).replace(".", ",")}×`; }
+
+function uppdateraSpelare() {
+  const a = $("v-ljud"), spar = $("v-spar");
+  const langd = spelarLangdNu();
+  const t = spelarDrar ? Number(spar.value) : (a.currentTime || 0);
+  sattText($("v-tid"), langd ? `${tid(t)} / ${tid(langd)}` : tid(t));
+  spar.disabled = !langd;
+  if (langd) {
+    const max = String(Math.round(langd));
+    if (spar.max !== max) spar.max = max;
+    if (!spelarDrar) spar.value = String(Math.floor(t));
+    spar.setAttribute("aria-valuetext", `${tid(t)} av ${tid(langd)}`);
+  } else {
+    spar.value = "0";
+    spar.setAttribute("aria-valuetext", tid(t));
+  }
+  sattAndel(spar, langd ? Math.min(1, t / langd) : 0);
+  const spelar = !a.paused && !a.ended;
+  const knapp = $("v-spela");
+  knapp.classList.toggle("spelar", spelar);
+  const etikett = spelar ? "Pausa" : "Spela upp";
+  if (knapp.getAttribute("aria-label") !== etikett) knapp.setAttribute("aria-label", etikett);
+}
+
+function sattTidSpelare(t) {
+  const langd = spelarLangdNu();
+  $("v-ljud").currentTime = Math.max(0, langd ? Math.min(langd, t) : t);
+  uppdateraSpelare();
+}
+
+function vaxlaSpela() {
+  const a = $("v-ljud");
+  if (a.paused) a.play().catch(() => { /* t.ex. om ljudet inte gar att spela */ });
+  else a.pause();
+}
+
+function vaxlaHastighet() {
+  hastighetIx = (hastighetIx + 1) % HASTIGHETER.length;
+  const h = HASTIGHETER[hastighetIx];
+  const a = $("v-ljud");
+  // defaultPlaybackRate behalls nar src byts; playbackRate nollstalls annars.
+  a.defaultPlaybackRate = h;
+  a.playbackRate = h;
+  const knapp = $("v-hastighet");
+  knapp.textContent = hastighetText(h);
+  knapp.setAttribute("aria-label", `Hastighet ${hastighetText(h)}`);
+}
+
+function sparTangent(e) {
+  const steg = { ArrowLeft: -5, ArrowDown: -5, ArrowRight: 5, ArrowUp: 5, PageDown: -30, PageUp: 30 }[e.key];
+  if (steg === undefined || e.altKey || e.ctrlKey || e.metaKey) return;
+  e.preventDefault();
+  sattTidSpelare($("v-ljud").currentTime + steg);
 }
 
 // --- lyssna -------------------------------------------------------------------------------
@@ -1882,6 +1956,9 @@ function stangVisning() {
   visaYta();
   $("v-ljud").pause();
   $("v-ljud").removeAttribute("src");
+  $("v-ljud").load(); // nollstaller tiden; utan load() star currentTime kvar och emptied kommer aldrig
+  spelarLangd = null;
+  uppdateraSpelare();
   markeraVisad();
   $("v-forlopp-steg").dataset.nyckel = "";
 }
@@ -1935,6 +2012,21 @@ $("v-ljud").addEventListener("emptied", () => stoppaProv(false)); // visningen s
 $("v-ljud").addEventListener("seeking", () => {
   if (prov && Math.abs($("v-ljud").currentTime - prov.start) > 0.3) stoppaProv(false);
 });
+for (const h of ["timeupdate", "play", "pause", "ended", "durationchange", "loadedmetadata", "emptied", "ratechange", "seeked"]) {
+  $("v-ljud").addEventListener(h, uppdateraSpelare);
+}
+$("v-spela").addEventListener("click", vaxlaSpela);
+$("v-hastighet").addEventListener("click", vaxlaHastighet);
+$("v-spar").addEventListener("pointerdown", () => { spelarDrar = true; });
+for (const h of ["pointerup", "pointercancel", "change", "blur"]) {
+  $("v-spar").addEventListener(h, () => { spelarDrar = false; uppdateraSpelare(); });
+}
+$("v-spar").addEventListener("input", () => {
+  $("v-ljud").currentTime = Number($("v-spar").value);
+  uppdateraSpelare();
+});
+$("v-spar").addEventListener("keydown", sparTangent);
+uppdateraSpelare();
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") stangTalarval(true); });
 document.addEventListener("mousedown", (e) => {
   if ($("talarval").hidden || $("talarval").contains(e.target)) return;

@@ -623,18 +623,54 @@ button.osaker-tecken:hover { background: var(--yta2); }
   position: sticky; top: 0; z-index: 5;
   margin: 0 calc(-1 * var(--blad-pad)); padding: 8px var(--blad-pad); background: var(--yta);
 }
-/* Spelarraden: ett morkt piller. Till och med har med webbblasarens egna reglage i ljudet. */
+/* Spelarraden: ett morkt piller med den egna spelaren (spelknapp, tid, spar, hastighet) och knapparna. */
 .spelare {
   --fokus: var(--fokus-pa-gront);
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 16px 10px 10px;
   border-radius: var(--radie-piller); background: var(--spelare-bg); color: var(--hero-text);
 }
-.spelare audio { flex: 1 1 240px; min-width: 0; height: 46px; margin: 0; color-scheme: dark; }
+.spelare audio { display: none; }
+.spela-knapp {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; padding: 0;
+  border: 0; border-radius: 50%; background: var(--lime); cursor: pointer; transition: background .15s;
+}
+.spela-knapp:hover { background: var(--lime-mork); }
+.spela-knapp::before {
+  content: ""; width: 15px; height: 15px; margin-left: 2px; background: var(--pa-lime);
+  clip-path: polygon(20% 8%, 92% 50%, 20% 92%);
+}
+.spela-knapp.spelar::before {
+  width: 14px; height: 16px; margin-left: 0; clip-path: none;
+  background: linear-gradient(to right, var(--pa-lime) 0 35%, transparent 35% 65%, var(--pa-lime) 65%);
+}
+.spelartid { flex: none; min-width: 6.6em; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--hero-text); }
+/* Sparet: fyllningen foljer --andel, som app.js satter. */
+.spar {
+  -webkit-appearance: none; appearance: none; flex: 1 1 50px; min-width: 0; height: 24px; margin: 0; padding: 0;
+  background: transparent; cursor: pointer;
+}
+.spar:disabled { opacity: .5; cursor: default; }
+.spar::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 999px;
+  background: linear-gradient(to right, var(--lime) calc(var(--andel, 0) * 100%), var(--spelare-spar) 0);
+}
+.spar::-moz-range-track { height: 6px; border-radius: 999px; background: var(--spelare-spar); }
+.spar::-moz-range-progress { height: 6px; border-radius: 999px; background: var(--lime); }
+.spar::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 18px; height: 18px; margin-top: -6px; border-radius: 50%;
+  background: var(--lime); border: 2px solid var(--spelare-bg); box-sizing: border-box;
+}
+.spar::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--lime); border: 2px solid var(--spelare-bg); box-sizing: border-box; }
+.hastighet { min-width: 3.4em; padding: 0 12px; }
 .spelare .knapp { white-space: nowrap; background: transparent; color: var(--lime); border: 1.5px solid var(--lime); }
 .spelare .knapp:hover { background: rgba(205, 242, 79, 0.14); }
 .osakra-lage { font-size: 14px; color: var(--pa-gront); font-variant-numeric: tabular-nums; white-space: nowrap; }
 @media (max-width: 700px) {
   .spelare { border-radius: 24px; }
+  .spelare { gap: 6px 10px; padding: 8px 14px 8px 8px; }
+  .spelare .knapp { min-height: 40px; }
+  .spelartid { min-width: 6.4em; }
+  .spar { flex-basis: 90px; }
 }
 /* Utan text finns inget att bladdra i: spelaren star still, med "Ladda ner ljudet" under. */
 .utan-text .kontrollrad { position: static; margin: 0; padding: 0; }
