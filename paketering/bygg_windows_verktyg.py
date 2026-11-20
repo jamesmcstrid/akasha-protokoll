@@ -3,6 +3,7 @@
     python paketering/bygg_windows_verktyg.py runtime KATALOG       kopierar in C-runtime-DLL:erna som filerna importerar
     python paketering/bygg_windows_verktyg.py ikon PNG ICO
     python paketering/bygg_windows_verktyg.py versionsfil UTFIL VERSION BYGGNUMMER
+    python paketering/bygg_windows_verktyg.py exeinfo EXE            versionsresurs, ikon och fonsterprogram (pefile)
     python paketering/bygg_windows_verktyg.py forbjudet KATALOG
     python paketering/bygg_windows_verktyg.py storlekar KATALOG
     python paketering/bygg_windows_verktyg.py zip KATALOG ZIPFIL
@@ -164,6 +165,38 @@ def kopiera_runtime(katalog, res):
     return kopierade
 
 
+def exe_info(sokvag, res):
+    """Versionsresursen, ikonen och undersystemet i en exe-fil: syns under Egenskaper och avgor om en konsol oppnas."""
+    import pefile
+
+    pe = pefile.PE(sokvag)
+    try:
+        strangar = {}
+        for fi in getattr(pe, "FileInfo", None) or []:
+            for post in fi:
+                if getattr(post, "Key", b"") == b"StringFileInfo":
+                    for tabell in post.StringTable:
+                        for k, v in tabell.entries.items():
+                            strangar[k.decode("utf-8", "replace")] = v.decode("utf-8", "replace")
+        for k in sorted(strangar):
+            print(f"  {k}: {strangar[k]}")
+        res.kontrollera(strangar.get("LegalCopyright") == UPPHOVSRATT and strangar.get("ProductName") == NAMN,
+                        f"versionsresursen har ProductName {NAMN} och upphovsratten {UPPHOVSRATT}",
+                        f"versionsresursen saknas eller har fel text (LegalCopyright {strangar.get('LegalCopyright')!r}, "
+                        f"ProductName {strangar.get('ProductName')!r})")
+        ikongrupper = 0
+        for e in getattr(getattr(pe, "DIRECTORY_ENTRY_RESOURCE", None), "entries", []) or []:
+            if e.id == pefile.RESOURCE_TYPE["RT_GROUP_ICON"]:
+                ikongrupper = len(e.directory.entries)
+        res.kontrollera(ikongrupper > 0, f"exe-filen har en ikon ({ikongrupper} ikongrupp)", "exe-filen har ingen ikon")
+        undersystem = pe.OPTIONAL_HEADER.Subsystem
+        res.kontrollera(undersystem == pefile.SUBSYSTEM_TYPE["IMAGE_SUBSYSTEM_WINDOWS_GUI"],
+                        "undersystemet ar Windows GUI (ingen konsol oppnas)",
+                        f"undersystemet ar {undersystem}, vantade 2 (GUI): console=False galler inte")
+    finally:
+        pe.close()
+
+
 def lista(katalog):
     print(f"Filer i {katalog}:")
     total = 0
@@ -227,6 +260,8 @@ def main(argv=None):
             with open(rest[0], "w", encoding="ascii", newline="\n") as f:
                 f.write(text)
             res.ok(f"versionsfilen {rest[0]} skriven (version {rest[1]}.{rest[2]})")
+        elif kmd == "exeinfo" and len(rest) == 1:
+            exe_info(rest[0], res)
         elif kmd == "forbjudet" and len(rest) == 1:
             funna = hitta_forbjudna(rest[0])
             for f in funna:
