@@ -30,6 +30,37 @@ class FalskFraga:
         return self.svar.pop(0) if self.svar else True
 
 
+class FalskKlocka:
+    """Ersatter modulen time i windows_app: sleep() flyttar klockan, ingen riktig vantan."""
+
+    def __init__(self):
+        self.nu = 0.0
+
+    def monotonic(self):
+        return self.nu
+
+    def sleep(self, s):
+        self.nu += s
+
+
+class FalskTimer:
+    """Ersatter threading.Timer: gar aldrig ut av sig sjalv; provet anropar function()."""
+    alla = []
+
+    def __init__(self, intervall, function):
+        self.intervall, self.function = intervall, function
+        self.daemon = False
+        self.startad = False
+        self.avbruten = False
+        FalskTimer.alla.append(self)
+
+    def start(self):
+        self.startad = True
+
+    def cancel(self):
+        self.avbruten = True
+
+
 class FalskTjanst:
     def __init__(self, vanta=True, starta=None, stang=None):
         self.hande = []
@@ -143,8 +174,36 @@ class TestBorja(Skalprov):
         self.webb.assert_not_called()
         self.assertEqual(self.fraga.rutor, [(start.STARTAR_REDAN_RUBRIK, start.STARTAR_REDAN_TEXT, OK)])
 
-    def test_andra_kopian_vantar_hogst_30_sekunder(self):
-        self.assertEqual(windows_app.VANTA_ANDRA_KOPIAN, 30)
+    def test_andra_kopian_vantar_hogst_120_sekunder(self):
+        self.assertEqual(windows_app.VANTA_ANDRA_KOPIAN, 120)
+
+    def fast_klocka(self):
+        klocka = FalskKlocka()
+        return klocka, mock.patch.object(windows_app, "time", klocka)
+
+    def test_andra_kopian_oppnar_sidan_aven_nar_svaret_kommer_sent(self):
+        plattform.en_kopia.return_value = False
+        klocka, pa = self.fast_klocka()
+        with pa, mock.patch.object(start, "lage", side_effect=lambda *a, **k: "akasha" if klocka.nu >= 100 else "ledig"), \
+             mock.patch.object(start, "url", return_value="u"), \
+             self.assertLogs("akasha-protokoll", "INFO") as logg:
+            self.assertFalse(self.skal.borja())
+        self.webb.assert_called_once_with("u")
+        self.assertEqual(self.fraga.rutor, [])  # ingenting visas under vantan
+        self.assertIn("INFO:akasha-protokoll:win: den forsta kopian svarade efter 100.0 s", logg.output)
+
+    def test_andra_kopian_ger_upp_efter_120_s_med_lugn_text(self):
+        plattform.en_kopia.return_value = False
+        klocka, pa = self.fast_klocka()
+        with pa, mock.patch.object(start, "lage", return_value="ledig"), \
+             self.assertLogs("akasha-protokoll", "INFO") as logg:
+            self.assertFalse(self.skal.borja())
+        self.assertGreaterEqual(klocka.nu, 120)
+        self.assertLess(klocka.nu, 121)
+        self.webb.assert_not_called()
+        self.assertEqual(self.fraga.rutor, [(start.STARTAR_REDAN_RUBRIK, start.STARTAR_REDAN_TEXT, OK)])
+        self.assertIn("INFO:akasha-protokoll:win: den andra kopian svarade inte inom 120 s", logg.output)
+        self.assertEqual(start.STARTAR_REDAN_RUBRIK, "Akasha Protokoll startar")
 
     def test_installningsproblem_ja_visar_filen(self):
         with mock.patch.object(start, "installningsproblem", return_value=["Rad 3 förstods inte."]):
@@ -201,7 +260,8 @@ class TestStart(Skalprov):
         t = FalskTjanst()
         with self.assertLogs("akasha-protokoll", "INFO") as logg:
             self.kor(t)
-        self.assertEqual(t.hande, ["starta", ("vanta", 30)])
+        self.assertEqual(t.hande, ["starta", ("vanta", 60)])
+        self.assertTrue(any(r.startswith("INFO:akasha-protokoll:win: tjansten startad efter ") for r in logg.output))
         self.assertTrue(self.skal.redo)
         self.webb.assert_called_once_with("http://127.0.0.1:8611")
         self.assertEqual(self.ikon.title, start.WIN_TIPS_IGANG)
@@ -228,7 +288,10 @@ class TestStart(Skalprov):
             self.kor(FalskTjanst())
         self.assertTrue(self.skal.redo)
 
-    def test_tjansten_svarar_inte_inom_30_s(self):
+    def test_tjansten_vantas_pa_i_60_s_fran_att_starta_har_returnerat(self):
+        self.assertEqual(windows_app.VANTA_TJANSTEN, 60)
+
+    def test_tjansten_svarar_inte_inom_60_s(self):
         self.fraga.svar = [False]
         t = FalskTjanst(vanta=False)
         self.kor(t)
@@ -265,6 +328,114 @@ class TestStart(Skalprov):
              self.assertLogs("akasha-protokoll", "ERROR"):
             self.kor(FalskTjanst(vanta=False))
         self.assertTrue(self.skal.klart.is_set())
+
+
+class TestStartarNotis(Skalprov):
+    """Notisen om att starten drojer: en timer som startas nar ikonen visas och avbryts nar startresultatet
+    kommer eller avslutet borjar. Ingen riktig vantan: timern ar falsk."""
+
+    def setUp(self):
+        super().setUp()
+        FalskTimer.alla = []
+        pa = mock.patch.object(windows_app.threading, "Timer", FalskTimer)
+        pa.start()
+        self.addCleanup(pa.stop)
+        bg = mock.patch.object(self.skal, "starta_i_bakgrunden")
+        bg.start()
+        self.addCleanup(bg.stop)
+        self.ikon = FalskIkon("n", "b", "t", None)
+        self.skal.ikon = self.ikon
+        self.tjanst = FalskTjanst()
+        self.skal.tjanst = self.tjanst
+
+    def vantade(self):
+        return [n for n in self.ikon.notiser if n[0] == start.WIN_STARTAR_NOTIS]
+
+    def test_timern_startas_nar_ikonen_visas(self):
+        self.skal._setup(self.ikon)
+        (timer,) = FalskTimer.alla
+        self.assertEqual(timer.intervall, 5)
+        self.assertEqual(windows_app.NOTIS_EFTER, 5)
+        self.assertTrue(timer.startad and timer.daemon and not timer.avbruten)
+        self.assertEqual(timer.function, self.skal._starten_drojer)
+
+    def test_notis_en_gang_nar_starten_drojer(self):
+        self.skal._setup(self.ikon)
+        timer = FalskTimer.alla[0]
+        with self.assertLogs("akasha-protokoll", "INFO") as logg:
+            timer.function()
+        self.assertEqual(self.ikon.notiser, [(start.WIN_STARTAR_NOTIS, "Akasha Protokoll")])
+        self.assertIn("INFO:akasha-protokoll:win: starten drojer, notis visad", logg.output)
+        timer.function()  # aldrig tva ganger
+        self.assertEqual(len(self.vantade()), 1)
+
+    def test_ingen_notis_nar_starten_gick_fort(self):
+        self.skal._setup(self.ikon)
+        timer = FalskTimer.alla[0]
+        with mock.patch.object(plattform, "forsta_start_visad", return_value=False), \
+             mock.patch.object(start, "url", return_value="u"):
+            self.skal.startad(True)
+        self.assertTrue(timer.avbruten)
+        timer.function()  # om den hann gå ut precis da: gor anda ingenting
+        self.assertEqual(self.vantade(), [])
+
+    def test_ingen_notis_om_startresultatet_kom_fore_timern(self):
+        with mock.patch.object(plattform, "forsta_start_visad", return_value=False), \
+             mock.patch.object(start, "url", return_value="u"):
+            self.skal.startad(True)
+        self.skal._setup(self.ikon)
+        self.assertEqual(FalskTimer.alla, [])  # ingen timer alls
+
+    def test_ingen_notis_efter_att_avslutet_har_borjat(self):
+        self.skal._setup(self.ikon)
+        timer = FalskTimer.alla[0]
+        self.skal.avsluta()
+        self.assertTrue(timer.avbruten)
+        timer.function()
+        self.assertEqual(self.ikon.notiser, [])
+
+    def test_avslutet_utan_timer_stoppar_notisen_aven_om_timern_gick_ut(self):
+        self.skal._setup(self.ikon)
+        timer = FalskTimer.alla[0]
+        self.skal._avslutet = True
+        timer.function()
+        self.assertEqual(self.ikon.notiser, [])
+
+    def test_startade_inte_stoppar_notisen(self):
+        self.skal._setup(self.ikon)
+        timer = FalskTimer.alla[0]
+        self.fraga.svar = [False]
+        self.skal.startad(False)
+        self.assertTrue(timer.avbruten)
+
+    def test_fel_i_notisen_loggas_och_stor_inte_starten(self):
+        self.ikon.notify = mock.Mock(side_effect=RuntimeError("ingen notis"))
+        self.skal._setup(self.ikon)
+        with self.assertLogs("akasha-protokoll", "ERROR"):
+            FalskTimer.alla[0].function()  # kastar inte
+        self.ikon.notify.assert_called_once()
+        self.assertFalse(self.skal.klart.is_set())
+
+    def test_ingen_notis_utan_ikon(self):
+        self.skal._setup(self.ikon)
+        self.skal.ikon = None
+        FalskTimer.alla[0].function()
+        self.assertEqual(self.ikon.notiser, [])
+
+    def test_ikonen_blir_inte_synlig_ger_ingen_timer(self):
+        class Osynlig(FalskIkon):
+            @property
+            def visible(self):
+                return False
+
+            @visible.setter
+            def visible(self, v):
+                if v:
+                    raise OSError("ingen tray")
+
+        with self.assertLogs("akasha-protokoll", "WARNING"):
+            self.skal._setup(Osynlig("n", "b", "t", None))
+        self.assertEqual(FalskTimer.alla, [])
 
 
 class TestOppna(Skalprov):
@@ -430,7 +601,7 @@ class TestAvsluta(Skalprov):
         with mock.patch.object(start, "Tjanst", return_value=t):
             skal.starta_i_bakgrunden()
         self.assertEqual(t.hande.count("stang"), 2)  # av skalet och av starttraden (Tjanst.stang tal flera)
-        self.assertNotIn(("vanta", 30), t.hande)
+        self.assertNotIn(("vanta", 60), t.hande)
         self.assertEqual(self.fraga.rutor, [])
 
 

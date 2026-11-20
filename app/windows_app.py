@@ -20,7 +20,9 @@ import start
 log = logging.getLogger("akasha-protokoll")
 
 MUTEX = "Local\\AkashaProtokoll"  # per inloggad anvandare
-VANTA_ANDRA_KOPIAN = 30  # sekunder
+VANTA_ANDRA_KOPIAN = 120  # sekunder: forsta starten pa en ny dator kan ta lang tid (Windows granskar filerna)
+VANTA_TJANSTEN = 60  # sekunder, raknat fran att tjanst.starta() har returnerat
+NOTIS_EFTER = 5  # sekunder fran att ikonen visas tills notisen "startar" visas om tjansten annu inte svarar
 
 # Typer av ruta for fraga()
 OK = "ok"
@@ -65,6 +67,10 @@ class Skal:
         self._avslutet = False  # sant sa snart avslutet har borjat: da gor startresultaten ingenting
         self._las = threading.Lock()
         self._avslutar = threading.Lock()
+        self._notis = None  # timern som visar notisen om att starten drojer
+        self._notis_las = threading.Lock()
+        self._start_klar = False  # sant nar resultatet av starten har kommit (eller avslutet har borjat)
+        self._notis_visad = False
 
     # --- start ---------------------------------------------------------------------------------
 
@@ -91,9 +97,11 @@ class Skal:
 
     def andra_kopian(self):
         """En annan kopia har mutexen: vanta pa att den svarar och oppna sidan, annars en ruta."""
-        slut = time.monotonic() + VANTA_ANDRA_KOPIAN
+        t0 = time.monotonic()
+        slut = t0 + VANTA_ANDRA_KOPIAN
         while True:
             if start.lage() == "akasha":
+                log.info("win: den forsta kopian svarade efter %.1f s", time.monotonic() - t0)
                 plattform.oppna_webblasare(start.url())
                 return
             if time.monotonic() >= slut:
@@ -109,11 +117,15 @@ class Skal:
             self.tjanst = tjanst
             if self._avslutet:
                 return
+            t0 = time.monotonic()
             tjanst.starta()
+            log.info("win: tjansten startad efter %.1f s", time.monotonic() - t0)
             if self._avslutet:  # avslutet borjade medan tjansten startade: stang den vi just startade
                 tjanst.stang()
                 return
-            ok = tjanst.vanta(30)
+            # Raknas fran att starta() har returnerat: importerna ingar inte. Det som aterstar ar forsta
+            # anropet till /health, som laddar sherpa-onnx (onnxruntime) och kan ta lang tid pa en ny dator.
+            ok = tjanst.vanta(VANTA_TJANSTEN)
         except start.StartFel as e:
             self.startfel(str(e))
             return
@@ -134,12 +146,43 @@ class Skal:
             log.info("win: %s ignoreras, avslutet har borjat", vad)
         return self._avslutet
 
+    def _stoppa_notistimern(self):
+        """Avbryter notisen om att starten drojer och markerar att den inte ska visas mer."""
+        with self._notis_las:
+            self._start_klar = True
+            timer, self._notis = self._notis, None
+        if timer is not None:
+            timer.cancel()
+
+    def _starta_notistimern(self):
+        with self._notis_las:
+            if self._start_klar:
+                return
+            timer = threading.Timer(NOTIS_EFTER, self._starten_drojer)
+            timer.daemon = True
+            self._notis = timer
+        timer.start()
+
+    def _starten_drojer(self):
+        """Timern gick ut: tjansten svarar annu inte. En notis, en gang, aldrig efter start eller avslut."""
+        try:
+            with self._notis_las:
+                if self._start_klar or self._avslutet or self._notis_visad or self.ikon is None:
+                    return
+                self._notis_visad = True
+                ikon = self.ikon
+            ikon.notify(start.WIN_STARTAR_NOTIS, plattform.NAMN)
+            log.info("win: starten drojer, notis visad")
+        except Exception:
+            log.exception("win: starten drojer")
+
     def startad(self, ok):
         try:
+            self._stoppa_notistimern()
             if self._efter_avslut("startad"):
                 return
             if not ok:
-                log.info("win: tjansten svarade inte inom 30 s")
+                log.info("win: tjansten svarade inte inom %d s", VANTA_TJANSTEN)
                 self.startade_inte()
                 return
             self.redo = True
@@ -208,6 +251,7 @@ class Skal:
         try:
             ikon.visible = True
             log.info("win: ikonen visas")
+            self._starta_notistimern()
         except Exception as e:
             log.warning("win: ikonen kunde inte visas: %s", e)
         self._starta_bakgrund_en_gang()
@@ -238,6 +282,10 @@ class Skal:
         """Tjansten och ikonen, en gang var (andra anropet gor inget). Kastar aldrig. Ordningen: tjansten,
         ikonen, och sist klart, sa att main() inte hinner avsluta processen under nedstangningen."""
         self._avslutet = True
+        try:
+            self._stoppa_notistimern()
+        except Exception:
+            log.exception("win: notistimern")
         tjanst, self.tjanst = self.tjanst, None
         ikon, self.ikon = self.ikon, None
         try:
