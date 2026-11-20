@@ -43,7 +43,7 @@ jobs:
           grep -v '^faster-whisper' app/requirements.txt > "$RUNNER_TEMP/krav.txt"
           python -m pip install -r "$RUNNER_TEMP/krav.txt"
       - name: Enhetstester
-        run: python -m unittest discover -s tester -v
+        run: python -m unittest discover -s tester -v --durations 15
 
   macos:
     # macOS kostar som tio Linux-jobb medan repot ar privat: bara vid release-tagg eller for hand.
@@ -67,4 +67,4 @@ jobs:
           grep -v '^faster-whisper' app/requirements.txt > "$RUNNER_TEMP/krav.txt"
           python -m pip install -r "$RUNNER_TEMP/krav.txt"
       - name: Enhetstester
-        run: python -m unittest discover -s tester -v
+        run: python -m unittest discover -s tester -v --durations 15

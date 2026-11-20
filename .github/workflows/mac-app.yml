@@ -48,7 +48,7 @@ jobs:
           build/venv/bin/pip install -q -r build/krav.txt -r paketering/krav-bygg.txt
           build/venv/bin/pip list
       - name: Enhetstester
-        run: build/venv/bin/python -m unittest discover -s tester
+        run: build/venv/bin/python -m unittest discover -s tester --durations 15
       - name: whisper-cli ur cachen
         id: cli
         uses: actions/cache@v6
