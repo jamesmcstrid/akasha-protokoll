@@ -116,6 +116,21 @@ class Paketering(unittest.TestCase):
                         "fortsätter den där den slutade."})
         self.assertEqual((start.AVSLUTA_NEJ, start.AVSLUTA_JA), ("Avbryt", "Avsluta ändå"))
 
+    def test_start_har_texterna_for_windows_skalet_ordagrant(self):
+        self.assertEqual(start.WIN_AVSLUTA_FRAGA, "Vill du avsluta ändå?")
+        self.assertEqual(start.WIN_VISA_LOGGEN_FRAGA, "Vill du öppna mappen med loggen?")
+        self.assertEqual(start.WIN_VISA_FILEN_FRAGA, "Vill du öppna mappen med inställningsfilen?")
+        self.assertEqual(start.STARTAR_REDAN_RUBRIK, "Akasha Protokoll startar redan")
+        self.assertEqual(
+            start.STARTAR_REDAN_TEXT,
+            "Akasha Protokoll håller redan på att starta men svarar inte. Vänta en stund och försök igen. "
+            "Hjälper det inte, starta om datorn.")
+        self.assertEqual(start.WIN_IGANG, "Akasha Protokoll är igång. Du hittar det bland ikonerna vid klockan.")
+        self.assertEqual(start.WIN_TIPS_STARTAR, "Akasha Protokoll startar\u2026")
+        self.assertEqual(start.WIN_TIPS_IGANG, "Akasha Protokoll är igång")
+        self.assertEqual(start.WIN_MENY_OPPNA, "Öppna Akasha Protokoll i webbläsaren")
+        self.assertEqual(start.WIN_MENY_AVSLUTA, "Avsluta Akasha Protokoll")
+
     def test_mac_app_importerar_inget_som_laser_installningar_pa_modulnivan(self):
         trad = ast.parse(las("app", "mac_app.py"))
         importerade = set()

@@ -79,6 +79,20 @@ AVSLUTA_MENING = {
 AVSLUTA_NEJ = "Avbryt"
 AVSLUTA_JA = "Avsluta ändå"
 
+# Windows-skalet (windows_app.py). Rutorna dar visar Ja/Nej/OK pa Windows sprak, sa varje fraga slutar med en
+# ja/nej-fraga i stallet for egna knappnamn.
+WIN_AVSLUTA_FRAGA = "Vill du avsluta ändå?"
+WIN_VISA_LOGGEN_FRAGA = "Vill du öppna mappen med loggen?"
+WIN_VISA_FILEN_FRAGA = "Vill du öppna mappen med inställningsfilen?"
+STARTAR_REDAN_RUBRIK = "Akasha Protokoll startar redan"
+STARTAR_REDAN_TEXT = ("Akasha Protokoll håller redan på att starta men svarar inte. Vänta en stund och försök "
+                      "igen. Hjälper det inte, starta om datorn.")
+WIN_IGANG = "Akasha Protokoll är igång. Du hittar det bland ikonerna vid klockan."
+WIN_TIPS_STARTAR = "Akasha Protokoll startar…"
+WIN_TIPS_IGANG = "Akasha Protokoll är igång"
+WIN_MENY_OPPNA = "Öppna Akasha Protokoll i webbläsaren"
+WIN_MENY_AVSLUTA = "Avsluta Akasha Protokoll"
+
 _ORDNING = ("inspelning", "transkribering", "hamtning")
 _problem_loggade = False
 
