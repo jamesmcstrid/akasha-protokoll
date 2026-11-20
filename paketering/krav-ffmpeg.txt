@@ -1,0 +1,9 @@
+# Bara for att bygga PyAV mot det egna FFmpeg-bygget (bygg-pyav.sh). Byggverktyg: foljer inte med programmet och star
+# varken i krav-bygg.txt eller app/requirements.txt.
+cython==3.0.12
+setuptools==84.2.1
+wheel==0.48.0
+delvewheel==1.13.2; sys_platform == "win32"
+delocate==0.13.0; sys_platform == "darwin"
+auditwheel==6.8.2; sys_platform == "linux"
+patchelf==0.19.3.0; sys_platform == "linux"

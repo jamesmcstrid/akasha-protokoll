@@ -973,5 +973,61 @@ class FfmpegKontrollSomPaIPyPi(unittest.TestCase):
         self.assertIn("förbjuden fil", text)
 
 
+class PyavHjulet(unittest.TestCase):
+    """bygg-pyav.sh och krav-ffmpeg.txt (L3): statiska kontroller, byggverktygen och reparationen per system."""
+
+    def test_sdist_adressen_och_sha256_star_i_skriptet(self):
+        text = las("paketering", "bygg-pyav.sh")
+        self.assertIn("SDIST_SHA256=04b1892562aff3277efc79f32bd8f1d0cbb64ed011241cb3e96f9ad471816c22", text)
+        self.assertIn("https://files.pythonhosted.org/packages/00/f8/5adeeae0c42a7130933d168b8d84a21c98a32cb9fcf9222e2541ed0d9c7b/av-12.3.0.tar.gz",
+                      text)
+        self.assertIn('"$FAKTISK" != "$SDIST_SHA256"', text)  # en annan hash stoppar bygget
+
+    def test_bygget_anvander_ffmpeg_dir_och_laser_om_c_koden(self):
+        text = las("paketering", "bygg-pyav.sh")
+        self.assertIn('--ffmpeg-dir="$PREFIX"', text)
+        self.assertIn('build_ext -j"$ANTAL"', text)
+        self.assertIn("rm -rf src", text)
+        self.assertIn("MACOSX_DEPLOYMENT_TARGET=14.0", text)
+        self.assertIn("-headerpad_max_install_names", text)
+        self.assertIn("krav-ffmpeg.txt", text)
+
+    def test_rat_reparationsverktyg_per_system(self):
+        text = las("paketering", "bygg-pyav.sh")
+        self.assertRegex(text, r"linux\).*auditwheel repair")
+        self.assertRegex(text, r"mac\).*delocate-wheel --require-archs arm64")
+        self.assertRegex(text, r'windows\).*delvewheel" repair --add-path "\$PREFIX/bin"')
+
+    def test_hjulet_installeras_utan_reserv_till_pypi(self):
+        text = las("paketering", "bygg-pyav.sh")
+        self.assertIn('pip install -q --no-deps --no-index "$HJUL"', text)
+        self.assertNotIn("pip install av", text)
+        self.assertIn("en-talare.m4a", text)  # rokprovet avkodar riktigt
+        self.assertIn("VANTAT_RAMAR, VANTAT_SAMPEL = 405, 414720", text)
+        self.assertIn("LGPL version 2.1 or later", text + las("paketering", "kontrollera_ffmpeg.py"))
+
+    def test_krav_ffmpeg_har_exakta_versioner_och_plattformsmarkorer(self):
+        rader = [r.strip() for r in las("paketering", "krav-ffmpeg.txt").splitlines() if r.strip() and not r.startswith("#")]
+        self.assertEqual(rader, ["cython==3.0.12", "setuptools==84.2.1", "wheel==0.48.0",
+                                 'delvewheel==1.13.2; sys_platform == "win32"', 'delocate==0.13.0; sys_platform == "darwin"',
+                                 'auditwheel==6.8.2; sys_platform == "linux"', 'patchelf==0.19.3.0; sys_platform == "linux"'])
+        for r in rader:
+            self.assertIn("==", r)
+
+    def test_byggverktygen_ar_inte_med_i_programmets_krav(self):
+        for delar in (("paketering", "krav-bygg.txt"), ("app", "requirements.txt")):
+            text = las(*delar).lower()
+            for verktyg in ("cython", "auditwheel", "delocate", "delvewheel", "patchelf"):
+                self.assertNotIn(verktyg, text, f"{verktyg} i {delar[-1]}")
+
+    def test_skriptet_gar_att_tolka_och_har_inga_aao_i_kommentarer(self):
+        if os.name != "nt" and shutil.which("bash"):
+            p = subprocess.run(["bash", "-n", os.path.join(PAKETERING, "bygg-pyav.sh")], capture_output=True, text=True)
+            self.assertEqual(p.returncode, 0, p.stderr)
+        for delar in (("paketering", "bygg-pyav.sh"), ("paketering", "krav-ffmpeg.txt")):
+            for k in re.findall(r"(?:^|\s)#(?!!).*", las(*delar), re.M):
+                self.assertIsNone(re.search("[åäöÅÄÖ]", k), k)
+
+
 if __name__ == "__main__":
     unittest.main()
