@@ -53,6 +53,10 @@
   </header>
 
   <main class="arbetsyta">
+    <button id="till-ny" type="button" class="till-ny" hidden>
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M8 2v12M2 8h12"/></svg>
+      Ny transkribering
+    </button>
     <div class="yta">
       <section id="modeller" class="blad" aria-labelledby="m-rubrik" hidden>
         <h2 id="m-rubrik" tabindex="-1"></h2>
@@ -159,7 +163,7 @@
       <section id="visning" class="blad" aria-labelledby="v-rubrik" hidden>
         <div class="visningshuvud">
           <div>
-            <h2 id="v-rubrik"></h2>
+            <h2 id="v-rubrik" tabindex="-1"></h2>
             <p id="v-info" class="dampad"></p>
           </div>
           <div class="knappar">

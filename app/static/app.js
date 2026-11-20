@@ -35,6 +35,8 @@ let namnLage = null; // talarnamnen som sparats eller halls pa att sparas: { id,
 let prov = null; // pagaende rostprov fran en Lyssna-knapp: { knapp, start, slut, timer }
 let talarvalAnkare = null; // det som oppnade talarvalsrutan, dit fokus gar tillbaka
 let modellerVisades = false; // modellkortet syntes vid senaste renderingen
+let modellLage = null; // "fullt", "talare" eller null: vad renderaModeller() har bestamt for kortet
+let laddarUpp = false; // en uppladdning pagar (formularet far inte doljas)
 let modellerInteNu = false; // "Inte nu" tryckt i den har sidvisningen (bara nar rostmodellen saknas)
 let modellTimer = null;
 let halsaTimer = null; // nasta /health-fraga medan tjansten inte svarar
@@ -324,6 +326,26 @@ async function kollaModeller() {
   if (HAMTAR.has(d.hamtning.tillstand)) modellTimer = setTimeout(kollaModeller, 1000);
 }
 
+// Hogra ytan visar en sak: formularet eller den oppna inspelningen. Det som pagar i formularet
+// (inspelning, kon, uppladdning) och modellkortet nar det behovs doljs aldrig.
+function visaYta() {
+  const fokus = document.activeElement;
+  const oppen = visadId !== null;
+  const pagarINy = !!inspelning || !$("ko").hidden || laddarUpp;
+  const hamtar = HAMTAR.has(senastTillstand);
+  $("modeller").hidden = !(modellLage === "fullt" || (modellLage === "talare" && (!oppen || hamtar)));
+  $("ny").hidden = modellLage === "fullt" || (oppen && !pagarINy);
+  $("visning").hidden = !oppen;
+  const knapp = $("till-ny");
+  knapp.hidden = modellLage === "fullt";
+  const vald = !$("ny").hidden && !oppen;
+  if (vald) knapp.setAttribute("aria-current", "true"); else knapp.removeAttribute("aria-current");
+  // Fokus i en del som just doldes: till rubriken i det som visas i stallet.
+  if (fokus && fokus !== document.body && fokus.closest("[hidden]")) {
+    (oppen ? $("v-rubrik") : !$("ny").hidden ? $("ny-rubrik") : $("m-rubrik")).focus({ preventScroll: true });
+  }
+}
+
 // Kortet #modeller enligt tabellen i planen: fullt lage (taligenkanningen saknas), talarlage
 // (bara rostmodellen) eller dolt. Allt byggs med el() och textContent, aldrig innerHTML.
 function renderaModeller(d) {
@@ -342,9 +364,9 @@ function renderaModeller(d) {
 
   if (!lage) {
     const hadeKort = modellerVisades;
-    $("modeller").hidden = true;
-    $("ny").hidden = false;
+    modellLage = null;
     modellerVisades = false;
+    visaYta();
     if (hadeKort && !d.hinder && !saknas.length) {
       meddela("");
       kvitto("Klart. Modellerna är hämtade och kontrollerade.");
@@ -356,8 +378,8 @@ function renderaModeller(d) {
   }
 
   modellerVisades = true;
-  $("modeller").hidden = false;
-  $("ny").hidden = lage === "fullt";
+  modellLage = lage;
+  visaYta();
   if (lage === "fullt") meddela(""); // "Tjansten ar inte redo" hor inte hemma i det dolda kortet
 
   sattText($("m-rubrik"), lage === "fullt" ? "Hämta modellerna" : "Hämta röstmodellen");
@@ -463,7 +485,8 @@ async function stoppaHamtning() {
 function inteNu() {
   modellerInteNu = true;
   modellerVisades = false;
-  $("modeller").hidden = true;
+  modellLage = null;
+  visaYta();
   $("ny-rubrik").focus();
 }
 
@@ -522,6 +545,7 @@ async function spelaIn() {
   inspelning = insp;
   koInsp = insp;
   $("ko").hidden = true;
+  visaYta();
   rec.addEventListener("dataavailable", (e) => { if (e.data && e.data.size) skickaDel(e.data); });
   rec.start(DEL_MS);
 
@@ -713,6 +737,7 @@ function uppdateraKo(insp) {
   }
   const nyckel = `${sort}|${insp.fel}|${gammalFil}`;
   $("ko").hidden = text === null;
+  visaYta();
   // Klar visas bara nar filen ar sparad: da kan inspelningen slappas utan att ljud tappas.
   $("ko-klar").hidden = !(insp.stoppad && filenArHel(insp) && (insp.fel || insp.nere || insp.harVantat || insp.klarVantar));
   if (text !== null && insp.stoppad && $("meddelande").textContent === "Sparar de sista sekunderna…") meddela("");
@@ -862,6 +887,7 @@ function slappInspelning(insp) {
   $("spela-in").hidden = false;
   $("valj-fil").disabled = false;
   $("kalla").disabled = false;
+  visaYta();
 }
 
 // Allt ljud ar sparat: starta transkriberingen. Svarar inte tjansten forsoker sidan igen.
@@ -913,6 +939,8 @@ function laddaUpp(fil) {
     if (e.lengthComputable) meddela(`Laddar upp: ${Math.round((e.loaded / e.total) * 100)} %`);
   });
   xhr.addEventListener("load", () => {
+    laddarUpp = false;
+    visaYta();
     let data = {};
     try { data = JSON.parse(xhr.responseText); } catch { /* inte JSON */ }
     if (xhr.status === 201) {
@@ -926,10 +954,14 @@ function laddaUpp(fil) {
     uppdateraLista();
   });
   xhr.addEventListener("error", () => {
+    laddarUpp = false;
+    visaYta();
     meddela(`Uppladdningen misslyckades. ${INGEN_TJANST}`, true);
     tjanstenSvararInte();
     $("fil").value = "";
   });
+  laddarUpp = true;
+  visaYta();
   xhr.send(form);
 }
 
@@ -1125,7 +1157,7 @@ async function visa(id, tyst = false) {
   const byttId = visadId !== id;
   visadId = id;
   const v = $("visning");
-  v.hidden = false;
+  visaYta();
   v.dataset.status = m.status;
   $("v-rubrik").textContent = m.rubrik;
   $("v-titel").placeholder = m.rubrik;
@@ -1775,7 +1807,7 @@ function stangVisning() {
   visadId = null;
   visadMeta = null;
   stangTalarval();
-  $("visning").hidden = true;
+  visaYta();
   $("v-ljud").pause();
   $("v-ljud").removeAttribute("src");
   markeraVisad();
@@ -1793,6 +1825,7 @@ $("valj-fil").addEventListener("click", () => $("fil").click());
 $("fil").addEventListener("change", () => { if ($("fil").files[0]) laddaUpp($("fil").files[0]); });
 $("v-kopiera").addEventListener("click", kopiera);
 $("v-stang").addEventListener("click", stangVisning);
+$("till-ny").addEventListener("click", () => { if (visadId !== null) stangVisning(); $("ny-rubrik").focus(); });
 $("v-byt-rubrik").addEventListener("click", () => visaRubrikform($("v-rubrikform").hidden));
 $("v-rubrik-avbryt").addEventListener("click", () => visaRubrikform(false));
 $("v-rubrikform").addEventListener("submit", sparaRubrik);
