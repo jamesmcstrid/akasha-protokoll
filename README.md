@@ -8,7 +8,7 @@ Du får texten uppdelad per talare och kan byta "Talare 1" och "Talare 2" mot ri
 - **Svensk taligenkänning** med [KB-Whisper](https://huggingface.co/KBLab/kb-whisper-medium) från
   Kungliga biblioteket. På Mac med Apple Silicon används grafikprocessorn (Metal).
 - **Möten i rummet och digitalt.** Med datorns mikrofon, eller Google Meet och Slack i Chrome.
-- **Inspelningen tappas inte.** Ljudet sparas på disken var femte sekund under mötet.
+- **Inspelningen tappas inte.** Ljudet sparas på disken var femte sekund under mötet. Svarar inte Akasha Meet en stund sparas ljudet i webbläsarfliken under tiden.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/bilder/akasha-meet-mork.png">
@@ -86,6 +86,7 @@ Google Meet, en Slack-huddle i Slack i Chrome (`app.slack.com`), Teams eller Zoo
   vald och att den inte är avstängd.
 - Medan texten tas fram somnar datorn inte av sig själv. Stänger du locket pausas
   transkriberingen och fortsätter när du öppnar det igen.
+- Svarar inte Akasha Meet under en inspelning fortsätter inspelningen, och ljudet sparas i fliken tills Akasha Meet är igång igen. Stäng inte fliken då. Trycker du Stoppa medan ljud väntar, startar transkriberingen när allt har kommit fram. Vill du inte vänta, tryck Spara ljudet som fil och sedan Klar, och ladda upp filen senare med Ladda upp ljudfil.
 - Om fliken stängs eller datorn startas om ligger inspelningen kvar i listan som "Spelar in".
   Tryck **Avsluta och transkribera**, så transkriberas det som hann sparas.
 - Kontrollera texten mot ljudet innan du använder den. Taligenkänning gör fel, särskilt på namn,
@@ -187,6 +188,7 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 | Texten är inte uppdelad per talare | Tryck **Transkribera igen** i listan och välj fler än 1 under "Hur många pratar?" |
 | Fel antal talare, eller "bara 1 röst gick att skilja åt" | Tryck **Transkribera igen** i listan och välj rätt antal. Ange inte fler än som pratar; är du osäker, välj **Vet inte – gissa**. Rösterna skiljs lättare åt om ni sitter på ungefär samma avstånd från datorn. Är ni många i rummet hjälper en konferensmikrofon mitt på bordet |
 | Du vill visa någon hur det gick, utan att dela texten | `bash halsokoll/sammanfatta.sh` skriver ut tider, talare och tecken på fel, men inga ord ur mötet. `bash halsokoll/talardiagnos.sh` visar varför det blev så många talare, och `bash halsokoll/jamfor.sh <id A> <id B>` jämför två transkriberingar av samma möte. Se [docs/TEKNIK.md](docs/TEKNIK.md) |
+| "Ljudet kan inte sparas på datorn" | Tryck Spara ljudet som fil och sedan Klar. Ladda upp filen med Ladda upp ljudfil och radera den ofullständiga inspelningen i listan. |
 | "Inget ljud hörs" under inspelningen | Kontrollera att rätt mikrofon är vald och inte avstängd: i webbläsarens inställningar och i Systeminställningar → Ljud → Ingång |
 | Transkriberingen misslyckades | Öppna inspelningen och tryck **Försök igen** |
 | Mötesljudet saknas i ett digitalt möte | Kryssade du i **Dela även flikljud**? Det går bara i Chrome. Gör en ny inspelning |

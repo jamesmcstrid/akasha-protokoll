@@ -71,6 +71,7 @@ Sidan i korthet:
   webbläsare som inte kan dela flikljud (allt utom Chrome och andra Chromium-webbläsare). Under inspelningen visar en
   nivåmätare ljudet, och en varning visas om nivån har legat under −80 dBFS i tio sekunder.
   Flikens titel visar ● och tiden.
+- **Ljud som väntar:** Under inspelningen behåller sidan alla delar i minnet (cirka 27 MB per timme med mikrofonen och 40 MB digitalt, uppmätt med låtsasmikrofon) och skickar dem i ordning. Svarar inte tjänsten försöker sidan igen utan slut, och efter Stoppa startar transkriberingen när allt har kommit fram. Vid ett serverfel slutar sidan skicka och erbjuder "Spara ljudet som fil". Inspelningen släpps först när allt är sparat eller filen är sparad.
 - **Listan:** byggs om varannan sekund medan något pågår. "Transkribera igen" öppnar en dialog
   som fylls i från inspelningens egna inställningar, inte från formuläret högst upp.
 - **Visningen** i tre steg: 1 Vem är vem? (namnen sparas när fältet lämnas eller med Enter;
@@ -338,6 +339,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 - första start på en riktig Mac och på Windows, och hämtning på ett företagsnät med proxy;
 - ett riktigt Google Meet-möte eller en Slack-huddle, där Chromes flikväljare och
   "Dela även flikljud" används på riktigt;
+- inspelning med avbrott och räddningsfil i Safari och Edge (provat i Chromium);
 - inspelning via webbsidan i Safari (Safari spelar in i ett annat format än Chrome);
 - fler långa möten på svenska, och möten där flera pratar i mun på varandra (bara provat i
   AMI-mötena, på engelska).
