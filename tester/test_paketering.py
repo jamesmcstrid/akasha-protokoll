@@ -478,6 +478,7 @@ class WindowsFlodet(unittest.TestCase):
             self.fail("ingen uppladdning av artefakten loggar")
         samla = next(s for s in d["jobs"]["bygg"]["steps"] if s.get("name") == "Samla loggar")
         self.assertEqual(samla["if"], "${{ always() }}")
+        self.assertIn("find \"$HEM\" -name 'akasha-protokoll.log'", samla["run"])  # loggen letas upp, antas inte ligga pa en plats
         for fil in ("pyinstaller.log", "warn-*.txt", "program-utskrift.log", "program-utskrift-andra.log", "programlogg"):
             self.assertIn(fil, samla["run"])
 

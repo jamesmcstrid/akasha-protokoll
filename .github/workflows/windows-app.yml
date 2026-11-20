@@ -170,7 +170,11 @@ jobs:
         run: |
           mkdir -p build/loggar
           HEM="$RUNNER_TEMP/Åsa Ölund"
-          cp -R "$HEM/AppData/Local/Akasha Protokoll/logg" build/loggar/programlogg 2>/dev/null || true
+          # Loggfilen letas upp (programkatalogen kan heta Akasha Meet eller Akasha Protokoll beroende pa hur langt kontrollen kom).
+          N=0
+          while IFS= read -r f; do
+            N=$((N + 1)); cp "$f" "build/loggar/programlogg-$N.log" 2>/dev/null || true
+          done < <(find "$HEM" -name 'akasha-protokoll.log' 2>/dev/null)
           cp "$HEM/program-utskrift.log" "$HEM/program-utskrift-andra.log" build/loggar/ 2>/dev/null || true
           cp build/app/pyinstaller.log build/app/*.txt build/loggar/ 2>/dev/null || true
           cp build/app/pyi/*/warn-*.txt build/loggar/ 2>/dev/null || true
@@ -185,7 +189,9 @@ jobs:
           # Det viktigaste skrivs ocksa ut har (de sista 300 raderna var), sa att det gar att lasa i jobbloggen utan att
           # ladda ned artefakten.
           visa() { echo; echo "=============== $1 ==============="; if [ -f "$2" ]; then tail -n 300 "$2"; else echo "(saknas: $2)"; fi; }
-          visa "programmets loggfil" "$HEM/AppData/Local/Akasha Protokoll/logg/akasha-protokoll.log"
+          echo; echo "=============== akasha-protokoll.log under $HEM ==============="
+          find "$HEM" -name 'akasha-protokoll.log' 2>/dev/null | while IFS= read -r f; do visa "loggfil: $f" "$f"; done
+          [ "$(find "$HEM" -name 'akasha-protokoll.log' 2>/dev/null | wc -l)" -gt 0 ] || { echo "(ingen akasha-protokoll.log hittades; kataloger under hemkatalogen:)"; find "$HEM" -maxdepth 5 -type d 2>/dev/null | head -n 60; }
           visa "program-utskrift.log" "$HEM/program-utskrift.log"
           visa "program-utskrift-andra.log" "$HEM/program-utskrift-andra.log"
           echo; echo "=============== pe-importer.txt: filer med FEL eller SAKNAS, och whisper-cli.exe, whisper.dll, sherpa och onnxruntime ==============="

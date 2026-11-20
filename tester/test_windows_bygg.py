@@ -554,6 +554,19 @@ class KontrolleraPerPlattform(unittest.TestCase):
         self.assertEqual(k.fel_lista[-1], "startar inte")
         skriv.assert_any_call("--- 3 FEL i kontrollen ---", flush=True)
 
+    def test_windows_lagger_inte_den_gamla_programkatalogen_och_tal_att_loggen_saknas(self):
+        text = open(os.path.join(PAKETERING, "kontrollera.py"), encoding="utf-8").read()
+        # Windows: bara inspelningsmappen flyttas, med en INFO-rad om varfor; Mac och Linux oforandrade
+        self.assertIn("if not WIN:\n        flyttpar.append((gammal_program", text)
+        self.assertIn("if not WIN:\n        kontrolleras.append((gammal_program", text)
+        self.assertIn("kan inte byta namn medan", text)
+        self.assertIn("ligger i programkatalogen", text)
+        # loggfilen far saknas: ingen open() utan isfile i steg 9, 9b och slut()
+        for rad in text.splitlines():
+            if "open(logg" in rad:
+                self.assertTrue("os.path.isfile(logg)" in rad or "if sokvag" in rad or "with open(logg" in rad, rad)
+        self.assertIn('read() if os.path.isfile(logg) else ""', text)
+
     def test_flaggan_finns_och_flodet_anger_den_inte_for_mac(self):
         text = open(os.path.join(PAKETERING, "kontrollera.py"), encoding="utf-8").read()
         self.assertIn('"--fortsatt-efter-fel"', text)

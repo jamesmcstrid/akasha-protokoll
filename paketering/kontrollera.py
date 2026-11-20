@@ -203,11 +203,23 @@ def main():
     # med en tom installningsfil. Programmet ska flytta dem till de nya namnen vid start (plattform.py).
     gammal_data = os.path.join(hem, "AkashaMeet")
     gammal_program = os.path.join(hem, *GAMMAL_PROGRAMKATALOG)
-    for mapp, fil, innehall in ((gammal_data, "flyttprov.txt", FLYTTPROV), (gammal_program, "installningar.env", "")):
+    # Windows: bara inspelningsmappen. Loggfilen ligger i programkatalogen dar, och stall_in_loggning() oppnar den fore
+    # flytten, och en katalog med en oppen fil kan inte byta namn pa Windows. Ingen Windows-installation har heller haft
+    # det gamla namnet, sa den flytten behovs inte dar.
+    flyttpar = [(gammal_data, "flyttprov.txt", FLYTTPROV)]
+    if not WIN:
+        flyttpar.append((gammal_program, "installningar.env", ""))
+    for mapp, fil, innehall in flyttpar:
         os.makedirs(mapp, exist_ok=True)
         with open(os.path.join(mapp, fil), "w", encoding="utf-8") as f:
             f.write(innehall)
-    ok(f"gamla mappar lagda: {gammal_data} (flyttprov.txt) och {gammal_program} (installningar.env)")
+    if WIN:
+        ok(f"gammal mapp lagd: {gammal_data} (flyttprov.txt)")
+        print(f"INFO: den gamla programkatalogen ({gammal_program}) laggs inte och flytten av den provas inte pa Windows: "
+              "loggfilen ligger i programkatalogen, sa en katalog med det gamla namnet kan inte byta namn medan "
+              "programmet kor, och ingen Windows-installation har haft det gamla namnet", flush=True)
+    else:
+        ok(f"gamla mappar lagda: {gammal_data} (flyttprov.txt) och {gammal_program} (installningar.env)")
 
     # 2. Starta programmet med tom hemkatalog. Inga MODELLKATALOG eller DATAKATALOG: standardvardena provas.
     miljo = programmiljo(hem)
@@ -252,8 +264,10 @@ def main():
                 f"datakatalog är {h.get('datakatalog')}", f"datakatalog är {h.get('datakatalog')}, väntade {forvantad}")
     # Flytten: det som lades under de gamla namnen ska nu ligga under de nya, och de gamla ska vara borta.
     ny_program = os.path.join(hem, *NY_PROGRAMKATALOG)
-    for gammal, ny, fil, innehall in ((gammal_data, forvantad, "flyttprov.txt", FLYTTPROV),
-                                      (gammal_program, ny_program, "installningar.env", "")):
+    kontrolleras = [(gammal_data, forvantad, "flyttprov.txt", FLYTTPROV)]
+    if not WIN:
+        kontrolleras.append((gammal_program, ny_program, "installningar.env", ""))
+    for gammal, ny, fil, innehall in kontrolleras:
         sokvag = os.path.join(ny, fil)
         text = open(sokvag, encoding="utf-8").read() if os.path.isfile(sokvag) else None
         kontrollera(text == innehall and not os.path.exists(gammal),
@@ -355,7 +369,7 @@ def main():
         r = hamta("/health")
         kontrollera(r.status_code == 200, "den första kopian svarar fortfarande på /health efter den andra starten",
                     f"/health gav {r.status_code} efter den andra starten")
-        text = open(logg, encoding="utf-8", errors="replace").read()
+        text = open(logg, encoding="utf-8", errors="replace").read() if os.path.isfile(logg) else ""
         kontrollera("win: kopia finns redan" in text, "loggen har raden 'win: kopia finns redan'",
                     "loggen saknar raden 'win: kopia finns redan' (den andra kopian kom inte till mutexen)")
 
