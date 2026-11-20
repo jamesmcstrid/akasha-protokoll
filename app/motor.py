@@ -182,10 +182,10 @@ def grafik_fil():
 
 
 def grafik_aktiv(system=None):
-    """Sant om whisper-cli ska fa anvanda grafikkretsen: GRAFIK=pa, filen grafik-fungerade-inte saknas, och inte Mac
-    (Mac har Metal och styrs inte av GRAFIK)."""
+    """Sant om whisper-cli ska fa anvanda grafikkretsen: bara Windows, med GRAFIK=pa och utan filen
+    grafik-fungerade-inte. Mac (Metal) och Linux styrs inte av GRAFIK."""
     system = system or plattform.system()
-    return system != "Darwin" and GRAFIK == "pa" and not os.path.exists(grafik_fil())
+    return system == "Windows" and GRAFIK == "pa" and not os.path.exists(grafik_fil())
 
 
 def modellnamn():
@@ -314,8 +314,8 @@ def cli_kommando(cli, katalog_rel, per_ord, prompt, tradar, system, grafik=False
     for byte, sa att prompten kommer fram som UTF-8; argv ar da bara [cli, "@..."] och svarsfil_text
     ar filens innehall. Pa Mac och Linux skickas argumenten som vanligt och svarsfil_text ar None.
 
-    grafik: sant om whisper-cli far anvanda grafikkretsen (grafik_aktiv()). Annars skickas -ng, pa alla system
-    utom Mac (Mac har Metal och fortsatter som forut)."""
+    grafik: sant om whisper-cli far anvanda grafikkretsen (grafik_aktiv()). Annars skickas -ng, men bara pa
+    Windows: Mac (Metal) och Linux (till exempel ett eget bygge med CUDA) fortsatter som forut, utan -ng."""
     modell = os.path.relpath(GGML_MODELL, modeller.MODELLKATALOG)
     cmd = [
         cli,
@@ -334,7 +334,7 @@ def cli_kommando(cli, katalog_rel, per_ord, prompt, tradar, system, grafik=False
         tradar = standard_tradar(system, os.cpu_count())
     if tradar:
         cmd += ["-t", str(tradar)]
-    if not grafik and system != "Darwin":
+    if not grafik and system == "Windows":
         cmd.append("-ng")
     if per_ord:
         # Ett segment per ord. whisper.cpp:s vanliga ordtider ar ungefarliga (ett ord kunde
@@ -402,7 +402,7 @@ def _skriv_grafik_fil(orsak, sista_rad):
 
 
 def _whispercpp(samples, per_ord, prompt, framsteg):
-    """whisper-cli. Med grafiken pa: ett fel, eller inga ord ur ett ljud over 5 s, ger ett nytt forsok med -ng
+    """whisper-cli. Med grafiken pa (bara Windows): ett fel, eller inga ord ur ett ljud over 5 s, ger ett nytt forsok med -ng
     (och filen grafik-fungerade-inte, sa att nasta korning gar direkt pa processorn). Avbrott ger aldrig det."""
     grafik = grafik_aktiv()
     if not grafik:

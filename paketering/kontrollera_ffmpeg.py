@@ -54,6 +54,11 @@ def poster_ur_hjul(sokvag):
     return [Post(i.filename, (lambda n=i.filename: z.read(n))) for i in z.infolist() if not i.filename.endswith("/")]
 
 
+def _las_fil(sokvag):
+    with open(sokvag, "rb") as f:
+        return f.read()
+
+
 def poster_ur_katalog(rot):
     ut = []
     for mapp, _k, filer in os.walk(rot):
@@ -61,7 +66,7 @@ def poster_ur_katalog(rot):
             full = os.path.join(mapp, f)
             if os.path.islink(full):
                 continue  # PyInstaller lagger lankar pa toppnivan till filerna i av.libs
-            ut.append(Post(os.path.relpath(full, rot).replace(os.sep, "/"), (lambda p=full: open(p, "rb").read())))
+            ut.append(Post(os.path.relpath(full, rot).replace(os.sep, "/"), (lambda p=full: _las_fil(p))))
     return ut
 
 
@@ -102,13 +107,20 @@ def bedom_importer(importer):
     return fel
 
 
+class IckePE(Exception):
+    """Filen ar ingen giltig PE-fil (Windows-DLL)."""
+
+
 def importer_ur(data):
     """Importerna (importtabell och fordrojda) ur en PE-fil med pefile, eller None om pefile saknas."""
     try:
         import pefile
     except ImportError:
         return None
-    pe = pefile.PE(data=data, fast_load=True)
+    try:
+        pe = pefile.PE(data=data, fast_load=True)
+    except pefile.PEFormatError as e:
+        raise IckePE(str(e))
     try:
         pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_IMPORT"],
                                                pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT"]])
@@ -179,7 +191,11 @@ def kontrollera(poster, komponenter, res):
     if dllar:
         kollade = 0
         for p in dllar:
-            importer = importer_ur(p.las())
+            try:
+                importer = importer_ur(p.las())
+            except IckePE as e:
+                res.fel(f"{p.sokvag}: inte en giltig Windows-DLL ({e})")
+                continue
             if importer is None:
                 res.info("importkontrollen hoppades över: pefile saknas")
                 break

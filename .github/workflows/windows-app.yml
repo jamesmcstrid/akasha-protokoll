@@ -91,22 +91,49 @@ jobs:
         if: steps.cli.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
-          # Tyst installation av bara det som behovs for att bygga (core: headers, vulkan-1.lib, glslc). Ingen tredjepartsaction.
+          # Tyst installation utan tredjepartsaction. Adressmonstret ar inte belagt (LunarG gick inte att na nar steget
+          # skrevs): prova tre kanda i tur och ordning och ta den forsta som ger en exe-fil over 50 MB.
           FIL="$RUNNER_TEMP/vulkansdk-installation.exe"
-          curl -fsSL --retry 3 -o "$FIL" "https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/windows/vulkansdk-windows-X64-${VULKAN_SDK_VERSION}.exe"
+          BAS="https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/windows"
+          ANVAND=""
+          for NAMN in "vulkansdk-windows-X64-${VULKAN_SDK_VERSION}.exe" "VulkanSDK-${VULKAN_SDK_VERSION}-Installer.exe" "vulkan_sdk.exe"; do
+            rm -f "$FIL"
+            if curl -fSL --retry 3 -o "$FIL" "$BAS/$NAMN"; then
+              STORLEK="$(wc -c < "$FIL" | tr -d ' ')"
+              if [ "$(head -c 2 "$FIL")" = "MZ" ] && [ "$STORLEK" -gt 52428800 ]; then ANVAND="$BAS/$NAMN"; break; fi
+              echo "Hoppar over $BAS/$NAMN: borjar inte med MZ eller ar inte over 50 MB ($STORLEK byte)"
+            else
+              echo "Kunde inte hamta $BAS/$NAMN"
+            fi
+          done
+          [ -n "$ANVAND" ] || { echo "FEL: ingen av adresserna gav en Vulkan SDK-installationsfil" >&2; exit 1; }
           SHA="$(sha256sum "$FIL" | cut -d' ' -f1)"
-          echo "sha256 for vulkansdk-windows-X64-${VULKAN_SDK_VERSION}.exe: $SHA"
+          echo "Adress som anvandes: $ANVAND"
+          echo "Storlek: $STORLEK byte"
+          echo "sha256: $SHA"
           if [ -n "$VULKAN_SDK_SHA256" ]; then
             [ "$SHA" = "$VULKAN_SDK_SHA256" ] || { echo "FEL: sha256 stammer inte, vantade $VULKAN_SDK_SHA256" >&2; exit 1; }
             echo "OK: sha256 stammer med den laste"
           else
-            echo "OBS: ingen last sha256 (VULKAN_SDK_SHA256 ar tom): summan ovan ar inte kontrollerad mot LunarG"
+            echo "OBS: sha256 ej last (VULKAN_SDK_SHA256 ar tom): summan ovan ar inte kontrollerad mot LunarG"
           fi
-          "$FIL" --accept-licenses --default-answer --confirm-command install com.lunarg.vulkan.core
-          SDK="C:\\VulkanSDK\\${VULKAN_SDK_VERSION}"
-          [ -f "/c/VulkanSDK/${VULKAN_SDK_VERSION}/Bin/glslc.exe" ] || { echo "FEL: glslc.exe saknas efter installationen" >&2; ls -R /c/VulkanSDK | head -50; exit 1; }
-          echo "VULKAN_SDK=$SDK" >> "$GITHUB_ENV"
-          echo "C:\\VulkanSDK\\${VULKAN_SDK_VERSION}\\Bin" >> "$GITHUB_PATH"
+          WINROT="C:\\VulkanSDK\\${VULKAN_SDK_VERSION}"
+          GITROT="/c/VulkanSDK/${VULKAN_SDK_VERSION}"
+          if ! "$FIL" --root "$WINROT" --accept-licenses --default-answer --confirm-command install; then
+            echo "FEL: installationen misslyckades. Installationsfilens --help:" >&2
+            "$FIL" --help >&2 || true
+            exit 1
+          fi
+          SAKNAS=""
+          for F in Bin/glslc.exe Include/vulkan/vulkan.h Lib/vulkan-1.lib; do [ -f "$GITROT/$F" ] || SAKNAS="$SAKNAS $F"; done
+          if [ -n "$SAKNAS" ]; then
+            echo "FEL: saknas efter installationen:$SAKNAS. Det som finns i $WINROT:" >&2
+            find "$GITROT" -maxdepth 3 | head -100 >&2
+            exit 1
+          fi
+          echo "OK: glslc.exe, vulkan.h och vulkan-1.lib finns"
+          echo "VULKAN_SDK=$WINROT" >> "$GITHUB_ENV"
+          echo "$WINROT\\Bin" >> "$GITHUB_PATH"
       - name: Bygg whisper-cli
         id: bygg_cli
         if: steps.cli.outputs.cache-hit != 'true'

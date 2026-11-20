@@ -355,8 +355,8 @@ class Kontroll:
         gammal = (motor.GRAFIK, motor.grafik_fil)
         motor.GRAFIK, motor.grafik_fil = "pa", lambda: fil
         try:
-            self.res.kontrollera(motor.grafik_aktiv(plattform.system()) == (plattform.system() != "Darwin"),
-                                 "GRAFIK=pa ger grafik_aktiv() (utom på Mac)", "GRAFIK=pa gav inte grafik_aktiv()")
+            self.res.kontrollera(motor.grafik_aktiv(plattform.system()) == (plattform.system() == "Windows"),
+                                 "GRAFIK=pa ger grafik_aktiv() (bara på Windows)", "GRAFIK=pa gav inte grafik_aktiv()")
             text, _, tider = motor._whispercpp(self.samples, True, PROMPT, None)
         except Exception as e:
             self.res.fel(f"transkribering med GRAFIK=pa kastade {type(e).__name__}: {e}")

@@ -259,24 +259,23 @@ class TestCliKommando(unittest.TestCase):
             "-oj", "-of", os.path.join(self.REL, "ut"), "--prompt", "Åsa", "-t", "4",
             "-ml", "1", "-sow", "--dtw", "medium", "-nfa", "-ojf"])
 
-    def test_linux_som_mac_utom_ng(self):
-        mac = motor.cli_kommando("/x/c", self.REL, False, "x", 0, "Darwin")
-        linux = motor.cli_kommando("/x/c", self.REL, False, "x", 0, "Linux")
-        self.assertNotIn("-ng", mac[0])
-        self.assertEqual([a for a in linux[0] if a != "-ng"], mac[0])
-        self.assertIn("-ng", linux[0])
+    def test_linux_som_mac(self):
+        self.assertEqual(motor.cli_kommando("/x/c", self.REL, False, "x", 0, "Linux"),
+                         motor.cli_kommando("/x/c", self.REL, False, "x", 0, "Darwin"))
 
-    def test_ng_pa_windows_och_linux_utan_grafik_men_aldrig_pa_mac(self):
+    def test_ng_bara_pa_windows_utan_grafik(self):
         for system in ("Windows", "Linux", "Darwin"):
             for grafik in (False, True):
                 with self.subTest(system=system, grafik=grafik):
                     cmd, svarsfil = motor.cli_kommando("/x/c", self.REL, True, "x", 2, system, grafik)
                     args = cmd if svarsfil is None else svarsfil.splitlines()
-                    self.assertEqual("-ng" in args, system != "Darwin" and not grafik)
+                    self.assertEqual("-ng" in args, system == "Windows" and not grafik)
 
-    def test_ng_ar_standard_utan_grafik_argumentet(self):
+    def test_ng_ar_standard_pa_windows_utan_grafik_argumentet(self):
+        _, svarsfil = motor.cli_kommando("/x/c", self.REL, False, "", 2, "Windows")
+        self.assertIn("-ng\n", svarsfil)
         cmd, _ = motor.cli_kommando("/x/c", self.REL, False, "", 2, "Linux")
-        self.assertIn("-ng", cmd)
+        self.assertNotIn("-ng", cmd)
 
     def test_sokvagarna_ar_relativa_och_har_inte_modellkatalogen(self):
         for system in ("Darwin", "Windows"):
@@ -292,7 +291,7 @@ class TestCliKommando(unittest.TestCase):
         cmd, svarsfil = motor.cli_kommando("C:\\p\\whisper-cli.exe", self.REL, True, "Åsa Öberg", 4, "Windows")
         self.assertEqual(cmd, ["C:\\p\\whisper-cli.exe", "@" + os.path.join(self.REL, "args.txt")])
         mac, _ = motor.cli_kommando("C:\\p\\whisper-cli.exe", self.REL, True, "Åsa Öberg", 4, "Darwin")
-        self.assertEqual([a for a in svarsfil.splitlines() if a != "-ng"], mac[1:])  # samma argument, en rad var
+        self.assertEqual([a for a in svarsfil.splitlines() if a != "-ng"], mac[1:])  # samma argument, en rad var (Windows har -ng)
         self.assertTrue(svarsfil.endswith("\n"))
         self.assertNotIn("\r", svarsfil)
         self.assertIn("--prompt\nÅsa Öberg\n", svarsfil)
@@ -931,9 +930,11 @@ class TestGrafikAterfall(unittest.TestCase):
         self.assertEqual(len(falsk.kommandon), 1)
         self.assertFalse(os.path.exists(self.fil))
 
-    def test_mac_styrs_inte_av_grafik(self):
+    def test_mac_och_linux_styrs_inte_av_grafik(self):
+        for system in ("Darwin", "Linux"):
+            with mock.patch.object(plattform, "system", lambda: system):
+                self.assertFalse(motor.grafik_aktiv())
         with mock.patch.object(plattform, "system", lambda: "Darwin"):
-            self.assertFalse(motor.grafik_aktiv())
             self.assertEqual(motor.modellnamn().endswith("Metal)"), motor.AKTIV == "whispercpp")
 
     def test_modellnamn_pa_windows(self):

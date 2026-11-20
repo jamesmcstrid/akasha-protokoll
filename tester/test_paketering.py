@@ -872,8 +872,15 @@ class KontrolleraFfmpeg(unittest.TestCase):
             with self.subTest(suffix=suffix):
                 shutil.rmtree(self.katalog)
                 os.makedirs(self.katalog)
-                res = self.kor(self.bygg(mapp, suffix, prefix))
+                # De pahittade .dll-filerna ar inga PE-filer: importkontrollen patchas, sa att utfallet inte beror pa pefile
+                with mock.patch.object(self.k, "importer_ur", lambda data: []):
+                    res = self.kor(self.bygg(mapp, suffix, prefix))
                 self.assertEqual(res.fel_rader, [], res.fel_rader)
+
+    @unittest.skipUnless(importlib.util.find_spec("pefile"), "pefile saknas")
+    def test_dll_som_inte_ar_pe_ger_fel_och_inte_undantag(self):
+        res = self.kor(self.bygg("av.libs", ".dll", ""))
+        self.assertTrue(any("inte en giltig Windows-DLL" in f and "avcodec" in f for f in res.fel_rader), res.fel_rader)
 
     def test_gpl_strang_ger_fel(self):
         res = self.kor(self.bygg(byt={"avcodec": self.lib("avcodec", "GPL version 3 or later")}))
