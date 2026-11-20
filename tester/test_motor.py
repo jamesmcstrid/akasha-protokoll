@@ -292,9 +292,36 @@ class TestCliKommando(unittest.TestCase):
         self.assertEqual(svarsfil.count("\n"), len(rader))
 
     def test_windows_utan_prompt_och_tradar(self):
-        _, svarsfil = motor.cli_kommando("c", self.REL, False, "", 0, "Windows")
+        with mock.patch.object(motor.os, "cpu_count", lambda: None):
+            _, svarsfil = motor.cli_kommando("c", self.REL, False, "", 0, "Windows")
         self.assertNotIn("--prompt", svarsfil)
         self.assertNotIn("-t\n", svarsfil)
+
+    def _tradar_i(self, system, tradar, logiska):
+        with mock.patch.object(motor.os, "cpu_count", lambda: logiska):
+            cmd, svarsfil = motor.cli_kommando("c", self.REL, False, "", tradar, system)
+        args = cmd if svarsfil is None else svarsfil.splitlines()
+        return args[args.index("-t") + 1] if "-t" in args else None
+
+    def test_windows_standardtradar_efter_logiska_karnor(self):
+        for logiska, vantat in ((12, "8"), (16, "8"), (10, "6"), (8, "4"), (4, "4"), (2, "2"), (1, "1"), (32, "8")):
+            with self.subTest(logiska=logiska):
+                self.assertEqual(self._tradar_i("Windows", 0, logiska), vantat)
+                self.assertEqual(motor.standard_tradar("Windows", logiska), int(vantat))
+
+    def test_mac_och_linux_far_inget_t_nar_cpu_tradar_ar_0(self):
+        for system in ("Darwin", "Linux"):
+            self.assertIsNone(self._tradar_i(system, 0, 12))
+            self.assertEqual(motor.standard_tradar(system, 12), 0)
+
+    def test_satt_cpu_tradar_vinner(self):
+        self.assertEqual(self._tradar_i("Windows", 6, 12), "6")
+        self.assertEqual(self._tradar_i("Windows", 6, None), "6")
+        self.assertEqual(self._tradar_i("Linux", 6, 12), "6")
+
+    def test_windows_utan_cpu_count_far_inget_t(self):
+        self.assertIsNone(self._tradar_i("Windows", 0, None))
+        self.assertEqual(motor.standard_tradar("Windows", None), 0)
 
 
 FALSK_CLI = textwrap.dedent("""

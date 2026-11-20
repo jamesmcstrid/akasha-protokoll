@@ -277,6 +277,15 @@ def stoppa():
 TMP_PREFIX = "tmp-akasha-protokoll-"
 
 
+def standard_tradar(system, logiska):
+    """Antal trader (-t) nar CPU_TRADAR ar 0: 0 = skicka inget -t (motorn valjer sjalv).
+    Pa Windows valjer whisper-cli annars min(4, logiska karnor), vilket ar for lite pa processorer med
+    manga sparsamma karnor (matt: 4 trader 318 s, 8 trader 272 s). Mac och Linux: oforandrat."""
+    if system != "Windows" or not logiska:
+        return 0
+    return min(logiska, min(8, max(4, logiska - 4)))
+
+
 def cli_kommando(cli, katalog_rel, per_ord, prompt, tradar, system):
     """Kommandot for whisper-cli -> (argv, svarsfil_text eller None).
 
@@ -299,6 +308,8 @@ def cli_kommando(cli, katalog_rel, per_ord, prompt, tradar, system):
     ]
     if prompt:
         cmd += ["--prompt", prompt]
+    if not tradar:
+        tradar = standard_tradar(system, os.cpu_count())
     if tradar:
         cmd += ["-t", str(tradar)]
     if per_ord:
