@@ -14,7 +14,7 @@ Akasha Meet är ett program som du öppnar som vilket annat som helst. Själva s
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/bilder/akasha-meet-mork.png">
-  <img src="docs/bilder/akasha-meet-ljus.png" alt="Akasha Meet i webbläsaren. Överst formuläret för en ny transkribering. Under det ett transkriberat möte i tre steg: 1 Vem är vem? med namnen Anna och Jonas, 2 Kontrollera mot ljudet med en förklaring av markeringarna, ljudspelaren och replikerna, där en replik är markerad som osäker talare och två ord är understrukna som osäkra, och 3 Använd texten med knappar för att kopiera och ladda ner." width="760">
+  <img src="docs/bilder/akasha-meet-ljus.png" alt="Akasha Meet i webbläsaren. Överst ett grönt fält med rubriken Mötet blir text. Inget lämnar datorn. och en elefant. Till vänster knappen Ny transkribering och listan med inspelningar, där en transkriberas just nu. Till höger ett transkriberat möte i tre steg: 1 Vem är vem? med namnen Anna och Jonas, 2 Kontrollera mot ljudet med en förklaring av markeringarna, ljudspelaren och replikerna, där en replik är markerad som osäker talare och två ord är understrukna som osäkra, och 3 Använd texten med knappar för att kopiera och ladda ner." width="760">
 </picture>
 
 <sub>Exemplet är påhittat.</sub>
