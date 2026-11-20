@@ -140,6 +140,31 @@ def programmiljo(hem):
     return miljo
 
 
+def prova_format(katalog):
+    """Skickar varje fil i katalogen (testljud/format/) till POST /transcribe i det korande programmet.
+    -> [(filnamn, statuskod, text)]. Motorn saknas eller har inga riktiga modeller i provet, sa 502 (eller 500) ar vantat: det
+    betyder att avkodningen lyckades. Det som inte far handa ar 400 med "ljudet kunde inte lasas"."""
+    ut = []
+    for namn in sorted(os.listdir(katalog)):
+        with open(os.path.join(katalog, namn), "rb") as f:
+            r = requests.post(f"http://127.0.0.1:{args.port}/transcribe", timeout=120,
+                              headers={**HEADERS, "Origin": f"http://127.0.0.1:{args.port}"},
+                              files={"audio": (namn, f, "application/octet-stream")})
+        ut.append((namn, r.status_code, r.text))
+    return ut
+
+
+def kontrollera_format(katalog):
+    """Avkodningen av varje format i det paketerade programmet (sa att ett bibliotek som saknar en avkodare syns har)."""
+    svar = prova_format(katalog)
+    kontrollera(len(svar) > 0, f"{len(svar)} ljudformat i {katalog} skickades till /transcribe",
+                f"inga filer i {katalog}")
+    for namn, status, text in svar:
+        kontrollera(not (status == 400 and "ljudet kunde inte l" in text.lower()),
+                    f"{namn}: avkodningen lyckades (svar {status})",
+                    f"{namn}: ljudet kunde inte läsas av det paketerade programmet (svar {status}: {text.strip()[:200]})")
+
+
 def tasklist(avbildning):
     """Namn pa processer med den avbildningen (tasklist; MSYS omskriver inte argument som startas fran Python)."""
     ut = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {avbildning}", "/NH", "/FO", "CSV"], capture_output=True,
@@ -343,6 +368,9 @@ def main():
                     f"jobbet gav status {i['status']} och fel {jobbfel!r}, väntade felet {args.vantat_jobbfel!r}")
         kontrollera("Ljudet kunde inte läsas" not in jobbfel, "avkodningen av ljudet lyckades",
                     f"avkodningen misslyckades: {jobbfel}")
+
+    # 8b. Varje ljudformat genom det paketerade programmet: avkodningen ska lyckas (motorn far gerna fela efterat).
+    kontrollera_format(os.path.join(ROT, "testljud", "format"))
 
     # 9. Loggfilen.
     rad = f"Akasha Protokoll: http://127.0.0.1:{args.port}"

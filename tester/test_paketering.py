@@ -1029,5 +1029,30 @@ class PyavHjulet(unittest.TestCase):
                 self.assertIsNone(re.search("[åäöÅÄÖ]", k), k)
 
 
+class ProvaLinuxMedEgetFfmpeg(unittest.TestCase):
+    def test_prova_linux_bygger_och_anvander_det_egna_hjulet_och_aldrig_pypi_hjulet(self):
+        text = las("paketering", "prova-linux.sh")
+        self.assertIn("bygg-ffmpeg.sh", text)
+        self.assertIn("bygg-pyav.sh", text)
+        self.assertIn("grep -v -E '^(faster-whisper|av)=='", text)  # av ur app/requirements.txt: PyPI-hjulet ar GPL
+        self.assertIn('pip" install -q --no-deps --no-index --force-reinstall "$HJUL"', text)
+        self.assertEqual(len(re.findall(r'pip" install', text)), 2)  # kraven (utan av) och hjulet, och bara de
+        self.assertNotRegex(text, r'pip" install[^\n]*\bav==')
+        # kontrollen pa hjulet och pa dist/
+        self.assertIn('kontrollera_ffmpeg.py" --hjul "$HJUL"', text)
+        self.assertIn('kontrollera_ffmpeg.py" --katalog "$UT/dist/akasha-protokoll"', text)
+        for verktyg in ("gcc", "make", "nasm", "git"):
+            self.assertIn(verktyg, text.split("for verktyg in")[1].split(";")[0])
+        self.assertLess(text.index("kontrollera_ffmpeg.py\" --hjul"), text.index("pyinstaller"))
+        self.assertLess(text.index("pyinstaller"), text.index("kontrollera_ffmpeg.py\" --katalog"))
+        self.assertLess(text.index("kontrollera_ffmpeg.py\" --katalog"), text.index("kontrollera.py\""))
+
+    def test_kontrollera_skickar_varje_format_i_testljud_format(self):
+        text = las("paketering", "kontrollera.py")
+        self.assertIn("/transcribe", text)
+        self.assertIn('"testljud", "format"', text)
+        self.assertEqual(len(os.listdir(os.path.join(ROT, "testljud", "format"))), 12)
+
+
 if __name__ == "__main__":
     unittest.main()

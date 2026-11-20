@@ -567,6 +567,55 @@ class KontrolleraPerPlattform(unittest.TestCase):
                 self.assertTrue("os.path.isfile(logg)" in rad or "if sokvag" in rad or "with open(logg" in rad, rad)
         self.assertIn('read() if os.path.isfile(logg) else ""', text)
 
+    def test_formaten_skickas_till_transcribe_och_400_med_ljudet_kunde_inte_lasas_ger_fel(self):
+        import http.server
+        import threading
+
+        anrop = []
+
+        class Handlare(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                langd = int(self.headers.get("Content-Length", 0))
+                kropp = self.rfile.read(langd)
+                namn = kropp.split(b'filename="')[1].split(b'"')[0].decode()
+                anrop.append((self.path, namn, self.headers.get("X-Akasha-Protokoll")))
+                if namn == "mp3.mp3":
+                    status, text = 400, '{"error": "ljudet kunde inte lasas: Invalid data"}'
+                else:
+                    status, text = 502, '{"error": "whisper-cli avslutades med kod 3"}'
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(text.encode())
+
+            def log_message(self, *a):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handlare)
+        self.addCleanup(server.server_close)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        katalog = os.path.join(ROT, "testljud", "format")
+        antal = len(os.listdir(katalog))
+
+        k = ladda_kontrollera("linux")
+        k.args = mock.Mock(port=server.server_address[1])
+        with mock.patch("builtins.print"), self.assertRaises(SystemExit):  # utan flaggan: stopp vid forsta felet
+            k.kontrollera_format(katalog)
+        k = ladda_kontrollera("linux")
+        k.args = mock.Mock(port=server.server_address[1])
+        k.FORTSATT = True
+        anrop.clear()
+        with mock.patch("builtins.print"):
+            k.kontrollera_format(katalog)
+        self.assertEqual(len(anrop), antal)  # alla tolv filer skickades
+        self.assertTrue(all(a[0] == "/transcribe" and a[2] == "1" for a in anrop))
+        self.assertEqual(len(k.fel_lista), 1)  # bara mp3.mp3 (400); 502 betyder att avkodningen lyckades
+        self.assertIn("mp3.mp3", k.fel_lista[0])
+        self.assertIn("ljudet kunde inte läsas", k.fel_lista[0])
+        self.assertIn("kontrollera_format(os.path.join(ROT, \"testljud\", \"format\"))",
+                      open(os.path.join(PAKETERING, "kontrollera.py"), encoding="utf-8").read())
+
     def test_flaggan_finns_och_flodet_anger_den_inte_for_mac(self):
         text = open(os.path.join(PAKETERING, "kontrollera.py"), encoding="utf-8").read()
         self.assertIn('"--fortsatt-efter-fel"', text)
