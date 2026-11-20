@@ -1,0 +1,56 @@
+#!/bin/bash
+# Bygger whisper-cli fran kallkod (whisper.cpp fran dess officiella repo, pa en fast tagg) for Apple Silicon.
+#   bash paketering/bygg-whisper-cli.sh VERSION UTKATALOG
+# Resultat: UTKATALOG/whisper-cli. Kors i Actions (paketering/ ar inte till for anvandarens Mac).
+set -euo pipefail
+trap 'echo "FEL: bygg-whisper-cli.sh stannade pa rad $LINENO: $BASH_COMMAND" >&2' ERR
+
+VERSION="${1:?ange whisper.cpp-version (tagg), till exempel v1.9.5}"
+UT="${2:?ange en utkatalog}"
+
+if [ -e "$UT/src" ] || [ -e "$UT/bygg" ]; then
+  echo "FEL: $UT/src eller $UT/bygg finns redan. Anvand en tom utkatalog." >&2
+  exit 1
+fi
+mkdir -p "$UT"
+
+echo "== Hamtar whisper.cpp $VERSION"
+git clone --quiet --depth 1 --branch "$VERSION" https://github.com/ggml-org/whisper.cpp.git "$UT/src"
+echo "whisper.cpp $VERSION = $(git -C "$UT/src" rev-parse HEAD)"
+
+# Statiskt (BUILD_SHARED_LIBS=OFF): inga libwhisper/libggml-dylib som skulle behova ligga bredvid
+#   programmet; hos anvandaren finns inget Homebrew.
+# Metal med biblioteket inbaddat (GGML_METAL_EMBED_LIBRARY=ON): ingen .metal-fil behovs bredvid binaren.
+# GGML_NATIVE=OFF med en uttrycklig arkitektur: maskinen som bygger far inte avgora vilka processorer
+#   programmet gar pa. armv8.4-a med dotprod klarar alla Apple Silicon fran M1.
+# Okanda CMake-flaggor ger bara en varning ("Manually-specified variables were not used"): leta efter
+#   den raden i loggen nedan.
+echo "== CMake: konfigurerar"
+cmake -S "$UT/src" -B "$UT/bygg" \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+  -DBUILD_SHARED_LIBS=OFF -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON \
+  -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8.4-a+dotprod \
+  -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF -DWHISPER_CURL=OFF -DWHISPER_FFMPEG=OFF
+
+echo "== CMake: sammanfattning av valen (ur cache-filen)"
+grep -E '^(CMAKE_BUILD_TYPE|CMAKE_OSX_ARCHITECTURES|CMAKE_OSX_DEPLOYMENT_TARGET|BUILD_SHARED_LIBS|GGML_METAL|GGML_METAL_EMBED_LIBRARY|GGML_NATIVE|GGML_CPU_ARM_ARCH|GGML_BLAS|GGML_ACCELERATE|WHISPER_[A-Z_]+):' "$UT/bygg/CMakeCache.txt" || true
+
+echo "== CMake: bygger whisper-cli"
+cmake --build "$UT/bygg" --config Release -j "$(sysctl -n hw.ncpu)" --target whisper-cli
+
+BIN="$UT/bygg/bin/whisper-cli"
+if [ ! -f "$BIN" ]; then
+  echo "Hittade inte $BIN. Alla filer som heter whisper-cli under $UT/bygg:"
+  find "$UT/bygg" -name whisper-cli -type f
+  BIN="$(find "$UT/bygg" -name whisper-cli -type f | sed -n 1p)"
+  if [ -z "$BIN" ]; then
+    echo "FEL: bygget gav ingen whisper-cli" >&2
+    exit 1
+  fi
+fi
+cp "$BIN" "$UT/whisper-cli"
+chmod +x "$UT/whisper-cli"
+
+echo "== Klar"
+file "$UT/whisper-cli"
+ls -l "$UT/whisper-cli"
