@@ -252,6 +252,45 @@ class TestHallVaken(unittest.TestCase):
         process.terminate.assert_called_once()
 
 
+class TestSkyddadPlats(unittest.TestCase):
+    HEM = os.path.join(os.sep, "Users", "x")
+
+    def _j(self, *delar):
+        return os.path.join(self.HEM, *delar)
+
+    def test_skyddade_rotter(self):
+        j = self._j
+        fall = [
+            (j("Downloads", "Akasha-Meet-main"), j("Downloads")),
+            (j("Documents"), j("Documents")),
+            (j("Desktop", "x"), j("Desktop")),
+            (j("Library", "Mobile Documents", "com~apple~CloudDocs", "a"), j("Library", "Mobile Documents")),
+            (j("Library", "CloudStorage", "Dropbox", "a"), j("Library", "CloudStorage")),
+            (j("downloads", "a"), j("Downloads")),
+        ]
+        for sokvag, rot in fall:
+            with self.subTest(sokvag=sokvag):
+                self.assertEqual(plattform.skyddad_plats(sokvag, self.HEM), rot)
+
+    def test_oskyddade(self):
+        for sokvag in (self._j("akasha-meet"), self._j("Downloadsx", "a"),
+                       self._j("Library", "Logs"), self.HEM):
+            with self.subTest(sokvag=sokvag):
+                self.assertIsNone(plattform.skyddad_plats(sokvag, self.HEM))
+
+    @unittest.skipIf(os.name == "nt", "/Volumes finns inte pa Windows")
+    def test_volumes(self):
+        self.assertEqual(plattform.skyddad_plats("/Volumes/USB/a", self.HEM), "/Volumes")
+
+    def test_ror_inte_filsystemet(self):
+        def forbjuden(*a, **k):
+            raise AssertionError("filsystemet far inte nas")
+        with mock.patch("os.stat", forbjuden), mock.patch("os.lstat", forbjuden), \
+                mock.patch("os.path.realpath", forbjuden):
+            self.assertEqual(plattform.skyddad_plats(self._j("Downloads", "a"), self.HEM), self._j("Downloads"))
+            self.assertIsNone(plattform.skyddad_plats(self._j("akasha-meet"), self.HEM))
+
+
 class TestGamlaModellkataloger(Tillfallig):
     def _hem(self):
         return mock.patch.dict(os.environ, {"HOME": self.katalog, "USERPROFILE": self.katalog})
@@ -289,6 +328,37 @@ class TestGamlaModellkataloger(Tillfallig):
     def test_ingen_katalog(self):
         with self._hem():
             self.assertEqual(plattform.gamla_modellkataloger(), [])
+
+    def _plist(self, repo):
+        agenter = os.path.join(self.katalog, "Library", "LaunchAgents")
+        os.makedirs(agenter)
+        with open(os.path.join(agenter, "local.akasha-meet.plist"), "wb") as f:
+            plistlib.dump({"ProgramArguments": ["/bin/bash", os.path.join(repo, "mac", "kor.sh")]}, f)
+
+    def test_skyddad_mapp_hoppas_over_utan_att_undersokas(self):
+        repo = os.path.join(self.katalog, "Downloads", "Akasha-Meet-main")
+        os.makedirs(os.path.join(repo, "modeller"))
+        self._plist(repo)
+        skyddad = os.path.join(self.katalog, "Downloads")
+        riktig = os.path.isdir
+        anrop = []
+
+        def spion(p):
+            anrop.append(p)
+            return riktig(p)
+        with self._hem(), mock.patch("os.path.isdir", spion), \
+                self.assertLogs("akasha-meet", level="INFO") as lg:
+            resultat = plattform.gamla_modellkataloger()
+        self.assertEqual(resultat, [])
+        self.assertFalse([p for p in anrop if str(p).startswith(skyddad)], anrop)
+        self.assertTrue(any("modeller: letar inte i" in m for m in lg.output))
+
+    def test_repo_i_hemkatalogen_tas_med(self):
+        repo = os.path.join(self.katalog, "akasha-meet")
+        os.makedirs(os.path.join(repo, "modeller"))
+        self._plist(repo)
+        with self._hem():
+            self.assertEqual(plattform.gamla_modellkataloger(), [os.path.join(repo, "modeller")])
 
 
 class TestGammalTjanst(unittest.TestCase):

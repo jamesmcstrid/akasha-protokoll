@@ -184,6 +184,35 @@ def hall_vaken():
                 process.kill()
 
 
+# Mappar dar macOS inte later en bakgrundstjanst (launchd) lasa, och som ett program med fonster
+# far en fraga om. Belagt hos Apple (Mac-anvandarhandboken, "Styra atkomsten till filer och mappar"):
+# Skrivbord, Hamtade filer och Dokument. Antaget, inte last hos Apple: iCloud Drive, molnmappar
+# via File Provider och natverks-/flyttbara volymer. De tas med eftersom en bakgrundstjanst
+# inte heller ska kora fran en mapp som synkas eller kan kopplas bort.
+SKYDDADE = (  # under hemkatalogen
+    "Desktop", "Documents", "Downloads",
+    os.path.join("Library", "Mobile Documents"),   # iCloud Drive (antaget)
+    os.path.join("Library", "CloudStorage"),       # Dropbox, OneDrive, Google Drive m.fl. (antaget)
+)
+SKYDDADE_ABSOLUTA = ("/Volumes",)  # natverks- och flyttbara volymer (antaget)
+
+
+def skyddad_plats(sokvag, hem=None):
+    """Den skyddade rotmappen som sokvag ligger i eller ar, annars None.
+
+    Bara stranglogik, ingen realpath och ingen stat: en stat i en skyddad mapp kan i sig fa
+    macOS att fraga om lov. Jamforelsen ar per sokvagskomponent och skiftlagesokansligt
+    (APFS ar det som standard)."""
+    hem = hem or os.path.expanduser("~")
+    kandidat = os.path.abspath(os.path.expanduser(sokvag)).casefold()
+    roter = [os.path.join(hem, namn) for namn in SKYDDADE] + list(SKYDDADE_ABSOLUTA)
+    for rot in roter:
+        r = os.path.abspath(rot).casefold()
+        if kandidat == r or kandidat.startswith(r + os.sep):
+            return rot
+    return None
+
+
 def gamla_modellkataloger():
     """Modellkataloger fran terminalinstallationen som finns kvar, utan dubbletter."""
     kandidater = []
@@ -200,6 +229,10 @@ def gamla_modellkataloger():
     kandidater.append(os.path.expanduser(os.path.join("~", "akasha-meet", "modeller")))
     hittade, sedda = [], set()
     for katalog in kandidater:
+        rot = skyddad_plats(katalog)
+        if rot:
+            log.info("modeller: letar inte i %s (macOS skyddar %s)", katalog, rot)
+            continue
         if not os.path.isdir(katalog):
             continue
         verklig = os.path.realpath(katalog)
