@@ -131,17 +131,16 @@ använder samma modul genom API:t ovan.
 ## Programmet (Mac)
 
 Programmet är ett vanligt Mac-program, `Akasha Meet.app`, för Apple Silicon (macOS 14 eller senare).
-Det ersätter inte terminalinstallationen: båda finns kvar och använder samma kod i `app/`. Den här
-delen beskriver hur programmet är tänkt att fungera. Det är ännu inte byggt eller provat på en Mac
-(se "Inte provat än" längst ned).
+Det ersätter inte terminalinstallationen: båda finns kvar och använder samma kod i `app/`.
+Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-26`.
 
 - **Hur det byggs.** PyInstaller 6.22.3 i katalogläge samlar Python, beroendena och deras inbyggda
   bibliotek till ett `.app`-paket. En spec-fil, `paketering/akasha-meet.spec`, bygger både Mac-programmet
-  och provbygget på Linux (en vanlig katalog). `whisper-cli` ska byggas från källkod i GitHub Actions
-  från en fast tagg av whisper.cpp, statiskt och med Metal, och läggas in i paketet så att den
+  och provbygget på Linux (en vanlig katalog). `whisper-cli` byggs från källkod i GitHub Actions
+  från en fast tagg av whisper.cpp, statiskt och med Metal, och läggs in i paketet så att den
   signeras med resten. Artefakten är en zip-fil som packas med `ditto`, för att behålla
   behörigheter och signatur. Bygget är ad hoc-signerat, inte signerat med ett Apple Developer ID. Flödet i
-  Actions (`.github/workflows/mac-app.yml`, körs bara för hand) finns inte i repot än.
+  Actions (`.github/workflows/mac-app.yml`) körs bara för hand.
 - **Vad som följer med.** Flask, waitress, requests, sherpa-onnx, numpy, PyAV (`av`), `truststore`
   och `whisper-cli`, samt PyObjC för Dock-ikonen och menyn. faster-whisper, ctranslate2,
   tokenizers, huggingface_hub och onnxruntime följer inte med, eftersom programmet använder
@@ -189,6 +188,22 @@ delen beskriver hur programmet är tänkt att fungera. Det är ännu inte byggt 
   loggen och avslutet fungerar. Den visar inte att Metal används, att Gatekeeper släpper igenom
   programmet efter godkännandet i Systeminställningar, eller att en riktig KB-Whisper-modell
   transkriberar. Det kräver en riktig Mac.
+- **Uppmätt i första körningen (2026-11-20).** Maskinen var macOS 26.7.2, Apple M1 (Virtual) med
+  3 kärnor, Xcode 26.6 och Python 3.12.10. whisper.cpp v1.9.5 är commiten
+  `d1be6fde11ac6e0407606b4e42fe72d34add8037`; `whisper-cli` byggdes statiskt, med Metal
+  inbäddat och OpenMP av, länkar bara mot systembibliotek (åtta) och är 8,0 MB. Kompilatorns mål
+  hade NEON, dotprod och fp16. Programmet är 128 MB och zip-filen 49 MB; störst är av (51 MB) och
+  sherpa-onnx (33 MB). Alla 164 Mach-O-filer är arm64 med lägsta macOS 11.0 eller 14.0. Programmet
+  är ad hoc-signerat och `codesign --verify --deep --strict` godkänner det; `spctl` avvisar det,
+  vilket är väntat utan Developer ID. Jobbet tog 5 min 6 s.
+- **Vad kontrollen visade.** Programmet startade och svarade efter 3 s med tom hemkatalog. Motorn
+  blev whisper.cpp med det medföljande `whisper-cli`, en gammal modellfil hårdlänkades in,
+  röstmodellen hämtades från Hugging Face och kontrollerades (6,4 s), och ljudet avkodades.
+  `whisper-cli` startades från paketet, loggfilen hamnade i `~/Library/Logs/Akasha Meet`, och
+  avslut med SIGTERM lämnade porten ledig. Det medföljande `whisper-cli` transkriberade ett
+  testljud med en liten modell, med ordtider från DTW (42 ord). Metal fanns på Actions-maskinen
+  (en paravirtuell GPU) och kompilerade sina bibliotek första gången (23 s); hur lång tid det tar
+  på en riktig Mac är inte mätt.
 
 ## Talaruppdelningen
 
@@ -360,7 +375,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
 **I en Linux-miljö utan grafikprocessor** (samma Python- och biblioteksversioner):
 
-- **Enhetstester:** 143 st, gröna, och ett till som bara körs för hand (se nedan). De täcker
+- **Enhetstester:** 255 st (2 överhoppade), gröna, och ett till som bara körs för hand (se nedan). De täcker
   talaruppdelning (även digitala möten), lagring av inspelningar i delar, export, skydd mot andra
   webbsidor, alla API-flöden och modellhämtningen mot låtsaskällan.
 - **Första start i Chromium**, med låtsaskällan i stället för Hugging Face: kortet med modellerna,
@@ -371,7 +386,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
   fortsatt med `Range`, med omdirigering till en CDN-värd och rätt sha256. Körs för hand med
   `AKASHA_RIKTIG_HAMTNING=1 venv/bin/python -m unittest discover -s tester -p test_riktig_hamtning.py`.
   Taligenkänningen (1,5 GB) har aldrig hämtats på riktigt i provet.
-- **GitHub Actions** (2026-11-19): enhetstesterna, 144 st (1 överhoppat: den riktiga hämtningen), gröna på ubuntu-latest (Ubuntu 26.04, Python 3.12.16) och windows-latest (Python 3.12.10) vid push till main, och på macos-latest (arm64, Python 3.12.10) körd för hand. Ubuntu-jobbet tog 17 s, Windows-jobbet 43 s och macOS-jobbet 20 s. faster-whisper installeras inte där (testerna behöver den inte).
+- **GitHub Actions:** enhetstesterna gröna på ubuntu-latest och windows-latest vid push till main, och på macOS i Mac-app-flödet (251 tester, 4 överhoppade). faster-whisper installeras inte där (testerna behöver den inte).
 - **Programmet:** provbygge på Linux med kontrollskriptet (start, standardplatser, flytt av gamla modeller, riktig hämtning av röstmodellen, avkodning, avslut).
 - **`installera.sh` från början:** med en ersättare för launchd, även en ominstallation när
   tjänsten redan finns. Modellnedladdningen med sha256-kontroll gick igenom.
@@ -401,7 +416,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
 **Inte provat än:**
 
-- programmet byggt för Mac (GitHub Actions) och på en riktig Mac: Gatekeeper, Dock, Metal och transkribering;
+- programmet på en riktig Mac: Gatekeeper, Dock, Metal och transkribering med KB-Whisper (bygget och kontrollen i GitHub Actions är gjorda, se Programmet (Mac));
 - faster-whisper och transkribering på Windows (CI installerar inte faster-whisper);
 - första start på en riktig Mac och på Windows, och hämtning på ett företagsnät med proxy;
 - ett riktigt Google Meet-möte eller en Slack-huddle, där Chromes flikväljare och
