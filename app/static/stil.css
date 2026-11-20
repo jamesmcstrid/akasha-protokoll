@@ -213,6 +213,7 @@ h2 { margin: 0 0 14px; font-size: 1.2rem; font-weight: 650; }
     grid-template-rows: auto 1fr; column-gap: 40px; align-items: start;
   }
   .yta { margin-bottom: 0; }
+  .till-ny { margin-bottom: 6px; }
 }
 
 /* Ett blad i hogra ytan: visar en sak. */
@@ -348,40 +349,61 @@ meter::-moz-meter-bar { background: var(--spar-fyllt); border-radius: 999px; }
 .liten { font-size: 14px; }
 code { font-size: 13px; background: var(--yta2); padding: 1px 6px; border-radius: 6px; }
 
-.lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+/* Listan: rader med harlinje i stallet for rutor. Den oppna raden ar fylld. Fargerna kommer fran lokala variabler
+   (--li-*) som den oppna raden byter, sa att inga fargregler behover skrivas om. */
+.inspelningar h2 {
+  margin: 26px 0 8px; font-family: var(--typ-rubrik); font-weight: 400; text-transform: uppercase;
+  font-size: 30px; line-height: 1.05; letter-spacing: 0.01em;
+}
+.lagring { margin: 0 16px 8px; }
+.lagring code { font-size: 13px; background: none; padding: 0; }
+.lista { list-style: none; margin: 0; padding: 0; }
 .lista li {
-  border: 1px solid var(--kant); border-radius: 14px; padding: 12px 14px; background: var(--yta2);
-  display: flex; gap: 12px; align-items: center; flex-wrap: wrap; transition: border-color .15s;
+  --li-text: var(--text); --li-dampad: var(--dampad); --li-fel: var(--fel); --li-kant: var(--knapp-kant);
+  --li-hover: var(--yta2);
+  display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-bottom: 1px solid var(--linje);
+  color: var(--li-text);
 }
-.lista li:hover { border-color: var(--vald-bg); }
-/* Inspelningen som visas: kant och en farglist till vanster, sa att den syns aven utan hover. */
-.lista li.visad { border-color: var(--vald-bg); background: var(--kort); box-shadow: inset 4px 0 0 var(--vald-bg); }
-.lista .knappar { margin: 0; }
-/* Lika bred knappyta pa varje rad, sa att pilarna hamnar under varandra. */
-@media (min-width: 640px) { .lista li > .knappar { min-width: 15rem; justify-content: flex-end; } }
-@media (max-width: 639px) { .lista li > .knappar:empty { display: none; } }
+.lista li:hover { background: var(--yta); border-radius: var(--radie-vald); border-bottom-color: transparent; }
+.lista li.visad {
+  --li-text: var(--vit); --li-dampad: var(--pa-gront); --li-fel: var(--fel-pa-gront); --li-kant: var(--pa-gront);
+  --li-hover: rgba(255, 255, 255, 0.12);
+  --spar: var(--spelare-spar); --spar-fyllt: var(--lime); --vandrare: var(--lime);
+  --vandrare-mork: var(--lime-mork); --vandrare-ora: var(--hero); --fokus: var(--fokus-pa-gront);
+  background: var(--vald-bg); border-radius: var(--radie-vald); border-bottom-color: transparent;
+}
 .post {
-  flex: 1; min-width: 220px; text-align: left; background: none; border: 0; padding: 0; font: inherit;
-  color: inherit; cursor: pointer; border-radius: 8px; display: flex; align-items: center; gap: 10px;
+  display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; background: none; border: 0;
+  padding: 0; font: inherit; color: inherit; cursor: pointer; border-radius: 8px;
 }
-.post-text { flex: 1; min-width: 0; }
-.post-rubrik { font-family: var(--typ-text); font-weight: 650; display: block; font-size: 1.02rem; overflow-wrap: anywhere; }
-.post-rad { display: block; }
-.post-info { color: var(--dampad); font-size: 0.85rem; }
-.post-fel { display: block; margin-top: 4px; color: var(--fel); font-size: 0.85rem; line-height: 1.4; }
-/* Pilen visar att raden gar att oppna. */
-.post-pil { font-size: 1.5rem; line-height: 1; color: var(--dampad); transition: transform .15s, color .15s; }
-.post:hover .post-pil, .lista li.visad .post-pil { color: var(--text); }
-.post:hover .post-pil { transform: translateX(2px); }
-@media (prefers-reduced-motion: reduce) { .post-pil { transition: none; } .post:hover .post-pil { transform: none; } }
-.status {
-  display: inline-block; font-size: 0.78rem; font-weight: 600; padding: 2px 9px; border-radius: 999px;
-  background: var(--kort); border: 1px solid var(--kant); margin-left: 4px; white-space: nowrap;
+.post-rubrik { font-weight: 700; font-size: 17px; line-height: 1.35; overflow-wrap: anywhere; }
+.post-info { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 14px; color: var(--li-dampad); }
+.post-info:empty { display: none; }
+.post-status { font-size: 14px; }
+.post-fel { font-size: 14px; line-height: 1.4; color: var(--li-fel); overflow-wrap: anywhere; }
+.status { font-size: 14px; }
+.status.spelar_in, .status.transkriberar, .status.talare { font-weight: 700; color: var(--li-text); }
+.status.sparad, .status.koar { font-weight: 600; color: var(--li-dampad); }
+.status.klar { font-weight: 400; color: var(--li-dampad); }
+.status.fel, .status.avbruten { font-weight: 700; color: var(--li-fel); }
+/* Pagaende inspelning: en rod prick som blinkar (av vid minskad rorelse). */
+.status.spelar_in::before {
+  content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; vertical-align: 1px;
+  border-radius: 50%; background: var(--rod-prick); animation: puls 1.2s infinite;
 }
-.status.fel, .status.avbruten { color: var(--fel); }
-.status.klar { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+.lista li.visad .status.spelar_in::before { background: var(--fel-pa-gront); }
+@media (prefers-reduced-motion: reduce) { .status.spelar_in::before { animation: none; } }
+/* Knapparna under statusen: sma piller. */
+.lista .knappar { margin: 4px 0 0; gap: 8px; }
+.lista .knappar:empty { display: none; }
+.lista .knapp {
+  min-height: 40px; padding: 0 14px; font-size: 14px; font-weight: 600; background: transparent;
+  color: var(--li-text); border: 1.5px solid var(--li-kant);
+}
+.lista .knapp:hover { background: var(--li-hover); }
+.lista .fara { color: var(--li-fel); }
+#tom { margin: 8px 16px; font-size: 15px; }
 progress { width: 120px; vertical-align: middle; accent-color: var(--spar-fyllt); }
-.status progress { width: 80px; height: 8px; margin-left: 2px; }
 
 /* Dialogen "Transkribera igen": ser ut som ett kort. showModal ger fokusfalla, Escape och bakgrund. */
 .dialog {
@@ -430,7 +452,7 @@ audio { width: 100%; margin: 10px 0; }
 .modell-lista { margin: 0; padding-left: 1.2em; font-size: 16px; }
 .modell-lista li + li { margin-top: 6px; }
 .knapp[aria-disabled="true"] { opacity: .45; cursor: progress; }
-.natet { margin: 20px 0 0; }
+.natet { margin: 20px 16px 0; }
 
 /* Modellkortet (forsta start): 14 px mellan delarna, rubriken i Instrument Sans. */
 .modellblad > * { margin: 0 0 14px; }

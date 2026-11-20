@@ -1002,20 +1002,29 @@ function laddaUpp(fil) {
 
 // --- listan --------------------------------------------------------------------------------
 
-// Etiketten ar kort. Ett felmeddelande star pa en egen rad under (se rendera), annars bryts
-// etiketten fult. I ko finns inget framsteg att visa, sa dar blir det bara "I ko".
-function statusElement(m) {
-  const text = STATUS[m.status] || m.status;
-  const span = el("span", { class: `status ${m.status}` });
+// Framsteg som listraden visar: fasen och andelen, nar jobbet pagar och har ett framsteg att visa.
+// I ko finns inget framsteg, sa dar blir det bara "I ko".
+function framsteg(m) {
   const fas = m.framsteg && m.framsteg.fas;
   if (PAGAENDE.has(m.status) && m.status !== "koar" && fas && fas !== "koar") {
-    const andel = m.framsteg.andel || 0;
-    span.append(`${STATUS[fas] || text} ${Math.round(andel * 100)} % `,
-      el("progress", { max: "1", value: String(andel), "aria-hidden": "true" }));
-  } else {
-    span.append(text);
+    return { fas, andel: m.framsteg.andel || 0 };
   }
-  return span;
+  return null;
+}
+
+// Statusen som ren text. Ett felmeddelande star pa en egen rad under (se rendera).
+function statusElement(m) {
+  const text = STATUS[m.status] || m.status;
+  const f = framsteg(m);
+  return el("span", { class: `status ${m.status}` }, f ? `${STATUS[f.fas] || text} ${Math.round(f.andel * 100)} %` : text);
+}
+
+// Sparet med den gaende elefanten under en rad som transkriberas.
+function gangElement(andel) {
+  const g = el("span", { class: "gang", "aria-hidden": "true" },
+    el("progress", { max: "1", value: String(andel) }), vandrare());
+  sattAndel(g, andel);
+  return g;
 }
 
 function rendera(lista) {
@@ -1044,13 +1053,16 @@ function rendera(lista) {
         onclick: () => radera(m) }, "Radera"));
     }
     const harFel = (m.status === "fel" || m.status === "avbruten") && m.fel;
+    const f = framsteg(m);
+    // "Klar" star som diskret text sist bland metadelarna; andra tillstand har en egen rad.
     ul.append(el("li", { "data-id": m.id },
       el("button", { type: "button", class: "post", "data-roll": "visa", onclick: () => visa(m.id) },
-        el("span", { class: "post-text" },
-          el("span", { class: "post-rubrik" }, m.rubrik),
-          el("span", { class: "post-rad" }, el("span", { class: "post-info" }, m.info || ""), " ", statusElement(m)),
-          harFel ? el("span", { class: "post-fel" }, m.fel) : null),
-        el("span", { class: "post-pil", "aria-hidden": "true" }, "›")),
+        el("span", { class: "post-rubrik" }, m.rubrik),
+        el("span", { class: "post-info" }, ...(m.info_delar || []).map((d) => el("span", {}, d)),
+          m.status === "klar" ? statusElement(m) : null),
+        f ? gangElement(f.andel) : null,
+        m.status === "klar" ? null : el("span", { class: "post-status" }, statusElement(m)),
+        harFel ? el("span", { class: "post-fel" }, m.fel) : null),
       atgarder));
   }
   markeraVisad();
