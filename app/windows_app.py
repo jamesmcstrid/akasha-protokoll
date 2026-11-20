@@ -62,6 +62,7 @@ class Skal:
         self.ikon = None
         self.klart = threading.Event()  # sats nar programmet ska avslutas
         self._bakgrund = False
+        self._avslutet = False  # sant sa snart avslutet har borjat: da gor startresultaten ingenting
         self._las = threading.Lock()
         self._avslutar = threading.Lock()
 
@@ -104,9 +105,15 @@ class Skal:
     def starta_i_bakgrunden(self):
         """Egen trad: ikonen ska synas medan tjansten startar."""
         try:
-            self.tjanst = start.Tjanst()
-            self.tjanst.starta()
-            ok = self.tjanst.vanta(30)
+            tjanst = start.Tjanst()
+            self.tjanst = tjanst
+            if self._avslutet:
+                return
+            tjanst.starta()
+            if self._avslutet:  # avslutet borjade medan tjansten startade: stang den vi just startade
+                tjanst.stang()
+                return
+            ok = tjanst.vanta(30)
         except start.StartFel as e:
             self.startfel(str(e))
             return
@@ -122,8 +129,15 @@ class Skal:
             self._bakgrund = True
         threading.Thread(target=self.starta_i_bakgrunden, name="start", daemon=True).start()
 
+    def _efter_avslut(self, vad):
+        if self._avslutet:
+            log.info("win: %s ignoreras, avslutet har borjat", vad)
+        return self._avslutet
+
     def startad(self, ok):
         try:
+            if self._efter_avslut("startad"):
+                return
             if not ok:
                 log.info("win: tjansten svarade inte inom 30 s")
                 self.startade_inte()
@@ -145,6 +159,8 @@ class Skal:
             log.exception("win: satt_tips")
 
     def startfel(self, text):
+        if self._efter_avslut("startfel"):
+            return
         try:
             fraga(start.UPPTAGEN_RUBRIK, text, OK)
         except Exception:
@@ -153,6 +169,8 @@ class Skal:
 
     def startade_inte(self):
         """Rutan "startade inte" far aldrig sjalv stoppa avslutet: gar den fel loggas det och programmet avslutas."""
+        if self._efter_avslut("startade_inte"):
+            return
         try:
             if fraga(start.STARTADE_INTE_RUBRIK,
                      start.STARTADE_INTE_TEXT.format(logg=start.loggfil()) + "\n\n" + start.WIN_VISA_LOGGEN_FRAGA,
@@ -210,36 +228,45 @@ class Skal:
                         return  # Nej: programmet fortsatter
                 except Exception:
                     log.exception("win: avslutsfragan")
+            self._avslutet = True
             log.info("win: avslutar")
             self.stang()
         finally:
             self._avslutar.release()
 
     def stang(self):
-        """Tjansten och ikonen. Far anropas flera ganger och kastar aldrig. Satter klart sist."""
+        """Tjansten och ikonen, en gang var (andra anropet gor inget). Kastar aldrig. Ordningen: tjansten,
+        ikonen, och sist klart, sa att main() inte hinner avsluta processen under nedstangningen."""
+        self._avslutet = True
+        tjanst, self.tjanst = self.tjanst, None
+        ikon, self.ikon = self.ikon, None
         try:
-            if self.tjanst is not None:
-                self.tjanst.stang()
+            if tjanst is not None:
+                tjanst.stang()
         except Exception:
             log.exception("win: tjanst.stang")
         try:
-            if self.ikon is not None:
-                self.ikon.stop()
+            if ikon is not None:
+                ikon.stop()
         except Exception:
             log.exception("win: ikon.stop")
         self.klart.set()
 
     # --- ikonen ----------------------------------------------------------------------------------
 
+    def bygg_meny(self, pystray):
+        """Menyn vid klockan: Oppna (forval) och Avsluta."""
+        return pystray.Menu(
+            pystray.MenuItem(start.WIN_MENY_OPPNA, self._meny_oppna, default=True),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(start.WIN_MENY_AVSLUTA, self._meny_avsluta),
+        )
+
     def visa_ikon(self, pystray, Image):
         """Kor ikonens meddelandeloop tills avslutet (blockerar). Gar ikonen inte att skapa loggas det och
         programmet fortsatter utan ikon: tjansten startas anda, och avslut gar da via Aktivitetshanteraren."""
         try:
-            meny = pystray.Menu(
-                pystray.MenuItem(start.WIN_MENY_OPPNA, self._meny_oppna, default=True),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem(start.WIN_MENY_AVSLUTA, self._meny_avsluta),
-            )
+            meny = self.bygg_meny(pystray)
             bild = Image.open(plattform.ikonfil())
             self.ikon = pystray.Icon(plattform.NAMN, bild, start.WIN_TIPS_STARTAR, meny)
             self.ikon.run(self._setup)

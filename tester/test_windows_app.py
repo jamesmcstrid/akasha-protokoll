@@ -375,10 +375,63 @@ class TestAvsluta(Skalprov):
             self.skal._meny_avsluta(None, None)
         self.assertTrue(self.stangt())
 
-    def test_stang_kan_anropas_flera_ganger(self):
+    def test_stang_gor_varje_del_exakt_en_gang(self):
         self.skal.stang()
         self.skal.stang()
-        self.assertEqual(self.ikon.stoppad, 2)
+        self.assertEqual(self.tjanst.hande, ["stang"])
+        self.assertEqual(self.ikon.stoppad, 1)
+        self.assertTrue(self.stangt())
+
+    def test_ett_vanligt_avslut_och_sedan_stang_fran_main_stanger_en_gang(self):
+        self.skal.avsluta()
+        self.skal.stang()  # som finally i main()
+        self.assertEqual(self.tjanst.hande, ["stang"])
+        self.assertEqual(self.ikon.stoppad, 1)
+
+    def test_ordningen_tjansten_ikonen_sist_klart(self):
+        hande = []
+        self.tjanst.stang = lambda: hande.append(("tjanst", self.skal.klart.is_set()))
+        self.ikon.stop = lambda: hande.append(("ikon", self.skal.klart.is_set()))
+        self.skal.stang()
+        self.assertEqual(hande, [("tjanst", False), ("ikon", False)])
+        self.assertTrue(self.skal.klart.is_set())
+
+    def test_inget_efter_att_avslutet_har_borjat(self):
+        """Avsluta under start (redo ar falskt): sena resultat fran starttraden gor ingenting."""
+        self.skal.redo = False
+        self.ikon.notify = mock.Mock()
+        with mock.patch.object(plattform, "forsta_start_visad", return_value=True), \
+             mock.patch.object(start, "url", return_value="u"):
+            self.skal.avsluta()
+            tjanst = self.tjanst
+            with self.assertLogs("akasha-protokoll", "INFO") as logg:
+                self.skal.startad(False)
+                self.skal.startad(True)
+                self.skal.startfel("x")
+                self.skal.startade_inte()
+        self.assertEqual(self.fraga.rutor, [])
+        self.webb.assert_not_called()
+        self.visa.assert_not_called()
+        self.ikon.notify.assert_not_called()
+        self.assertFalse(self.skal.redo)
+        self.assertEqual(tjanst.hande, ["stang"])
+        self.assertEqual(len([r for r in logg.output if "ignoreras" in r]), 4)
+
+    def test_tjansten_som_startar_nar_avslutet_borjar_stangs(self):
+        skal = windows_app.Skal()
+        t = FalskTjanst()
+        orig = t.starta
+
+        def starta():
+            orig()
+            skal.stang()  # avslutet borjar medan starta() pagar
+
+        t.starta = starta
+        with mock.patch.object(start, "Tjanst", return_value=t):
+            skal.starta_i_bakgrunden()
+        self.assertEqual(t.hande.count("stang"), 2)  # av skalet och av starttraden (Tjanst.stang tal flera)
+        self.assertNotIn(("vanta", 30), t.hande)
+        self.assertEqual(self.fraga.rutor, [])
 
 
 class TestIkon(Skalprov):
@@ -587,7 +640,7 @@ class TestStatiskt(unittest.TestCase):
     def test_inga_svenska_texter_i_skalet(self):
         tillatna = {"Local\\AkashaProtokoll", "user32", OK, JA_NEJ, AVSLUTA, "\n\n", "start", "avsluta",
                     "tjansten startade inte", "__main__", "akasha-protokoll",
-                    "redan_igang", "upptagen", "akasha"}  # besluten fran start.forbered()
+                    "redan_igang", "upptagen", "akasha", "startad", "startfel", "startade_inte"}  # besluten fran start.forbered()
         docstrings = set()
         for nod in ast.walk(self.trad):
             if isinstance(nod, (ast.Module, ast.ClassDef, ast.FunctionDef)):
@@ -655,6 +708,32 @@ class TestWindowsRiktigt(unittest.TestCase):
         with mock.patch.object(windows_app, "_user32", return_value=k):
             self.assertTrue(windows_app.fraga("R", "T", AVSLUTA))
         self.assertEqual(k.MessageBoxW.call_args[0][3], 0x4 | 0x30 | 0x100 | 0x10000 | 0x40000)
+
+    def test_riktig_pystray_meny_anropar_skalets_metoder(self):
+        """Den riktiga pystray.Menu/MenuItem (pystray raknar metodens parametrar). Ingen Icon, ingen
+        ruta och ingen webblasare: oppna_webblasare ar utbytt och ingenting pagar."""
+        import pystray
+        skal = windows_app.Skal()
+        skal.tjanst = FalskTjanst()
+        meny = skal.bygg_meny(pystray)
+        oppna, avdelare, avsluta = list(meny.items)
+        self.assertEqual((oppna.text, oppna.default), (start.WIN_MENY_OPPNA, True))
+        self.assertEqual(avdelare.text, pystray.Menu.SEPARATOR.text)
+        self.assertEqual((avsluta.text, avsluta.default), (start.WIN_MENY_AVSLUTA, False))
+        webb = mock.Mock(return_value=True)
+        with mock.patch.object(plattform, "oppna_webblasare", webb), \
+             mock.patch.object(start, "url", return_value="u"), \
+             mock.patch.object(start, "pagar", return_value=[]), \
+             mock.patch.object(windows_app, "fraga", side_effect=AssertionError("ingen ruta")):
+            oppna(None)  # som pystray gor: MenuItem.__call__(icon)
+            webb.assert_not_called()  # tjansten ar inte redo an
+            skal.redo = True
+            oppna(None)
+            meny(None)  # forvalet, som ett vanstermusklick pa ikonen
+            self.assertEqual(webb.call_count, 2)
+            avsluta(None)
+            self.assertTrue(skal.klart.wait(20), "Avsluta ledde inte till att klart sattes")
+        self.assertEqual(skal.tjanst, None)
 
     def test_hela_skalet_med_falska_rutor_och_ikon_oppnar_ingen_webblasare(self):
         webb = mock.Mock(return_value=True)
