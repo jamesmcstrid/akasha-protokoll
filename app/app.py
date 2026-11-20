@@ -40,6 +40,26 @@ log = logging.getLogger("akasha-protokoll")
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.config["MAX_CONTENT_LENGTH"] = MAX_MB * 1024 * 1024
 
+# Filtyper som programmet skickar ut, satta uttryckligen: Python laser annars systemets tabell (mime-filer pa Linux och Mac,
+# registret pa Windows), dar .woff2 saknas och .js eller .css kan vara text/plain. Tillsammans med nosniff skulle webblasaren
+# da vagra kora app.js. Samma sak for ljudet i inspelningarna.
+FILTYPER = {
+    ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css",
+    ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/vnd.microsoft.icon", ".woff2": "font/woff2",
+    ".json": "application/json", ".txt": "text/plain", ".md": "text/markdown",
+}
+LJUDTYPER = {
+    ".webm": "video/webm", ".m4a": "audio/mp4", ".mp4": "video/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav",
+    ".ogg": "audio/ogg", ".oga": "audio/ogg", ".opus": "audio/ogg", ".aac": "audio/aac", ".flac": "audio/flac",
+    ".mov": "video/quicktime",
+}
+
+
+def filtyp(sokvag, tabell=FILTYPER):
+    """Filtypen for en filandelse ur var egen tabell, eller None (da avgor Flask)."""
+    return tabell.get(os.path.splitext(sokvag)[1].lower())
+
+
 _ko = queue.Queue()
 _framsteg = {}  # id -> {"fas": ..., "andel": 0..1, "start": monotonic}, bara i minnet
 _arbetare_startad = threading.Event()
@@ -77,6 +97,8 @@ def sakerhetsheaders(svar):
     svar.headers["Referrer-Policy"] = "no-referrer"
     if request.path.startswith("/api/"):
         svar.headers["Cache-Control"] = "no-store"
+    if request.endpoint == "static" and svar.status_code == 200 and filtyp(request.path):
+        svar.mimetype = filtyp(request.path)  # lagger till charset for text/*
     return svar
 
 
@@ -281,7 +303,7 @@ def starta_arbetare():
 
 @app.get("/")
 def startsida():
-    return send_file(os.path.join(app.static_folder, "index.html"))
+    return send_file(os.path.join(app.static_folder, "index.html"), mimetype="text/html")
 
 
 @app.get("/health")
@@ -526,9 +548,9 @@ def ladda_ner_text(id_, fmt):
 def ljud(id_):
     meta = lagring.las(id_)
     if request.args.get("ladda_ner"):
-        return send_file(lagring.ljudfil(meta), as_attachment=True,
+        return send_file(lagring.ljudfil(meta), as_attachment=True, mimetype=filtyp("ljud" + meta.get("andelse", ""), LJUDTYPER),
                          download_name=f"{filnamn(meta)}{meta.get('andelse', '')}")
-    return send_file(lagring.ljudfil(meta), conditional=True)
+    return send_file(lagring.ljudfil(meta), conditional=True, mimetype=filtyp("ljud" + meta.get("andelse", ""), LJUDTYPER))
 
 
 @app.post("/api/inspelningar/<id_>/radera")

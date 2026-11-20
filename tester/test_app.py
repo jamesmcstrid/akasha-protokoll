@@ -63,9 +63,9 @@ class TestApp(unittest.TestCase):
         for p in self.patchar:
             p.stop()
 
-    def ladda_upp(self, innehall=b"ljud", talare_="2", titel="Avstämning"):
+    def ladda_upp(self, innehall=b"ljud", talare_="2", titel="Avstämning", filnamn="mote.m4a"):
         r = self.klient.post("/api/inspelningar/fil", headers=H, content_type="multipart/form-data",
-                             data={"ljud": (io.BytesIO(innehall), "mote.m4a"), "talare": talare_, "titel": titel})
+                             data={"ljud": (io.BytesIO(innehall), filnamn), "talare": talare_, "titel": titel})
         self.assertEqual(r.status_code, 201, r.get_json())
         akasha._ko.join()  # vanta tills bakgrundsjobbet ar klart
         return r.get_json()["id"]
@@ -349,6 +349,43 @@ class TestApp(unittest.TestCase):
         res = self.klient.get(f"/api/inspelningar/{id_}").get_json()["resultat"]
         self.assertNotIn("segment_original", res)
         self.assertEqual(len(res["segment"]), 2)
+
+    def test_filtyperna_beror_inte_pa_systemets_tabell(self):
+        # Pa Windows laser mimetypes registret, dar .woff2 saknas och .js kan vara text/plain; med nosniff kor
+        # webblasaren da inte app.js. Tabellen ar har forgiftad helt: allt blir text/plain.
+        forvantat = {"/": "text/html", "/static/index.html": "text/html", "/static/app.js": "text/javascript",
+                     "/static/stil.css": "text/css", "/static/favicon.svg": "image/svg+xml",
+                     "/static/elefant.svg": "image/svg+xml",
+                     "/static/typsnitt/instrument-sans-latin-wght-normal.woff2": "font/woff2",
+                     "/static/typsnitt/anton-latin-400-normal.woff2": "font/woff2"}
+        with mock.patch("mimetypes.guess_type", lambda *a, **k: ("text/plain", None)), \
+             mock.patch("mimetypes.guess_extension", lambda *a, **k: ".txt"):
+            for sokvag, typ in forvantat.items():
+                with self.klient.get(sokvag) as r:
+                    self.assertEqual(r.status_code, 200, sokvag)
+                    self.assertEqual(r.mimetype, typ, sokvag)
+                    self.assertEqual(r.headers["X-Content-Type-Options"], "nosniff")
+                    if typ.startswith("text/"):
+                        self.assertIn("charset=utf-8", r.headers["Content-Type"], sokvag)
+
+    def test_filtyperna_utan_forgiftning_ar_samma(self):
+        for sokvag, typ in (("/static/app.js", "text/javascript"), ("/static/stil.css", "text/css"),
+                            ("/static/typsnitt/instrument-sans-latin-wght-normal.woff2", "font/woff2")):
+            with self.klient.get(sokvag) as r:
+                self.assertEqual(r.mimetype, typ)
+
+    def test_ljudets_filtyp_per_filandelse_beror_inte_pa_systemets_tabell(self):
+        forvantat = {".webm": "video/webm", ".m4a": "audio/mp4", ".mp4": "video/mp4", ".mp3": "audio/mpeg",
+                     ".wav": "audio/wav", ".ogg": "audio/ogg", ".oga": "audio/ogg", ".opus": "audio/ogg",
+                     ".aac": "audio/aac", ".flac": "audio/flac", ".mov": "video/quicktime"}
+        self.assertEqual(set(forvantat), set(lagring.ANDELSER))
+        for andelse, typ in forvantat.items():
+            id_ = self.ladda_upp(filnamn=f"mote{andelse}")
+            with mock.patch("mimetypes.guess_type", lambda *a, **k: ("text/plain", None)):
+                with self.klient.get(f"/api/inspelningar/{id_}/ljud") as r:
+                    self.assertEqual((r.status_code, r.mimetype), (200, typ), andelse)
+                with self.klient.get(f"/api/inspelningar/{id_}/ljud?ladda_ner=1") as r:
+                    self.assertEqual(r.mimetype, typ, andelse)
 
     def test_ljud_kan_laddas_ner(self):
         id_ = self.ladda_upp(titel="Möte med A/B")
