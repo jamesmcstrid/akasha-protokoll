@@ -1,8 +1,13 @@
-"""Alla installningar pa ett stalle. Allt har ett standardvarde; .env behovs bara for att andra.
+"""Alla installningar pa ett stalle. Allt har ett standardvarde; en installningsfil behovs bara for att andra.
 
-mac/kor.sh laser .env (om den finns) innan tjansten startar.
+Installningar kommer fran miljon: fran .env via mac/kor.sh (terminalinstallationen) eller fran
+installningar.env i programkatalogen (programmet, se plattform.las_in_installningar).
 """
 import os
+
+import plattform
+
+plattform.las_in_installningar()
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -25,7 +30,11 @@ SPRAK = _env("SPRAK", "sv")
 # Inspelningar och transkriberingar. Medvetet INTE i Dokument eller Skrivbord: de synkas ofta
 # till iCloud, och motesinspelningar ska stanna pa datorn.
 DATAKATALOG = _sokvag(_env("DATAKATALOG", "~/AkashaMeet"))
-MODELLKATALOG = _sokvag(_env("MODELLKATALOG", os.path.join(REPO, "modeller")))
+# Programmet (PyInstaller) har modellerna i sin programkatalog, terminalinstallationen i repot.
+_STANDARD_MODELLER = (
+    os.path.join(plattform.programkatalog(), "modeller") if plattform.ar_paketerad() else os.path.join(REPO, "modeller")
+)
+MODELLKATALOG = _sokvag(_env("MODELLKATALOG", _STANDARD_MODELLER))
 
 # KB-Whisper medium (standard) eller large. Large gor farre fel men tar langre tid.
 MODELL = _env("MODELL", "medium").lower()

@@ -599,7 +599,7 @@ class TestHallVaken(unittest.TestCase):
              mock.patch.object(plattform.shutil, "which", return_value="/usr/bin/caffeinate"), \
              mock.patch.object(plattform.subprocess, "Popen", return_value=process) as popen:
             with plattform.hall_vaken():
-                popen.assert_called_once_with(["caffeinate", "-i"])
+                popen.assert_called_once_with(["caffeinate", "-i", "-w", str(os.getpid())])
                 process.terminate.assert_not_called()
         process.terminate.assert_called_once()
 
