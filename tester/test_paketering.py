@@ -20,7 +20,7 @@ def las(*delar):
 
 class Paketering(unittest.TestCase):
     def test_filerna_gar_att_kompilera(self):
-        for delar in (("app", "mac_app.py"), ("paketering", "akasha-protokoll.spec"), ("paketering", "kontrollera.py")):
+        for delar in (("app", "mac_app.py"), ("app", "windows_app.py"), ("paketering", "akasha-protokoll.spec"), ("paketering", "kontrollera.py")):
             compile(las(*delar), "/".join(delar), "exec")  # inte importerad: PyObjC finns bara pa Mac
 
     def test_typsnitten_stilmallen_pekar_pa_finns_med_sina_licenser(self):

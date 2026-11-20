@@ -212,6 +212,33 @@ def whisper_cli():
     return os.path.abspath(funnen) if funnen else None
 
 
+def ikonfil():
+    """Bilden till ikonen vid klockan (Windows-skalet): ikon.png i det paketerade programmet, annars
+    paketering/ikon-1024.png i repot. None om filen saknas."""
+    if ar_paketerad():
+        sokvag = os.path.join(sys._MEIPASS, "ikon.png")
+    else:
+        sokvag = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              "paketering", "ikon-1024.png")
+    return sokvag if os.path.isfile(sokvag) else None
+
+
+def forsta_start_visad():
+    """Sant forsta gangen (ingen forsta-start-visad i programkatalogen), och lagger da markeringen.
+    Falskt senare, och om markeringen inte gar att skriva (hellre ingen notis an en notis varje gang)."""
+    markering = os.path.join(programkatalog(), "forsta-start-visad")
+    if os.path.exists(markering):
+        return False
+    try:
+        os.makedirs(os.path.dirname(markering), exist_ok=True)
+        with open(markering, "w", encoding="utf-8") as f:
+            f.write("1\n")
+    except OSError as e:
+        log.warning("kunde inte skriva %s: %s", markering, e)
+        return False
+    return True
+
+
 def oppna_webblasare(url):
     try:
         if system() == "Darwin":

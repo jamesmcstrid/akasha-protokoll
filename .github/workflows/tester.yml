@@ -42,6 +42,11 @@ jobs:
         run: |
           grep -v '^faster-whisper' app/requirements.txt > "$RUNNER_TEMP/krav.txt"
           python -m pip install -r "$RUNNER_TEMP/krav.txt"
+      - name: Windows-skalets beroenden (pystray, pillow, six ur krav-bygg.txt)
+        if: runner.os == 'Windows'
+        run: |
+          grep -E '^(pystray|pillow|six)==' paketering/krav-bygg.txt > "$RUNNER_TEMP/skal.txt"
+          python -m pip install -r "$RUNNER_TEMP/skal.txt"
       - name: Enhetstester
         run: python -m unittest discover -s tester -v --durations 15
 
