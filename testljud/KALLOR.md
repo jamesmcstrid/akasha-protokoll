@@ -13,3 +13,19 @@ FLEURS är licensierat [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/)
 Eftersom varje röst är ett och samma klipp vet vi säkert hur många personer det är.
 `en-talare.m4a` och `tva-talare.m4a` är omkodade till AAC, 64 kbit/s, mono, 16 kHz. `digitalt-mote.webm`
 är Opus, 96 kbit/s, stereo, 48 kHz. Ingenting annat är ändrat.
+
+## testljud/format/
+
+Tolv filer om 5 s (672 kB), ett exempel av varje ljudformat som avkodningen ska klara (de testas i
+`tester/test_ljud.py` med exakta längder, och skickas genom det paketerade programmet av `paketering/kontrollera.py`).
+Källan är samma FLEURS-klipp som ovan (CC-BY-4.0): de fem första sekunderna av `en-talare.m4a` (mono, 16 kHz) och av
+`digitalt-mote.webm` (stereo, 48 kHz, för `opus-stereo.webm`), omkodade till formaten nedan. Inget annat är ändrat.
+
+`mp3.mp3`, `opus.ogg`, `opus.opus`, `vorbis.oga`, `flac.flac`, `pcm.wav`, `adpcm.wav` (IMA), `aac.aac` (ADTS), `aac.mov`,
+`aac-safari.mp4` (fragmenterad mp4, som Safari spelar in), `alac.m4a`, `opus-stereo.webm`.
+
+De är gjorda med PyAV (med GPL-kodare som libmp3lame, libopus och libvorbis; det spelar ingen roll, filerna är data):
+ett litet skript klipper de fem sekunderna, omsamplar till 16 kHz mono respektive 48 kHz stereo med
+`av.audio.resampler.AudioResampler` och kodar med en kodare per format (`libmp3lame` 32 kbit/s, `libopus` 24 kbit/s för
+mono och 48 kbit/s för stereo, `libvorbis` 32 kbit/s, `flac`, `pcm_s16le`, `adpcm_ima_wav`, `aac` 32 kbit/s, `alac`). Filerna
+är inte bit för bit reproducerbara (Ogg-strömmar får ett slumpat serienummer), men längderna är exakta.
