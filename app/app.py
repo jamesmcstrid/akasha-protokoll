@@ -118,6 +118,7 @@ def med_framsteg(meta):
     meta = dict(meta)
     meta["rubrik"] = export.rubrik(meta)
     meta["info"] = export.info(meta)
+    meta["info_delar"] = export.info_delar(meta)
     if meta["status"] in lagring.PAGAENDE and meta["id"] in _framsteg:
         framsteg = dict(_framsteg[meta["id"]])
         start = framsteg.pop("start", None)

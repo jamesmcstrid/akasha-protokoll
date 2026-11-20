@@ -25,7 +25,8 @@ def rubrik(meta):
         return "Möte"
 
 
-def info(meta):
+def info_delar(meta):
+    """Datum, langd och antal talare som en lista (sidan satter egna mellanrum)."""
     res = meta.get("resultat") or {}
     delar = []
     try:
@@ -36,7 +37,11 @@ def info(meta):
         delar.append(tid(res["langd_s"]))
     if res.get("talare"):
         delar.append(f"{res['talare']} talare")
-    return " · ".join(delar)
+    return delar
+
+
+def info(meta):
+    return " · ".join(info_delar(meta))
 
 
 def _rader(meta):

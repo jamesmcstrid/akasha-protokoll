@@ -25,6 +25,14 @@ class TestExport(unittest.TestCase):
         self.assertEqual(export.tid(65.4), "01:05")
         self.assertEqual(export.tid(3725), "1:02:05")
 
+    def test_info_delar_och_info(self):
+        self.assertEqual(export.info_delar(META), ["2026-11-17 14:03", "1:02:05", "2 talare"])
+        utan = dict(META, resultat={"langd_s": 5, "segment": []})
+        self.assertEqual(export.info_delar(utan), ["2026-11-17 14:03", "00:05"])
+        for m in (META, utan):
+            self.assertEqual(export.info(m), " · ".join(export.info_delar(m)))
+        self.assertEqual(export.info(META), "2026-11-17 14:03 · 1:02:05 · 2 talare")
+
     def test_markdown_med_namn(self):
         md = export.som_markdown(META)
         self.assertTrue(md.startswith("# Möte 2026-11-17 14:03\n"))

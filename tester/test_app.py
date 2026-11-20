@@ -86,6 +86,16 @@ class TestApp(unittest.TestCase):
         akasha._ko.join()
         self.assertEqual(self.klient.get(f"/api/inspelningar/{id_}").get_json()["status"], "klar")
 
+    def test_info_delar_finns_i_listan_och_i_en_inspelning(self):
+        id_ = self.ladda_upp()
+        en = self.klient.get(f"/api/inspelningar/{id_}").get_json()
+        lista = self.klient.get("/api/inspelningar").get_json()["inspelningar"]
+        post = next(m for m in lista if m["id"] == id_)
+        for m in (en, post):
+            self.assertIsInstance(m["info_delar"], list)
+            self.assertEqual(" · ".join(m["info_delar"]), m["info"])
+            self.assertTrue(m["info_delar"])
+
     def test_annat_vardnamn_avvisas(self):
         self.assertEqual(self.klient.get("/", base_url="http://angripare.example").status_code, 403)
         self.assertEqual(self.klient.get("/health", base_url="http://127.0.0.1:8611").status_code, 200)
