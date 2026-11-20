@@ -498,6 +498,7 @@ class KontrolleraPerPlattform(unittest.TestCase):
         with mock.patch.dict(os.environ, extra or {}, clear=True):
             return k, k.programmiljo(self.hem)
 
+    @unittest.skipIf(os.name == "nt", "os.environ skiljer inte pa stora och sma bokstaver pa Windows: tmpdir och TMPDIR blir en nyckel")
     def test_linux_och_mac_far_samma_miljo_som_forut(self):
         for plattform in ("linux", "darwin"):
             k, miljo = self.miljo(plattform, {"HTTPS_PROXY": "http://p:1", "TMPDIR": "/t"})
@@ -525,6 +526,41 @@ class KontrolleraPerPlattform(unittest.TestCase):
         self.assertEqual(k.NY_PROGRAMKATALOG, ("AppData", "Local", "Akasha Protokoll"))
         self.assertEqual(k.GAMMAL_PROGRAMKATALOG, ("AppData", "Local", "Akasha Meet"))
         self.assertEqual(k.START_TIDSGRANS, 120)
+
+    def test_kontrollera_stoppar_som_forut_men_fortsatter_med_flaggan(self):
+        k = ladda_kontrollera("linux")
+        self.assertFalse(k.FORTSATT)
+        with mock.patch("builtins.print"), self.assertRaises(SystemExit) as stopp:
+            k.kontrollera(False, "ok", "fel ett")
+        self.assertEqual(stopp.exception.code, 1)
+        self.assertEqual(k.fel_lista, [])  # utan flaggan samlas inget
+        with mock.patch("builtins.print") as skriv:
+            self.assertTrue(k.kontrollera(True, "allt ar bra", "x"))
+        skriv.assert_called_once_with("OK: allt ar bra", flush=True)
+        k.FORTSATT = True
+        with mock.patch("builtins.print") as skriv:
+            self.assertFalse(k.kontrollera(False, "ok", "fel ett"))
+            self.assertFalse(k.kontrollera(False, "ok", "fel tva"))
+            self.assertTrue(k.kontrollera(True, "ok tre", "x"))  # fortsatter efter felen
+        self.assertEqual(k.fel_lista, ["fel ett", "fel tva"])
+        skriv.assert_any_call("FEL: fel ett", flush=True)
+        with mock.patch("builtins.print") as skriv:
+            k.sammanfatta_fel()
+        skriv.assert_any_call("--- 2 FEL i kontrollen ---", flush=True)
+        skriv.assert_any_call("FEL: fel tva", flush=True)
+        # slut() (programmet startar eller svarar inte) stoppar anda, med listan
+        with mock.patch("builtins.print") as skriv, self.assertRaises(SystemExit):
+            k.slut("startar inte")
+        self.assertEqual(k.fel_lista[-1], "startar inte")
+        skriv.assert_any_call("--- 3 FEL i kontrollen ---", flush=True)
+
+    def test_flaggan_finns_och_flodet_anger_den_inte_for_mac(self):
+        text = open(os.path.join(PAKETERING, "kontrollera.py"), encoding="utf-8").read()
+        self.assertIn('"--fortsatt-efter-fel"', text)
+        mac = open(os.path.join(ROT, ".github", "workflows", "mac-app.yml"), encoding="utf-8").read()
+        self.assertNotIn("fortsatt-efter-fel", mac)
+        win = open(os.path.join(ROT, ".github", "workflows", "windows-app.yml"), encoding="utf-8").read()
+        self.assertIn("--fortsatt-efter-fel", win)
 
     def test_tasklist_hittar_bara_rader_med_avbildningens_namn(self):
         k = ladda_kontrollera("win32")

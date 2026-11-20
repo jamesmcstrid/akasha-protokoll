@@ -42,6 +42,8 @@ WINDOWS_MILJO = ("SYSTEMROOT", "WINDIR", "COMSPEC", "SYSTEMDRIVE", "PATHEXT", "P
                  "PROCESSOR_ARCHITEW6432", "NUMBER_OF_PROCESSORS", "OS", "PROGRAMDATA", "PROGRAMFILES", "ALLUSERSPROFILE",
                  "USERNAME", "COMPUTERNAME")
 
+FORTSATT = False  # --fortsatt-efter-fel: ett misslyckat villkor skrivs som FEL och kontrollen fortsatter
+fel_lista = []
 proc = None
 andra_proc = None
 args = None
@@ -53,15 +55,31 @@ def ok(text):
     print(f"OK: {text}", flush=True)
 
 
+def sammanfatta_fel():
+    """Med --fortsatt-efter-fel: listan over alla FEL som hittats (tom annars)."""
+    if fel_lista:
+        print(f"--- {len(fel_lista)} FEL i kontrollen ---", flush=True)
+        for rad in fel_lista:
+            print(f"FEL: {rad}", flush=True)
+
+
 def slut(text):
     """FEL: skriv felet, de sista raderna av programmets utskrift och logg, stoppa programmet."""
     print(f"FEL: {text}", flush=True)
+    if FORTSATT:
+        fel_lista.append(text)
     for namn, sokvag in (("programmets utskrift", utskrift), ("loggfilen", logg)):
         if sokvag and os.path.isfile(sokvag):
             with open(sokvag, encoding="utf-8", errors="replace") as f:
                 rader = f.read().splitlines()[-40:]
             print(f"--- {namn} ({sokvag}), sista {len(rader)} raderna ---", flush=True)
             print("\n".join(rader), flush=True)
+    if WIN and logg and os.path.isfile(logg):
+        with open(logg, encoding="utf-8", errors="replace") as f:
+            win = [r for r in f.read().splitlines() if "win:" in r]
+        print(f"--- alla loggrader fran Windows-skalet (win: ...), {len(win)} st ---", flush=True)
+        print("\n".join(win), flush=True)
+    sammanfatta_fel()
     for p in (andra_proc, proc):
         if p is not None and p.poll() is None:
             p.kill()
@@ -70,10 +88,15 @@ def slut(text):
 
 
 def kontrollera(villkor, text_ok, text_fel):
+    """OK, eller FEL: utan --fortsatt-efter-fel stoppar kontrollen (slut), med den skrivs felet och kontrollen fortsatter."""
     if villkor:
         ok(text_ok)
+    elif FORTSATT:
+        print(f"FEL: {text_fel}", flush=True)
+        fel_lista.append(text_fel)
     else:
         slut(text_fel)
+    return bool(villkor)
 
 
 def hamta(sokvag, **kw):
@@ -141,7 +164,7 @@ def programstorlek(program):
 
 
 def main():
-    global proc, andra_proc, args, utskrift, logg
+    global proc, andra_proc, args, utskrift, logg, FORTSATT
     if WIN:  # Actions-maskinens konsol ar inte UTF-8: en omdirigerad utskrift med a-ring far inte krascha skriptet
         for strom in (sys.stdout, sys.stderr):
             strom.reconfigure(encoding="utf-8", errors="replace")
@@ -152,7 +175,11 @@ def main():
     ap.add_argument("--vantad-motor", required=True, choices=["whispercpp", "faster"])
     ap.add_argument("--vantat-jobbfel", required=True)
     ap.add_argument("--riktig-rostmodell", action="store_true")
+    ap.add_argument("--fortsatt-efter-fel", action="store_true",
+                    help="skriv varje misslyckat villkor som FEL och fortsatt; stoppa bara nar det inte gar att fortsatta "
+                         "(programmet startar eller svarar inte). Sist en lista over alla FEL och slutkod 1")
     args = ap.parse_args()
+    FORTSATT = args.fortsatt_efter_fel
     hem = os.path.abspath(args.hem)
     program = os.path.abspath(args.program)
     if WIN and not os.path.isfile(program):  # ett tydligt FEL i stallet for en traceback om bygget inte gav nagon exe
@@ -278,28 +305,30 @@ def main():
         r = requests.post(f"http://127.0.0.1:{args.port}/api/inspelningar/fil", timeout=60,
                           headers={**HEADERS, "Origin": f"http://127.0.0.1:{args.port}"},
                           files={"ljud": ("en-talare.m4a", f, "audio/mp4")}, data={"talare": "1"})
-    kontrollera(r.status_code == 201, "uppladdningen ger 201", f"uppladdningen gav {r.status_code}: {r.text}")
-    id_ = r.json()["id"]
-    t0 = time.monotonic()
-    while True:
-        i = hamta(f"/api/inspelningar/{id_}").json()
-        if i["status"] in ("klar", "fel"):
-            break
-        if time.monotonic() - t0 > 120:
-            slut(f"jobbet blev inte klart inom 120 s (status {i['status']})")
-        time.sleep(1)
-    jobbfel = i.get("fel") or ""
-    kontrollera(i["status"] == "fel" and args.vantat_jobbfel in jobbfel,
-                f"jobbet misslyckades som väntat efter {time.monotonic() - t0:.1f} s: {jobbfel}",
-                f"jobbet gav status {i['status']} och fel {jobbfel!r}, väntade felet {args.vantat_jobbfel!r}")
-    kontrollera("Ljudet kunde inte läsas" not in jobbfel, "avkodningen av ljudet lyckades",
-                f"avkodningen misslyckades: {jobbfel}")
+    uppladdat = kontrollera(r.status_code == 201, "uppladdningen ger 201", f"uppladdningen gav {r.status_code}: {r.text}")
+    if uppladdat:
+        id_ = r.json()["id"]
+        t0 = time.monotonic()
+        while True:
+            i = hamta(f"/api/inspelningar/{id_}").json()
+            if i["status"] in ("klar", "fel"):
+                break
+            if time.monotonic() - t0 > 120:
+                slut(f"jobbet blev inte klart inom 120 s (status {i['status']})")
+            time.sleep(1)
+        jobbfel = i.get("fel") or ""
+        kontrollera(i["status"] == "fel" and args.vantat_jobbfel in jobbfel,
+                    f"jobbet misslyckades som väntat efter {time.monotonic() - t0:.1f} s: {jobbfel}",
+                    f"jobbet gav status {i['status']} och fel {jobbfel!r}, väntade felet {args.vantat_jobbfel!r}")
+        kontrollera("Ljudet kunde inte läsas" not in jobbfel, "avkodningen av ljudet lyckades",
+                    f"avkodningen misslyckades: {jobbfel}")
 
     # 9. Loggfilen.
     rad = f"Akasha Protokoll: http://127.0.0.1:{args.port}"
     text = open(logg, encoding="utf-8", errors="replace").read() if os.path.isfile(logg) else None
     kontrollera(text is not None and rad in text, f"loggfilen {logg} finns och innehåller '{rad}'",
                 f"loggfilen {logg} saknas eller saknar raden '{rad}'")
+    text = text or ""  # med --fortsatt-efter-fel kan loggen saknas: raderna nedan jamfor da mot en tom text
     if WIN:
         # Raderna "win: ..." visar hur langt skalet kom (ikonen vid klockan, beslutet, webblasaren).
         print("--- loggrader fran Windows-skalet (win: ...) ---", flush=True)
@@ -352,8 +381,23 @@ def main():
     # 11. Storlek.
     rot, total = programstorlek(program)
     ok(f"programmets storlek: {total / 1e6:.1f} MB ({rot})")
+    sammanfatta_fel()
+    if fel_lista:
+        print("KONTROLL: FEL")
+        sys.exit(1)
     print("KONTROLL: OK")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # Bara med --fortsatt-efter-fel: ett ovantat undantag (till exempel ett svar som saknar ett falt efter ett misslyckat
+        # villkor) ska inte dolja de FEL som redan hittats.
+        if not FORTSATT:
+            raise
+        import traceback
+
+        traceback.print_exc()
+        fel_lista.append("kontrollen avbrots av ett ovantat undantag (se traceback ovan)")
+        slut("kontrollen kunde inte fortsatta")

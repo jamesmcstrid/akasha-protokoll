@@ -219,10 +219,35 @@ class WindowsBygget(unittest.TestCase):
     def test_skripten_gar_att_tolka(self):
         for namn in WINDOWS_PY:
             compile(las("paketering", namn), namn, "exec")
-        if shutil.which("bash"):
+        # Inte pa Windows: subprocess hittar dar C:\\Windows\\System32\\bash.exe (WSL-startaren) fore Git Bash. Linux-jobbet tacker det.
+        if os.name != "nt" and shutil.which("bash"):
             for namn in WINDOWS_SH:
                 p = subprocess.run(["bash", "-n", os.path.join(PAKETERING, namn)], capture_output=True, text=True)
                 self.assertEqual(p.returncode, 0, f"{namn}: {p.stderr}")
+
+    def test_inga_msys_sokvagar_till_windows_program_i_skripten(self):
+        # Med MSYS_NO_PATHCONV=1 gar $ROT, $(pwd) och $PWD (som ger /d/a/...) oforandrade till python.exe, cmake och git,
+        # som inte forstar dem. Skripten gar till repots rot med cd och anvander relativa sokvagar (eller pwd -W).
+        for namn in WINDOWS_SH:
+            for rad in las("paketering", namn).splitlines():
+                kod = rad.split(" #")[0] if not rad.lstrip().startswith("#") else ""
+                if "$ROT" in kod or "${ROT}" in kod:
+                    self.assertTrue(kod.startswith("ROT=") or kod.strip() == 'cd "$ROT"', f"{namn}: {rad}")
+                self.assertNotIn("$PWD", kod, f"{namn}: {rad}")
+                if "$(pwd" in kod or "`pwd" in kod:
+                    self.assertTrue(kod.startswith("ROT=") or kod.startswith("winsokvag()"), f"{namn}: {rad}")
+        for namn in ("bygg-whisper-cli-windows.sh", "samla-whisper-cli-windows.sh"):
+            text = las("paketering", namn)
+            self.assertIn('cd "$(dirname "$0")/.."', text)
+            self.assertIn('"$PYTHON" "paketering/', text)
+        flode = las(".github", "workflows", "windows-app.yml")
+        self.assertNotIn("$(pwd)", flode)
+        self.assertNotIn("$PWD", flode)
+
+    def test_bygget_av_whisper_cli_tar_inte_med_parakeet(self):
+        text = las("paketering", "bygg-whisper-cli-windows.sh")
+        self.assertIn('cp "$BIN_KAT"/whisper.dll "$BIN_KAT"/ggml*.dll', text)
+        self.assertNotIn('"$BIN_KAT"/*.dll', text)
 
     def test_kommentarerna_i_windows_filerna_har_inga_aao(self):
         filer = [("paketering", n) for n in WINDOWS_PY + WINDOWS_SH] + [("paketering", "akasha-protokoll.spec")]

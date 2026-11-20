@@ -11,8 +11,10 @@ trap 'echo "FEL: samla-whisper-cli-windows.sh stannade pa rad $LINENO: $BASH_COM
 KOMPILERAT="${1:?ange katalogen med det kompilerade}"
 UT="${2:?ange en utkatalog}"
 PYTHON="${PYTHON:-python}"
-ROT="$(cd "$(dirname "$0")/.." && pwd)"
-VERKTYG="$ROT/paketering/bygg_windows_verktyg.py"
+# Alla sokvagar nedan ar relativa till repots rot: en sokvag i MSYS-form (/d/a/...) fran pwd eller $0 forstar inte ett
+# Windows-program (python, cmake, git), och MSYS_NO_PATHCONV=1 hindrar omskrivningen. Anroparen kor fran repots rot.
+cd "$(dirname "$0")/.."
+VERKTYG="paketering/bygg_windows_verktyg.py"
 
 [ -f "$KOMPILERAT/whisper-cli.exe" ] || { echo "FEL: $KOMPILERAT/whisper-cli.exe saknas (bygget eller cachen gav inget kompilerat)" >&2; ls -l "$KOMPILERAT" >&2 || true; exit 1; }
 rm -rf "$UT"
@@ -40,5 +42,5 @@ echo "OK: $(echo "$VARIANTER" | grep -c .) processorvarianter"
 echo "OK: whisper-cli.exe, whisper.dll, ggml.dll och ggml-base.dll finns"
 
 echo "== Beroenden (alla importer ska hittas i samma katalog eller bland Windows egna DLL-filer)"
-"$PYTHON" "$ROT/paketering/kontrollera_pe.py" "$UT" --system-katalog "${SYSTEMROOT:-C:\\Windows}\\System32"
+"$PYTHON" "paketering/kontrollera_pe.py" "$UT" --system-katalog "${SYSTEMROOT:-C:\\Windows}\\System32"
 echo "== Klar"

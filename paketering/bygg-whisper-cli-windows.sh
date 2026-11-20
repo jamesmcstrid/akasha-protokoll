@@ -14,7 +14,9 @@ trap 'echo "FEL: bygg-whisper-cli-windows.sh stannade pa rad $LINENO: $BASH_COMM
 VERSION="${1:?ange whisper.cpp-version (tagg), till exempel v1.9.5}"
 UT="${2:?ange en utkatalog}"
 PYTHON="${PYTHON:-python}"
-ROT="$(cd "$(dirname "$0")/.." && pwd)"
+# Alla sokvagar nedan ar relativa till repots rot: en sokvag i MSYS-form (/d/a/...) fran pwd eller $0 forstar inte ett
+# Windows-program (python, cmake, git), och MSYS_NO_PATHCONV=1 hindrar omskrivningen. Anroparen kor fran repots rot.
+cd "$(dirname "$0")/.."
 
 if [ -e "$UT/src" ] || [ -e "$UT/bygg" ] || [ -e "$UT/kompilerat" ]; then
   echo "FEL: $UT/src, $UT/bygg eller $UT/kompilerat finns redan. Anvand en tom utkatalog." >&2
@@ -101,8 +103,14 @@ BIN_KAT="$(dirname "$BIN")"
 echo "whisper-cli.exe: $BIN"
 mkdir -p "$UT/kompilerat"
 cp "$BIN" "$UT/kompilerat/"
-# Alla DLL-filer som byggdes ligger normalt bredvid exe-filen (whisper.cpp satter utkatalogen till bin/).
-cp "$BIN_KAT"/*.dll "$UT/kompilerat/" 2>/dev/null || echo "VARNING: inga .dll i $BIN_KAT"
+# DLL-filerna ligger normalt bredvid exe-filen (whisper.cpp satter utkatalogen till bin/). Bara whisper.dll och ggml*.dll
+# tas med: andra byggda filer (till exempel parakeet.dll, som hor till parakeet-cli) behovs inte. Importerar nagot vi
+# skickar med en sadan fil anda blir det FEL i beroendekontrollen (samla-whisper-cli-windows.sh), och da tas den tillbaka.
+cp "$BIN_KAT"/whisper.dll "$BIN_KAT"/ggml*.dll "$UT/kompilerat/" 2>/dev/null || echo "VARNING: whisper.dll eller ggml*.dll saknas i $BIN_KAT"
+echo "-- Byggda filer i $BIN_KAT som INTE tas med:"
+for f in "$BIN_KAT"/*; do
+  [ -e "$UT/kompilerat/$(basename "$f")" ] || echo "   $(basename "$f")"
+done
 # Och om nagon byggdes pa annat stalle, till exempel i ett eget undermapp per mal:
 for dll in $(find "$UT/bygg" \( -name 'whisper.dll' -o -name 'ggml*.dll' \) -not -path '*CMakeFiles*'); do
   if [ ! -f "$UT/kompilerat/$(basename "$dll")" ]; then
@@ -112,7 +120,7 @@ for dll in $(find "$UT/bygg" \( -name 'whisper.dll' -o -name 'ggml*.dll' \) -not
 done
 
 echo "== Filerna i $UT/kompilerat"
-"$PYTHON" "$ROT/paketering/bygg_windows_verktyg.py" lista "$UT/kompilerat"
+"$PYTHON" "paketering/bygg_windows_verktyg.py" lista "$UT/kompilerat"
 
 echo "== Processorvarianter (ggml-cpu-*.dll)"
 VARIANTER="$(find "$UT/kompilerat" -name 'ggml-cpu-*.dll' | sort)"

@@ -124,7 +124,7 @@ jobs:
           build/venv/Scripts/python paketering/kontrollera.py \
             --program "build/uppackad/Åsa Ölund/Akasha Protokoll/Akasha Protokoll.exe" \
             --hem "$RUNNER_TEMP/Åsa Ölund" --port 8611 \
-            --vantad-motor whispercpp --vantat-jobbfel whisper-cli --riktig-rostmodell 2>&1 | tee build/loggar/kontrollera.log
+            --vantad-motor whispercpp --vantat-jobbfel whisper-cli --riktig-rostmodell --fortsatt-efter-fel 2>&1 | tee build/loggar/kontrollera.log
       - name: Kontrollera sökvägar och talare
         id: kontroll_windows
         if: ${{ !cancelled() }}
@@ -182,6 +182,23 @@ jobs:
           ls -l dist > build/loggar/dist-filer.txt 2>&1 || true
           ls -lR build/uppackad > build/loggar/uppackad-filer.txt 2>&1 || true
           ls -l build/loggar
+          # Det viktigaste skrivs ocksa ut har (de sista 300 raderna var), sa att det gar att lasa i jobbloggen utan att
+          # ladda ned artefakten.
+          visa() { echo; echo "=============== $1 ==============="; if [ -f "$2" ]; then tail -n 300 "$2"; else echo "(saknas: $2)"; fi; }
+          visa "programmets loggfil" "$HEM/AppData/Local/Akasha Protokoll/logg/akasha-protokoll.log"
+          visa "program-utskrift.log" "$HEM/program-utskrift.log"
+          visa "program-utskrift-andra.log" "$HEM/program-utskrift-andra.log"
+          echo; echo "=============== pe-importer.txt: filer med FEL eller SAKNAS, och whisper-cli.exe, whisper.dll, sherpa och onnxruntime ==============="
+          if [ -f build/app/pe-importer.txt ]; then
+            wc -l build/app/pe-importer.txt
+            grep -E 'SAKNAS|FEL' build/app/pe-importer.txt | head -n 100 || true
+            awk '/^[^ ]/ { p = ($0 ~ /whisper-cli\.exe|whisper\.dll|_sherpa_onnx|sherpa-onnx-c-api|onnxruntime\.dll/) } p' build/app/pe-importer.txt | head -n 300
+          else
+            echo "(saknas)"
+          fi
+          echo; echo "=============== PyInstallers varningsfil (utan missing module named numpy._core.*) ==============="
+          VARNING="$(ls build/app/pyi/*/warn-*.txt 2>/dev/null | head -n 1)"
+          if [ -n "$VARNING" ]; then grep -v 'missing module named numpy\._core\.' "$VARNING" | tail -n 300; else echo "(saknas)"; fi
       - uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
