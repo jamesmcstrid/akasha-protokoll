@@ -617,7 +617,7 @@ async function oppnaLjud(kalla) {
   try {
     mik = await navigator.mediaDevices.getUserMedia({
       // Whisper klarar sig bast med obehandlat ljud. Automatisk niva hjalper nar nagon sitter
-      // langre bort. Vid digitalt mote tar ekosläckningen bort motesljudet om du har hogtalare.
+      // langre bort. Vid digitalt mote tar ekoborttagningen bort motesljudet om du har hogtalare.
       audio: { echoCancellation: kalla === "digitalt", noiseSuppression: false, autoGainControl: true },
     });
   } catch {

@@ -82,6 +82,7 @@ Sidan i korthet:
   och 3 Använd texten. Ett klick på ett osäkert ord spelar från 2 s före ordets uppskattade tid.
 - **Kvitton och fel** från listan och visningen visas i en ruta nederst i fönstret. Kvitton
   försvinner efter 6 s, fel ligger kvar tills man stänger dem.
+- **Typsnitt:** Anton och Instrument Sans följer med programmet som `.woff2`-filer i `app/static/typsnitt/`, tillsammans med licenserna (SIL OFL 1.1, `OFL-*.txt`). Sidan hämtar inget typsnitt från internet.
 
 ## Modellerna och hämtningen
 
