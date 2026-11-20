@@ -382,6 +382,41 @@ class TestWhispercppKor(FalskCliMiljo):
         self.kontrollera(mk, logg, res, fr)
 
 
+@unittest.skipIf(os.name == "nt", "ett skalskript som cli; sokvagstestet i test_plattform tacker Windows")
+class TestRelativCli(unittest.TestCase):
+    def test_relativ_whisper_cli_startas_trots_annan_arbetskatalog(self):
+        """WHISPERCPP_BIN=./bin/whisper-cli: sokvagen gors absolut fore arbetskatalogen byts."""
+        bas = tempfile.mkdtemp(prefix="akasha-motor-")
+        self.addCleanup(shutil.rmtree, bas, True)
+        bin_ = os.path.join(bas, "bin")
+        modellkatalog = os.path.join(bas, "modeller")
+        os.makedirs(bin_)
+        os.makedirs(os.path.join(modellkatalog, "kb-whisper-medium-ggml"))
+        modell = os.path.join(modellkatalog, "kb-whisper-medium-ggml", "ggml-model.bin")
+        with open(modell, "wb") as f:
+            f.write(b"x")
+        logg = os.path.join(bas, "logg.json")
+        cli = os.path.join(bin_, "whisper-cli")
+        kod = f'#!/bin/sh\nexec "{sys.executable}" "{os.path.join(bas, "falsk_cli.py")}" "$@"\n'
+        with open(cli, "w") as f:
+            f.write(kod)
+        os.chmod(cli, 0o755)
+        with open(os.path.join(bas, "falsk_cli.py"), "w", encoding="utf-8") as f:
+            f.write(FALSK_CLI)
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(bas)  # annan an modellkatalogen: ./bin/whisper-cli finns bara har
+        with mock.patch.object(modeller, "MODELLKATALOG", modellkatalog), \
+             mock.patch.object(motor, "GGML_MODELL", modell), \
+             mock.patch.object(plattform, "ar_paketerad", lambda: False), \
+             mock.patch.object(plattform, "system", lambda: "Darwin"), \
+             mock.patch.object(installningar, "WHISPERCPP_BIN", os.path.join(".", "bin", os.path.basename(cli))), \
+             mock.patch.dict(os.environ, {"FALSK_CLI_LOGG": logg}):
+            resultat = motor._whispercpp(np_tyst(), False, "", None)
+        self.assertEqual(resultat[0], "Hej Åsa.")
+        with open(logg, encoding="utf-8") as f:
+            self.assertEqual(os.path.realpath(json.load(f)["cwd"]), os.path.realpath(modellkatalog))
+
+
 class TestTillfalligKatalog(unittest.TestCase):
     def test_skapas_under_modellkatalogen_och_stadningen_ignorerar_fel(self):
         bas = tempfile.mkdtemp(prefix="akasha-motor-")

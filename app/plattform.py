@@ -206,7 +206,10 @@ def whisper_cli():
         if os.path.isfile(kandidat) and os.access(kandidat, os.X_OK):
             return kandidat
         return None
-    return shutil.which(WHISPERCPP_BIN)
+    # Alltid absolut: whisper-cli startas med MODELLKATALOG som arbetskatalog, och shutil.which lamnar en
+    # relativ sokvag (WHISPERCPP_BIN=./bin/whisper-cli) som den ar.
+    funnen = shutil.which(WHISPERCPP_BIN)
+    return os.path.abspath(funnen) if funnen else None
 
 
 def oppna_webblasare(url):
@@ -226,9 +229,13 @@ def visa_fil(sokvag):
         if system() == "Darwin":
             subprocess.Popen(["/usr/bin/open", "-R", sokvag])
         elif system() == "Windows":
-            # Ett enda argument: "/select,<sokvag>" (inte ett mellanslag efter kommat, som ger tva
-            # argument). Pythons citering satter hela argumentet inom citattecken om det har mellanslag.
-            subprocess.Popen(["explorer", "/select," + sokvag.replace("/", "\\")])
+            # Den belagda formen for Utforskaren: explorer /select,"<sokvag>" (citattecken bara runt
+            # sokvagen), som en fardig kommandorad. En strang gar oforandrad till CreateProcess.
+            sokvag = sokvag.replace("/", "\\")
+            if '"' in sokvag:  # kan inte finnas i en Windows-sokvag
+                log.warning("kunde inte visa filen: sokvagen har ett citattecken")
+                return
+            subprocess.Popen('explorer /select,"%s"' % sokvag)
         else:
             webbrowser.open("file://" + os.path.dirname(sokvag))
     except OSError as e:

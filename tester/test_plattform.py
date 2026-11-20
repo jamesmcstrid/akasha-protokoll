@@ -478,8 +478,8 @@ class TestWhisperCliWindows(Tillfallig):
     def test_vald_bin_i_installningarna_ar_ovrort(self):
         with mock.patch.object(sys, "frozen", True, create=True), \
              mock.patch.object(installningar, "WHISPERCPP_BIN", "C:\\egen\\whisper-cli.exe"), \
-             mock.patch.object(shutil, "which", return_value="X") as which, system("Windows"):
-            self.assertEqual(plattform.whisper_cli(), "X")
+             mock.patch.object(shutil, "which", return_value=os.path.abspath("X")) as which, system("Windows"):
+            self.assertEqual(plattform.whisper_cli(), os.path.abspath("X"))
         which.assert_called_once_with("C:\\egen\\whisper-cli.exe")
 
 
@@ -647,6 +647,29 @@ class TestHallVakenWindows(unittest.TestCase):
                 pass
 
 
+class TestWhisperCliRelativ(Tillfallig):
+    def test_relativ_bin_ger_absolut_sokvag(self):
+        mapp = os.path.join(self.katalog, "bin")
+        os.mkdir(mapp)
+        fil = os.path.join(mapp, "whisper-cli.exe" if os.name == "nt" else "whisper-cli")
+        with open(fil, "w") as f:
+            f.write("#!/bin/sh\n")
+        os.chmod(fil, 0o755)
+        rel = os.path.join(".", "bin", os.path.basename(fil))
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(self.katalog)
+        with mock.patch.object(plattform, "ar_paketerad", return_value=False), \
+             mock.patch.object(installningar, "WHISPERCPP_BIN", rel):
+            funnen = plattform.whisper_cli()
+        self.assertTrue(os.path.isabs(funnen), funnen)
+        self.assertEqual(os.path.realpath(funnen), os.path.realpath(fil))
+
+    def test_saknad_ger_none(self):
+        with mock.patch.object(plattform, "ar_paketerad", return_value=False), \
+             mock.patch.object(shutil, "which", return_value=None):
+            self.assertIsNone(plattform.whisper_cli())
+
+
 class TestHallVaken(unittest.TestCase):
     def test_caffeinate_med_w(self):
         process = mock.Mock()
@@ -659,19 +682,21 @@ class TestHallVaken(unittest.TestCase):
 
 
 class TestVisaFil(unittest.TestCase):
-    def test_windows_ett_select_argument(self):
+    def test_windows_citattecken_bara_runt_sokvagen(self):
         with system("Windows"), mock.patch.object(subprocess, "Popen") as popen:
             plattform.visa_fil("C:\\Users\\Åsa Öberg\\AkashaProtokoll\\en fil.txt")
-        popen.assert_called_once_with(["explorer", "/select,C:\\Users\\Åsa Öberg\\AkashaProtokoll\\en fil.txt"])
+        popen.assert_called_once_with('explorer /select,"C:\\Users\\Åsa Öberg\\AkashaProtokoll\\en fil.txt"')
 
     def test_windows_snedstreck_blir_omvanda(self):
         with system("Windows"), mock.patch.object(subprocess, "Popen") as popen:
             plattform.visa_fil("C:/Users/x/fil.txt")
-        self.assertEqual(popen.call_args[0][0], ["explorer", "/select,C:\\Users\\x\\fil.txt"])
+        self.assertEqual(popen.call_args[0][0], 'explorer /select,"C:\\Users\\x\\fil.txt"')
 
-    def test_citeringen_ger_ett_argument_till_explorer(self):
-        rad = subprocess.list2cmdline(["explorer", "/select,C:\\Users\\Åsa Öberg\\fil.txt"])
-        self.assertEqual(rad, 'explorer "/select,C:\\Users\\Åsa Öberg\\fil.txt"')
+    def test_windows_citattecken_i_sokvagen_loggas_och_ger_inget_anrop(self):
+        with system("Windows"), mock.patch.object(subprocess, "Popen") as popen, \
+             self.assertLogs("akasha-protokoll", "WARNING"):
+            plattform.visa_fil('C:\\x"y\\fil.txt')
+        popen.assert_not_called()
 
     def test_mac_ar_oforandrat(self):
         with system("Darwin"), mock.patch.object(subprocess, "Popen") as popen:
