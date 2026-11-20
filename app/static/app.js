@@ -514,7 +514,7 @@ async function spelaIn() {
   // delar: alla delar i ordning, aven de som redan ar sparade (raddningsfilen ska bli hela
   // inspelningen). sparade: antal delar servern har kvitterat.
   const insp = { id, rec, ljud, start: Date.now(), delar: [], sparade: 0, skickar: false, fel: null,
-    lage: "spelar", mime: format.mime, andelse: format.andelse, filSparad: false, vackning: null,
+    lage: "spelar", mime: format.mime, andelse: format.andelse, filDelar: 0, vackning: null,
     nere: false, harVantat: false, stoppad: false, tomma: [], senastKoText: null };
   inspelning = insp;
   koInsp = insp;
@@ -660,6 +660,12 @@ function vantaPaKon(insp) {
   return new Promise((r) => insp.tomma.push(r));
 }
 
+// Den sparade filen har allt ljud: inspelaren har stannat (inga fler delar kommer) och filen
+// sparades efter den sista delen.
+function filenArHel(insp) {
+  return insp.slut && insp.filDelar > 0 && insp.filDelar === insp.delar.length;
+}
+
 // Rutan #ko och raden #sparat. Texten i rutan skrivs bara nar laget eller felet byts, sa att
 // skarmlasare inte laser upp den varje sekund. Mangden som vantar star bara i #sparat.
 function uppdateraKo(insp) {
@@ -697,10 +703,15 @@ function uppdateraKo(insp) {
       text = "Inspelningen är stoppad och sparad. Transkriberingen startar när Akasha Meet svarar igen. Stäng inte fliken.";
     }
   }
-  const nyckel = `${sort}|${insp.fel}`;
+  // Filen sparades tidigare men saknar slutet: en extra mening i lagen "vantar-ljud" och "fel-stoppad".
+  const gammalFil = insp.stoppad && insp.filDelar > 0 && !filenArHel(insp);
+  if (gammalFil && (sort === "vantar-ljud" || sort === "fel-stoppad")) {
+    text += " Filen du sparade tidigare har inte med allt. Spara ljudet som fil igen för att få med hela inspelningen.";
+  }
+  const nyckel = `${sort}|${insp.fel}|${gammalFil}`;
   $("ko").hidden = text === null;
   // Klar visas bara nar filen ar sparad: da kan inspelningen slappas utan att ljud tappas.
-  $("ko-klar").hidden = !(insp.stoppad && insp.filSparad && (insp.fel || insp.nere || insp.harVantat || insp.klarVantar));
+  $("ko-klar").hidden = !(insp.stoppad && filenArHel(insp) && (insp.fel || insp.nere || insp.harVantat || insp.klarVantar));
   if (text !== null && insp.stoppad && $("meddelande").textContent === "Sparar de sista sekunderna…") meddela("");
   if (text === null) insp.senastKoText = null;
   else if (insp.senastKoText !== nyckel) {
@@ -722,9 +733,12 @@ function sparaLjudSomFil(insp) {
   lank.click();
   lank.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
-  insp.filSparad = true;
+  insp.filDelar = insp.delar.length;
   uppdateraKo(insp);
-  kvitto(insp.fel
+  const tidIFilen = tid(insp.delar[insp.delar.length - 1].sekunder);
+  kvitto(!insp.slut
+    ? `Ljudet fram till nu (${tidIFilen}) är sparat som en fil bland dina hämtade filer. Inspelningen fortsätter. Spara igen efter Stoppa, så att filen får med allt.`
+    : insp.fel
     ? "Ljudet är sparat som en fil bland dina hämtade filer. Ladda upp den med knappen Ladda upp ljudfil. Den ofullständiga inspelningen i listan kan du radera."
     : "Ljudet är sparat som en fil bland dina hämtade filer. Sidan fortsätter att försöka spara inspelningen här.");
 }
@@ -824,7 +838,7 @@ async function stoppa() {
 // Klar efter sparad fil: inspelningen slapps och kon slutar skicka.
 function slappEfterFil() {
   const insp = koInsp;
-  if (!insp || !insp.stoppad || !insp.filSparad) return;
+  if (!insp || !insp.stoppad || !filenArHel(insp)) return;
   const lageFel = insp.lage === "fel" || !!insp.fel;
   insp.slappt = true;
   insp.vackning?.();
@@ -875,7 +889,7 @@ async function avslutaInspelning(insp) {
   $("ko").hidden = true;
   slappInspelning(insp);
   $("titel").value = ""; // annars far nasta inspelning samma rubrik
-  meddela("Inspelningen är sparad och transkriberas nu." + (insp.filSparad ? " Filen du sparade behövs inte." : ""));
+  meddela("Inspelningen är sparad och transkriberas nu." + (insp.filDelar > 0 ? " Filen du sparade behövs inte." : ""));
   visa(insp.id);
 }
 
