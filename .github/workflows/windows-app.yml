@@ -154,6 +154,14 @@ jobs:
           build/venv/Scripts/python paketering/kontrollera_installation.py --installation dist/Akasha-Protokoll-installation.exe \
             --katalog "$RUNNER_TEMP/Installerat Åäö/Akasha Protokoll" --hem "$RUNNER_TEMP/Hem för installationen Åäö" \
             --version "$AKASHA_VERSION.$AKASHA_BYGGNUMMER" --port 8611 --logg-katalog build/loggar 2>&1 | tee build/loggar/kontrollera-installation.log
+      - name: Kontrollsummor (SHA256SUMS.txt)
+        id: summor
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          build/venv/Scripts/python paketering/kontrollsummor.py dist/SHA256SUMS.txt \
+            dist/Akasha-Protokoll-windows-x64.zip dist/Akasha-Protokoll-installation.exe 2>&1 | tee build/loggar/kontrollsummor.log
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
@@ -164,6 +172,12 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           path: dist/Akasha-Protokoll-installation.exe
+          archive: false
+          retention-days: 7
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          path: dist/SHA256SUMS.txt
           archive: false
           retention-days: 7
       - name: Sammanfattning
@@ -178,11 +192,12 @@ jobs:
           KONTROLL_WINDOWS: ${{ steps.kontroll_windows.outcome }}
           INSTALLATION: ${{ steps.installation.outcome }}
           KONTROLL_INSTALLATION: ${{ steps.kontroll_installation.outcome }}
+          SUMMOR: ${{ steps.summor.outcome }}
         run: |
           fel=0
           for rad in "Enhetstester=$TESTER" "Bygg whisper-cli (skipped betyder ur cachen)=$BYGG_CLI" "Samla whisper-cli=$SAMLA_CLI" "Kontroll av whisper-cli=$KONTROLL_CLI" \
                      "Bygg av programmet=$BYGG" "Kontroll av programmet=$KONTROLL_PROGRAM" "Sökvägar och talare=$KONTROLL_WINDOWS" \
-                     "Bygg av installationsfilen=$INSTALLATION" "Kontroll av installationen=$KONTROLL_INSTALLATION"; do
+                     "Bygg av installationsfilen=$INSTALLATION" "Kontroll av installationen=$KONTROLL_INSTALLATION" "Kontrollsummor=$SUMMOR"; do
             namn="${rad%=*}"
             utfall="${rad##*=}"
             echo "$namn: ${utfall:-ej körd}"

@@ -203,7 +203,7 @@ class Paketering(unittest.TestCase):
 
 
 WINDOWS_PY = ("kontroll_hjalp.py", "kontrollera_pe.py", "kontrollera_whisper_cli_windows.py", "kontrollera_windows.py",
-              "bygg_windows_verktyg.py", "bygg_installation.py", "kontrollera_installation.py")
+              "bygg_windows_verktyg.py", "bygg_installation.py", "kontrollera_installation.py", "kontrollsummor.py")
 WINDOWS_SH = ("bygg-whisper-cli-windows.sh", "samla-whisper-cli-windows.sh", "bygg-windows.sh")
 
 
@@ -487,6 +487,28 @@ class Installationsfilen(unittest.TestCase):
         self.assertEqual(rad, '"C:\\x y\\Setup.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER '
                               '/DIR="C:\\Åsa Ölund\\Akasha Protokoll" /LOG="C:\\l.log"')
 
+    def test_kontrollsummorna_har_sha256sum_format(self):
+        import hashlib
+        import kontrollsummor as ks
+        mapp = tempfile.mkdtemp(prefix="akasha-summor-")
+        self.addCleanup(shutil.rmtree, mapp, True)
+        a, b = os.path.join(mapp, "Åsa zip.zip"), os.path.join(mapp, "inst.exe")
+        for f, data in ((a, b"abc"), (b, b"")):
+            with open(f, "wb") as h:
+                h.write(data)
+        rader, saknas = ks.rader([a, b, os.path.join(mapp, "finns-inte")])
+        self.assertEqual(rader, [hashlib.sha256(b"abc").hexdigest() + "  Åsa zip.zip", hashlib.sha256(b"").hexdigest() + "  inst.exe"])
+        self.assertEqual(len(saknas), 1)
+        ut = os.path.join(mapp, "SHA256SUMS.txt")
+        with mock.patch("builtins.print"):
+            self.assertEqual(ks.main([ut, a, b]), 0)
+            self.assertEqual(ks.main([ut, a, os.path.join(mapp, "saknas")]), 1)  # saknad fil ger FEL men a far sin summa
+        with open(ut, encoding="utf-8", newline="") as f:
+            self.assertEqual(f.read(), hashlib.sha256(b"abc").hexdigest() + "  Åsa zip.zip\n")
+        if shutil.which("sha256sum") and os.name != "nt":
+            p = subprocess.run(["sha256sum", "-c", ut], cwd=mapp, capture_output=True, text=True)
+            self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+
 
 class WindowsFlodet(unittest.TestCase):
     """Statiska kontroller av .github/workflows/windows-app.yml (flodet kors bara i Actions)."""
@@ -587,27 +609,28 @@ class WindowsFlodet(unittest.TestCase):
         for fil in ("pyinstaller.log", "warn-*.txt", "program-utskrift.log", "program-utskrift-andra.log", "programlogg"):
             self.assertIn(fil, samla["run"])
 
-    def test_installationen_i_flodet(self):
+    def test_installationen_och_kontrollsummorna_i_flodet(self):
         d = self.yaml()
         steg = d["jobs"]["bygg"]["steps"]
         id_ = [s_.get("id") for s_ in steg]
-        for i in ("installation", "kontroll_installation"):
+        for i in ("installation", "kontroll_installation", "summor"):
             s_ = steg[id_.index(i)]
             self.assertTrue(s_["continue-on-error"], i)  # ett fel hos Inno Setup hindrar aldrig zip-filen
             self.assertEqual(s_["if"], "${{ !cancelled() }}", i)
         # efter zip-kontrollen, fore sammanfattningen
         self.assertLess(id_.index("kontroll_windows"), id_.index("installation"))
         self.assertLess(id_.index("installation"), id_.index("kontroll_installation"))
+        self.assertLess(id_.index("kontroll_installation"), id_.index("summor"))
         text = self.text()
-        for stycke in ("bygg_installation.py", "kontrollera_installation.py",
+        for stycke in ("bygg_installation.py", "kontrollera_installation.py", "kontrollsummor.py",
                        '--version "$AKASHA_VERSION.$AKASHA_BYGGNUMMER"', "$RUNNER_TEMP/Installerat Åäö/Akasha Protokoll",
-                       "$RUNNER_TEMP/Hem för installationen Åäö", "dist/Akasha-Protokoll-installation.exe"):
+                       "$RUNNER_TEMP/Hem för installationen Åäö", "dist/Akasha-Protokoll-installation.exe", "dist/SHA256SUMS.txt"):
             self.assertIn(stycke, text)
         uppladdat = [s_["with"]["path"] for s_ in steg if s_.get("uses", "").startswith("actions/upload-artifact") and "path" in s_.get("with", {})
                      and not s_["with"].get("name")]
-        self.assertEqual(uppladdat, ["dist/Akasha-Protokoll-windows-x64.zip", "dist/Akasha-Protokoll-installation.exe"])
+        self.assertEqual(uppladdat, ["dist/Akasha-Protokoll-windows-x64.zip", "dist/Akasha-Protokoll-installation.exe", "dist/SHA256SUMS.txt"])
         sammanfattning = next(s_ for s_ in steg if s_.get("name") == "Sammanfattning")
-        for i in ("installation", "kontroll_installation"):
+        for i in ("installation", "kontroll_installation", "summor"):
             self.assertIn(f"steps.{i}.outcome", str(sammanfattning["env"]))
         self.assertNotIn("secrets", text.lower())
 
