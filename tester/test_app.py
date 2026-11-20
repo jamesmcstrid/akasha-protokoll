@@ -368,6 +368,15 @@ class TestApp(unittest.TestCase):
                     if typ.startswith("text/"):
                         self.assertIn("charset=utf-8", r.headers["Content-Type"], sokvag)
 
+    def test_filtyperna_galler_ocksa_delsvar_206(self):
+        with mock.patch("mimetypes.guess_type", lambda *a, **k: ("text/plain", None)):
+            for sokvag, typ in (("/static/app.js", "text/javascript"),
+                                ("/static/typsnitt/instrument-sans-latin-wght-normal.woff2", "font/woff2")):
+                with self.klient.get(sokvag, headers={"Range": "bytes=0-99"}) as r:
+                    self.assertEqual(r.status_code, 206, sokvag)
+                    self.assertEqual(r.mimetype, typ, sokvag)
+                    self.assertEqual(len(r.data), 100)
+
     def test_filtyperna_utan_forgiftning_ar_samma(self):
         for sokvag, typ in (("/static/app.js", "text/javascript"), ("/static/stil.css", "text/css"),
                             ("/static/typsnitt/instrument-sans-latin-wght-normal.woff2", "font/woff2")):

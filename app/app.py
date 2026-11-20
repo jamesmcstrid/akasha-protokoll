@@ -97,7 +97,7 @@ def sakerhetsheaders(svar):
     svar.headers["Referrer-Policy"] = "no-referrer"
     if request.path.startswith("/api/"):
         svar.headers["Cache-Control"] = "no-store"
-    if request.endpoint == "static" and svar.status_code == 200 and filtyp(request.path):
+    if request.endpoint == "static" and svar.status_code in (200, 206) and filtyp(request.path):
         svar.mimetype = filtyp(request.path)  # lagger till charset for text/*
     return svar
 
