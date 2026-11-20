@@ -2,7 +2,7 @@
 
 // Alla anrop som andrar nagot maste ha den har headern (skydd mot andra webbsidor).
 const HEADER = { "X-Akasha-Meet": "1" };
-const INGEN_TJANST = "Akasha Meet svarar inte. Se till att programmet är igång och försök igen. Det som redan är sparat ligger kvar.";
+const INGEN_TJANST = "Akasha Meet svarar inte. Öppna Akasha Meet igen om du har avslutat det, och försök sedan igen. Det som redan är sparat ligger kvar.";
 const DEL_MS = 5000; // webblasaren skickar ljudet till disken var femte sekund
 // Varning om inget ljud kommer in: ljudnivan (RMS) under -80 dBFS i 10 sekunder. En avstangd
 // eller fel vald mikrofon ger nollor eller nastan nollor (16-bitarsljudets minsta steg ar ca

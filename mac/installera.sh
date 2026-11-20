@@ -54,8 +54,15 @@ mkdir -p "$DATA" "$LA"
 chmod 700 "$DATA"   # motesinspelningar: bara du kommer at dem
 LOGG="$DATA/akasha-meet.log"
 
-echo "== launchd: $ETIKETT"
 TJANST="gui/$UIDN/$ETIKETT"
+# Ar programmet (Akasha Meet.app) igang pa porten utan att launchd-tjansten finns ska vi inte lagga
+# in den: annars kraschar tjansten om och om igen pa den upptagna porten, medan vantan nedan far
+# svar fran programmet och sager "Klart".
+if ! launchctl print "$TJANST" >/dev/null 2>&1 && curl -s -o /dev/null "http://127.0.0.1:$PORT/health"; then
+  echo "FEL: Akasha Meet (programmet) ar igang pa port $PORT. Avsluta det forst (Akasha Meet > Avsluta Akasha Meet) och kor skriptet igen."; exit 1
+fi
+
+echo "== launchd: $ETIKETT"
 sed -e "s#__REPO__#$REPO#g" -e "s#__LOGG__#$LOGG#g" "$REPO/mac/$ETIKETT.plist" > "$LA/$ETIKETT.plist"
 if command -v plutil >/dev/null; then
   plutil -lint "$LA/$ETIKETT.plist" >/dev/null || { echo "FEL: $LA/$ETIKETT.plist ar ogiltig"; exit 1; }

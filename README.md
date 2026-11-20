@@ -10,6 +10,8 @@ Du får texten uppdelad per talare och kan byta "Talare 1" och "Talare 2" mot ri
 - **Möten i rummet och digitalt.** Med datorns mikrofon, eller Google Meet och Slack i Chrome.
 - **Inspelningen tappas inte.** Ljudet sparas på disken var femte sekund under mötet. Svarar inte Akasha Meet en stund sparas ljudet i webbläsarfliken under tiden.
 
+Akasha Meet är ett program som du öppnar som vilket annat som helst. Själva sidan visas i webbläsaren.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/bilder/akasha-meet-mork.png">
   <img src="docs/bilder/akasha-meet-ljus.png" alt="Akasha Meet i webbläsaren. Överst formuläret för en ny transkribering. Under det ett transkriberat möte i tre steg: 1 Vem är vem? med namnen Anna och Jonas, 2 Kontrollera mot ljudet med en förklaring av markeringarna, ljudspelaren och replikerna, där en replik är markerad som osäker talare och två ord är understrukna som osäkra, och 3 Använd texten med knappar för att kopiera och ladda ner." width="760">
@@ -19,7 +21,9 @@ Du får texten uppdelad per talare och kan byta "Talare 1" och "Talare 2" mot ri
 
 ## Använda
 
-1. Öppna **http://127.0.0.1:8611** i Chrome (eller Safari). Spara gärna sidan som bokmärke.
+1. Öppna **Akasha Meet** i Program. Webbläsaren öppnas på sidan av sig själv. Har du installerat från
+   Terminal går du i stället till **http://127.0.0.1:8611** i Chrome (eller Safari). Spara gärna
+   sidan som bokmärke.
 2. Välj **Hur spelas mötet in?** och **Hur många pratar?**. Skriv gärna namn och facktermer som
    sägs i mötet under **Svårstavade ord**, så stavas de rätt.
 3. Tryck **Spela in**. När mötet är slut trycker du **Stoppa och transkribera**. Du kan också
@@ -100,6 +104,39 @@ fram visar sidan ungefär hur lång tid som är kvar.
 
 ## Installera
 
+### Som program (prov, Mac med Apple Silicon)
+
+Programmet byggs i GitHub Actions och är ännu inte signerat av Apple. Det kräver en Mac med Apple
+Silicon (M1 eller senare) och macOS 14 eller senare.
+
+1. Öppna repot på GitHub, gå till **Actions → Mac-app**, välj den senaste gröna körningen och ladda
+   ned **Akasha-Meet-mac-arm64.zip** under **Artifacts**.
+2. Öppna zip-filen i Hämtade filer om Safari inte redan har gjort det, och dra **Akasha Meet** till
+   **Program**.
+3. Dubbelklicka på Akasha Meet. Första gången visar macOS en varning om att appen inte går att
+   kontrollera. Stäng varningen utan att flytta appen till papperskorgen.
+4. Välj Apple-menyn > Systeminställningar och klicka på **Integritet och säkerhet** i sidofältet
+   (du kanske måste rulla nedåt). Gå till **Säkerhet** och klicka på **Öppna** vid raden om Akasha
+   Meet. Klicka sedan på **Öppna ändå**. Knappen finns i omkring en timme efter att du försökte
+   öppna appen; gör om steg 3 om den saknas. Ange ditt inloggningslösenord och klicka på **OK**.
+   Det behövs bara första gången. Apple beskriver stegen i
+   [Öppna en Mac-app från en okänd utvecklare](https://support.apple.com/sv-se/guide/mac-help/mh40616/mac).
+5. Sidan öppnas och erbjuder att hämta modellerna (cirka 1,6 GB, bara första gången).
+
+Säger macOS att programmet är skadat, eller finns ingen Öppna ändå-knapp, kör en gång i Terminal:
+`xattr -dr com.apple.quarantine "/Applications/Akasha Meet.app"` och öppna programmet igen.
+
+**Igång och avsluta:** när Akasha Meet är igång har ikonen i Dock en prick under sig. Klicka på
+ikonen för att öppna sidan igen. Avsluta med **⌘Q** eller genom att högerklicka på ikonen och välja
+**Avsluta**. Det du redan spelat in ligger kvar.
+
+**Har du installerat från Terminal tidigare** frågar programmet om det ska ta över. Då stängs den
+gamla installationen av och startar inte längre när du loggar in. Inspelningarna i `~/AkashaMeet`
+och modellerna du redan har används av programmet, så ingenting hämtas igen. Vill du ha tillbaka den
+gamla kör du `bash mac/installera.sh` igen.
+
+### Från Terminal
+
 Kräver: en Mac (helst Apple Silicon), [Homebrew](https://brew.sh) och cirka 4 GB ledigt utrymme.
 Repot är privat, så du behöver läsrätt till det och en SSH-nyckel kopplad till ditt GitHub-konto.
 Öppna Terminal och kör:
@@ -139,10 +176,10 @@ kvar tills du tar bort dem själv.
 
 I mappen `~/AkashaMeet` i din hemkatalog. Bara ditt konto kommer åt mappen. För varje inspelning
 finns ljudet, en `.md` med texten och en `.json` med uppgifterna. **Radera** i listan tar bort alla
-tre.
+tre. Det gäller både programmet och installationen från Terminal.
 
 Mappen ligger medvetet inte i Dokument eller på Skrivbordet, eftersom de ofta synkas till iCloud.
-Vill du ha den någon annanstans anger du `DATAKATALOG` i `.env`.
+Vill du ha den någon annanstans anger du `DATAKATALOG` i inställningarna (se nedan).
 
 ## Integritet och säkerhet
 
@@ -155,10 +192,19 @@ Vill du ha den någon annanstans anger du `DATAKATALOG` i `.env`.
 - Andra webbsidor du har öppna kan inte styra tjänsten. Den svarar bara på `localhost`, och allt som
   ändrar något kräver en särskild header som en främmande sida inte får skicka.
 - Ingen språkmodell skriver om eller sammanfattar texten. Det whisper hör är det som står.
+- Programmet är ännu inte signerat och kontrollerat av Apple. Därför varnar macOS första gången du öppnar det.
 
 ## Inställningar
 
-Allt har standardvärden. Vill du ändra något gör du det i `.env`, som skapas vid installationen.
+Allt har standardvärden. I programmet ligger inställningarna i filen `installningar.env` i mappen
+`~/Library/Application Support/Akasha Meet`. Filen finns inte från början. Skapa den med TextEdit
+(Format → Gör till ren text), en inställning per rad, till exempel `MODELL=large`, och avsluta och
+öppna Akasha Meet igen. Mappen hittar du i Finder med Gå → Gå till mapp…
+
+Har filen ett fel, till exempel en rad som inte går att förstå eller fel sorts text, säger
+programmet till när det startar och använder standardvärdet för just det.
+
+Har du installerat från Terminal gör du det i `.env`, som skapas vid installationen.
 Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`.
 
 | Inställning | Standard | Vad |
@@ -175,12 +221,15 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 
 | Problem | Gör så här |
 |---|---|
-| Sidan öppnas inte | `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`. Läs loggen `~/AkashaMeet/akasha-meet.log` |
-| "Akasha Meet svarar inte" | Tjänsten har stannat. Den startar av sig själv när du loggar in, så logga ut och in igen, eller kör `launchctl kickstart -k gui/$(id -u)/local.akasha-meet` i Terminal. Det du redan spelat in ligger kvar. Sidan märker själv när tjänsten är igång igen. |
-| "Inte redo" uppe till höger | Håll muspekaren över texten för att se orsaken. Det är något som en hämtning inte kan rätta, till exempel en inställning i `.env`. |
+| Sidan öppnas inte | Programmet: avsluta och öppna Akasha Meet igen. Loggen finns i `~/Library/Logs/Akasha Meet/akasha-meet.log` (öppnas med appen Konsol). Från Terminal: `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`, och loggen `~/AkashaMeet/akasha-meet.log` |
+| "Akasha Meet svarar inte" | Programmet har avslutats eller stannat. Öppna Akasha Meet igen. Från Terminal: tjänsten startar av sig själv när du loggar in, så logga ut och in igen, eller kör `launchctl kickstart -k gui/$(id -u)/local.akasha-meet` i Terminal. Det du redan spelat in ligger kvar. Sidan märker själv när Akasha Meet är igång igen. |
+| macOS varnar och Akasha Meet öppnas inte, eller "är skadat" | Se steg 3 och 4 under Som program. Hjälper inte det, kör `xattr -dr com.apple.quarantine "/Applications/Akasha Meet.app"` i Terminal. |
+| "Akasha Meet kan inte starta" (port 8611) | Ett annat program använder porten. Avsluta det, eller ange en annan port med `PORT=` i inställningarna. |
+| "Akasha Meet startade inte" | Tryck **Visa loggen** och läs de sista raderna, eller skicka dem till den som hjälper dig. Loggen innehåller inga inspelningar eller texter. |
+| "Inte redo" uppe till höger | Håll muspekaren över texten för att se orsaken. Det är något som en hämtning inte kan rätta, till exempel en inställning i `.env` eller `installningar.env`. |
 | "Modellerna behöver hämtas" uppe till höger | Tryck **Hämta nu** i rutan överst på sidan. Det görs bara en gång. |
 | Hämtningen säger "Kunde inte nå Hugging Face" | Kontrollera att datorn är ansluten till internet och tryck **Försök igen**. Det som redan hämtats ligger kvar. |
-| Hämtningen fungerar inte på ett företagsnät (certifikatfel eller inget svar) | Lägg in nätets proxy i `.env`, till exempel `HTTPS_PROXY=http://proxy.foretaget.se:8080`, och vid behov företagets certifikat med `REQUESTS_CA_BUNDLE=/sökväg/till/certifikat.pem`. Starta sedan om tjänsten och tryck **Försök igen**. |
+| Hämtningen fungerar inte på ett företagsnät (certifikatfel eller inget svar) | Lägg in nätets proxy i inställningarna, till exempel `HTTPS_PROXY=http://proxy.foretaget.se:8080`, och vid behov företagets certifikat med `REQUESTS_CA_BUNDLE=/sökväg/till/certifikat.pem`. Starta sedan om tjänsten och tryck **Försök igen**. Programmet använder Macens egna certifikat, så företagets certifikat behövs oftast inte. |
 | "Det får inte plats på disken" | Frigör utrymme och tryck **Försök igen**. Sidan visar hur mycket som behövs. |
 | "Kontrollsumman stämmer inte" | Filen har tagits bort. Tryck **Försök igen**. Händer det igen kan filen ha ändrats hos Hugging Face. |
 | `Bootstrap failed: 5` vid installation | Uppdatera (`git pull`) och kör `bash mac/installera.sh` igen. Hjälper inte det: Systeminställningar → Allmänt → Inloggningsobjekt, tillåt `bash` i bakgrunden |
@@ -201,13 +250,17 @@ Hur det fungerar inuti, hur talaruppdelningen utvärderades och vad som är test
 `venv/bin/python -m unittest discover -s tester`. `venv/bin/python tester/forsta_start.py` startar
 sidan som vid första start, med en låtsaskälla i stället för Hugging Face.
 
+Programmet för Mac byggs med `paketering/` och GitHub Actions (se [docs/TEKNIK.md](docs/TEKNIK.md)).
+`python app/start.py` startar tjänsten och webbläsaren utan programmet.
+
 ## Källor och licenser
 
 | Del | Licens |
 |---|---|
 | Akasha Meet (det här programmet), © 2026 Dennis Fredin | Apache-2.0, se [LICENSE](LICENSE) och [NOTICE](NOTICE) |
 | [KB-Whisper medium](https://huggingface.co/KBLab/kb-whisper-medium) (KBLab, Kungliga biblioteket) | Apache-2.0 |
-| [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | MIT |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (följer med programmet) | MIT |
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2.0 |
+| [PyAV](https://github.com/PyAV-Org/PyAV) med FFmpeg, Python, Flask, numpy, PyObjC och de andra delarna i programmet | Var och en sin licens. En förteckning läggs till innan programmet släpps |
 | NeMo TitaNet small (NVIDIA), via sherpa-onnx | CC-BY-4.0 |
 | Testljud: [Google FLEURS](https://huggingface.co/datasets/google/fleurs) | CC-BY-4.0 |

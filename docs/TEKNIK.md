@@ -25,7 +25,8 @@ app/app.py (Flask, bara 127.0.0.1) ── sparar i ~/AkashaMeet ── köar ett
 
 | Mapp | Innehåll |
 |---|---|
-| `app/` | Tjänsten (`app.py`), motorerna (`motor.py`), modellerna och hämtningen (`modeller.py`), talaruppdelningen (`talare.py`), det som skiljer mellan operativsystemen (`plattform.py`), lagring, export och webbsidan i `static/` |
+| `app/` | Tjänsten (`app.py`), motorerna (`motor.py`), modellerna och hämtningen (`modeller.py`), talaruppdelningen (`talare.py`), det som skiljer mellan operativsystemen (`plattform.py`), starten som är gemensam för alla system (`start.py`), Dock-ikonen och menyn på Mac (`mac_app.py`), avkodning med PyAV (`ljud.py`), lagring, export och webbsidan i `static/` |
+| `paketering/` | PyInstaller-spec, kontrollskript och byggskript för programmet. `prova-linux.sh` bygger samma Python-delar på Linux och kör kontrollen. |
 | `mac/` | `installera.sh`, `hamta-modeller.sh`, `kor.sh`, `avinstallera.sh` och launchd-mallen. Skripten som hämtar modeller anropar `app/modeller.py` |
 | `halsokoll/` | `prov.sh`: provet efter installation. `sammanfatta.sh` och `talardiagnos.sh`: hur en transkribering gick, utan att visa texten (se nedan) |
 | `tester/` | Enhetstester. De behöver inga modeller. Här finns också `falsk_hf.py` (en låtsaskälla som spelar Hugging Face), `forsta_start.py` (startar sidan som vid första start, med låtsaskällan) och `test_riktig_hamtning.py` (hämtar röstmodellen på riktigt, bara för hand) |
@@ -105,8 +106,10 @@ använder samma modul genom API:t ovan.
   20 försök.
 - **Proxy och certifikat:** `requests` följer `HTTPS_PROXY`, `NO_PROXY`, `REQUESTS_CA_BUNDLE` och
   `CURL_CA_BUNDLE`. Det läser inte `SSL_CERT_FILE`, så `ny_session()` använder den om ingen av de
-  andra är satt. `.env` läses av `mac/kor.sh`, så proxyn kan stå där. Operativsystemets egna
-  certifikat används inte.
+  andra är satt. Är ingen av de tre satt använder `ny_session()` operativsystemets egna certifikat
+  via `truststore` (`truststore.SSLContext`), så ett företagsnät med egen rot-CA i nyckelringen
+  fungerar utan inställningar. Saknas `truststore` blir det som förut. `.env` läses av `mac/kor.sh`,
+  så proxyn kan stå där, och i programmet står den i `installningar.env` (se nedan).
 - **`HF_HUB_OFFLINE=1`** sätts överst i `motor.py`, så att faster-whisper aldrig hämtar något
   själv.
 - **Motorn väljs om efter hämtningen.** `motor.mal_motor()` säger vilken motor modellerna ska
@@ -124,6 +127,68 @@ använder samma modul genom API:t ovan.
   riktig kod körs oförändrad: adresserna, omdirigeringarna, kravet på https och sha256. Det finns
   ingen flagga, miljövariabel eller undantag för http i `app/`. Transporten stoppar alla andra
   värdar än de falska, så inget test når nätet.
+
+## Programmet (Mac)
+
+Programmet är ett vanligt Mac-program, `Akasha Meet.app`, för Apple Silicon (macOS 14 eller senare).
+Det ersätter inte terminalinstallationen: båda finns kvar och använder samma kod i `app/`. Den här
+delen beskriver hur programmet är tänkt att fungera. Det är ännu inte byggt eller provat på en Mac
+(se "Inte provat än" längst ned).
+
+- **Hur det byggs.** PyInstaller 6.22.3 i katalogläge samlar Python, beroendena och deras inbyggda
+  bibliotek till ett `.app`-paket. En spec-fil, `paketering/akasha-meet.spec`, bygger både Mac-programmet
+  och provbygget på Linux (en vanlig katalog). `whisper-cli` ska byggas från källkod i GitHub Actions
+  från en fast tagg av whisper.cpp, statiskt och med Metal, och läggas in i paketet så att den
+  signeras med resten. Artefakten är en zip-fil som packas med `ditto`, för att behålla
+  behörigheter och signatur. Bygget är ad hoc-signerat, inte signerat med ett Apple Developer ID. Flödet i
+  Actions (`.github/workflows/mac-app.yml`, körs bara för hand) finns inte i repot än.
+- **Vad som följer med.** Flask, waitress, requests, sherpa-onnx, numpy, PyAV (`av`), `truststore`
+  och `whisper-cli`, samt PyObjC för Dock-ikonen och menyn. faster-whisper, ctranslate2,
+  tokenizers, huggingface_hub och onnxruntime följer inte med, eftersom programmet använder
+  whisper.cpp. Därför avkodas ljudet med `app/ljud.py` (PyAV) i stället för med faster-whisper.
+  Sätts `MOTOR=faster` i programmet visar sidan "Inte redo" med en förklaring.
+- **Start och avslut.** `mac_app.py` är det tunna Mac-skalet: ikon i Dock, programmenyn och
+  Dock-menyn. Allt annat ligger i `start.py`, som går att köra och testa på Linux: loggning, kontroll
+  av inställningsfilen, om porten är ledig, tjänsten i en bakgrundstråd, att öppna webbläsaren och att
+  stänga ned. Vid start frågar `start.lage()` om porten är ledig, upptagen av en annan Akasha Meet
+  eller upptagen av något annat. En annan Akasha Meet gör att programmet bara öppnar sidan och
+  avslutas, och något annat ger ett felmeddelande. Dubbelklick på ett program som redan är igång
+  hanteras av macOS, som skickar "öppna igen" till det som körs. Vid ⌘Q frågar programmet först om
+  det pågår en inspelning, en transkribering eller en hämtning (`start.pagar()`), och stänger sedan
+  servern och `whisper-cli`. En transkribering som avbryts på det sättet blir `avbruten` och kan
+  göras om med "Försök igen".
+- **Den gamla installationen.** Finns launchd-tjänsten `local.akasha-meet` frågar programmet om det
+  ska ta över. Svarar man ja stängs tjänsten av med `launchctl disable` och `launchctl bootout`, så
+  att den inte startar vid nästa inloggning, och programmet väntar tills porten är ledig. Två
+  tjänster får aldrig dela datakatalog, eftersom `lagring.aterstall_avbrutna()` vid start annars
+  skulle märka den andras pågående jobb som avbrutna. `mac/installera.sh` stannar åt andra hållet
+  med en förklaring om programmet är igång på porten och launchd-tjänsten inte finns.
+- **Var saker ligger.** Inspelningar: `~/AkashaMeet`, som i terminalinstallationen. Modeller:
+  `~/Library/Application Support/Akasha Meet/modeller`. Inställningar:
+  `~/Library/Application Support/Akasha Meet/installningar.env`, med samma `NAMN=värde` som `.env`.
+  Den läses bara när programmet är paketerat, och en miljövariabel som redan är satt vinner.
+  Programmet stannar aldrig på grund av filen: det som inte går att läsa ersätts med
+  standardvärdet, och rutan vid start, loggen och (utan fönster) stderr säger till. Problemtexterna
+  innehåller bara radnummer och inställningens namn, aldrig något ur filen. Loggen ligger i
+  `~/Library/Logs/Akasha Meet/akasha-meet.log` (roterande, 2 MB, tre filer). Har någon modeller i
+  repots `modeller/` från terminalinstallationen hårdlänkas de in i programmets katalog vid start,
+  så att inget hämtas igen och terminalinstallationen fungerar som förut. Går länken inte (annan
+  volym) erbjuder sidan hämtning som vid första start.
+- **Det enda som skiljer.** Om koden körs som programmet avgörs av `sys.frozen`, PyInstallers eget
+  märke, och bara i `app/plattform.py`. Det finns ingen testflagga eller testmiljövariabel i `app/`.
+- **Kontrollen i Actions.** Det byggda programmet ska startas med en tom hemkatalog (`HOME`). En
+  gles fil med GGML-modellens storlek läggs i `~/akasha-meet/modeller`, så att flytten av gamla
+  modeller och motorvalet provas utan att 1,5 GB hämtas. Röstmodellen (40 MB) hämtas på riktigt
+  genom programmets eget API. Ett testljud laddas upp, avkodningen ska lyckas och jobbet ska
+  misslyckas med ett fel från den medföljande `whisper-cli` (den gles filen är ingen modell). Sist
+  skickas SIGTERM och porten ska vara ledig. Dessutom ska den medföljande `whisper-cli`
+  transkribera ett testljud med en liten riktig modell. Samma kontrollskript
+  (`paketering/kontrollera.py`) körs mot provbygget på Linux. Kontrollen visar att programmet
+  startar, att standardplatserna, flytten av modeller, motorvalet, sherpa-onnx, PyAV, requests och
+  certifikaten fungerar i det frysta programmet, att hämtningen från Hugging Face fungerar, och att
+  loggen och avslutet fungerar. Den visar inte att Metal används, att Gatekeeper släpper igenom
+  programmet efter godkännandet i Systeminställningar, eller att en riktig KB-Whisper-modell
+  transkriberar. Det kräver en riktig Mac.
 
 ## Talaruppdelningen
 
@@ -307,6 +372,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
   `AKASHA_RIKTIG_HAMTNING=1 venv/bin/python -m unittest discover -s tester -p test_riktig_hamtning.py`.
   Taligenkänningen (1,5 GB) har aldrig hämtats på riktigt i provet.
 - **GitHub Actions** (2026-11-19): enhetstesterna, 144 st (1 överhoppat: den riktiga hämtningen), gröna på ubuntu-latest (Ubuntu 26.04, Python 3.12.16) och windows-latest (Python 3.12.10) vid push till main, och på macos-latest (arm64, Python 3.12.10) körd för hand. Ubuntu-jobbet tog 17 s, Windows-jobbet 43 s och macOS-jobbet 20 s. faster-whisper installeras inte där (testerna behöver den inte).
+- **Programmet:** provbygge på Linux med kontrollskriptet (start, standardplatser, flytt av gamla modeller, riktig hämtning av röstmodellen, avkodning, avslut).
 - **`installera.sh` från början:** med en ersättare för launchd, även en ominstallation när
   tjänsten redan finns. Modellnedladdningen med sha256-kontroll gick igenom.
 - **`halsokoll/prov.sh`:** grön med båda motorerna.
@@ -335,6 +401,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
 **Inte provat än:**
 
+- programmet byggt för Mac (GitHub Actions) och på en riktig Mac: Gatekeeper, Dock, Metal och transkribering;
 - faster-whisper och transkribering på Windows (CI installerar inte faster-whisper);
 - första start på en riktig Mac och på Windows, och hämtning på ett företagsnät med proxy;
 - ett riktigt Google Meet-möte eller en Slack-huddle, där Chromes flikväljare och
