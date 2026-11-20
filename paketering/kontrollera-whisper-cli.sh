@@ -6,6 +6,87 @@
 set -euo pipefail
 trap 'echo "FEL: kontrollera-whisper-cli.sh stannade pa rad $LINENO: $BASH_COMMAND" >&2' ERR
 
+# Avgorandet i steg 8, utbrutet sa att det gar att prova med handskrivna filer:
+#   bash paketering/kontrollera-whisper-cli.sh --bara-avgor OKANT FIL FORVAL KOD_OKANT KOD
+# (stderr fran korningen med det pahittade forvalet, stderr fran korningen med FORVAL, och deras slutkoder).
+# Funktionerna returnerar 1 med en FEL:-rad pa stderr nar det inte gar att avgora eller forvalet inte kanns igen.
+# Raderna som whisper.cpp skriver nar den laser modellfilen:
+LADDAR='whisper_model_load|whisper_init_from_file'
+SATT=""
+# Ett Python-fel fran med_tidsgrans (tidsgrans eller kommandot kunde inte startas) betyder att whisper-cli inte
+# har sagt sitt: da finns inget att avgora pa. whisper-cli skriver aldrig sadant sjalv.
+har_pythonfel() { grep -aq 'Traceback (most recent call last)' "$1"; }
+har_laddning() { grep -aEq "$LADDAR" "$1"; }
+
+# valj_satt OKANT KOD_OKANT: satter SATT till laddning eller rader, och skriver okant-dtw.txt bredvid OKANT.
+valj_satt() {
+  local okant="$1" kod="$2" dtw
+  dtw="$(dirname "$okant")/okant-dtw.txt"
+  grep -ai dtw "$okant" > "$dtw" || true
+  SATT=""
+  if har_pythonfel "$okant"; then
+    echo "FEL: kan inte avgora om DTW-forvalen kanns igen: korningen med det pahittade forvalet gav ett Python-fel (tidsgrans?), se raderna ovan" >&2
+    return 1
+  fi
+  if ! har_laddning "$okant" && grep -aq '[^[:space:]]' "$okant" && [ "$kod" -ne 0 ] && [ "$kod" -lt 128 ]; then
+    SATT=laddning      # stoppade fore laddningen: ett kant forval ska ge laddningsrader
+  elif har_laddning "$okant" && [ -s "$dtw" ]; then
+    SATT=rader         # laddade modellen och sa ifran med en dtw-rad: jamfor dtw-raderna
+  else
+    echo "FEL: kan inte avgora om DTW-forvalen kanns igen: det pahittade forvalet gav varken ett stopp fore modelladdningen (kod $kod) eller en dtw-rad efter den (se raderna ovan)" >&2
+    return 1
+  fi
+  echo "Satt att avgora: $SATT"
+}
+
+# avgor_forval OKANT FIL FORVAL KOD: FIL ar stderr fran korningen med FORVAL. Kraver valj_satt fore.
+avgor_forval() {
+  local okant="$1" fil="$2" f="$3" kod="$4" dir
+  dir="$(dirname "$fil")"
+  if har_pythonfel "$fil"; then
+    echo "FEL: kan inte avgora om DTW-forvalet $f kanns igen: korningen gav ett Python-fel (tidsgrans?), se raderna ovan" >&2
+    return 1
+  fi
+  if [ "$SATT" = laddning ] && ! har_laddning "$fil"; then
+    echo "FEL: forvalet $f kanns inte igen (modellen laddades aldrig, som for ett okant forval)" >&2
+    return 1
+  fi
+  # Dtw-raderna fran det pahittade forvalet, ocksa med namnet utbytt mot forvalets, far inte finnas
+  # ordagrant i utskriften (annars skulle "unknown ... 'medium'" aldrig vara lika med "... 'finns-inte'").
+  { cat "$dir/okant-dtw.txt"; sed "s/finns-inte/$f/g" "$dir/okant-dtw.txt"; } > "$dir/mall-$f.txt"
+  if grep -a -n -x -F -f "$dir/mall-$f.txt" "$fil" > "$dir/lika-$f.txt"; then
+    echo "FEL: forvalet $f kanns inte igen: en dtw-rad som for ett pahittat forval (namnet utbytt) finns i utskriften:" >&2
+    cat "$dir/lika-$f.txt" >&2
+    return 1
+  fi
+  if [ "$SATT" = laddning ]; then
+    echo "OK: forvalet $f kanns igen (modellen laddades; kod $kod)"
+  else
+    echo "OK: forvalet $f kanns igen (ingen dtw-rad fran det pahittade forvalet finns i utskriften; kod $kod)"
+  fi
+}
+
+# visa_utdrag FIL KOD: kod, om modellen laddades, och de rader som behovs for att lasa av steget (utan
+# de cirka 35 Metal-raderna). Stoppar aldrig skriptet: grep utan traff ger slutkod 1.
+visa_utdrag() {
+  local fil="$1" kod="$2" ladd=nej
+  if har_laddning "$fil"; then ladd=ja; fi
+  echo "kod $kod"
+  echo "laddar modellen: $ladd"
+  echo "antal rader i filen: $(wc -l < "$fil" | tr -d ' '), varav med dtw: $(grep -aic dtw "$fil" || true)"
+  { grep -aiE "dtw|error|assert|abort|whisper_model_load: (type|n_text_layer|n_audio_layer)|whisper_init_from_file|progress|output_json" "$fil" | grep -v ggml_metal | head -n 20; } || true
+  echo "(sista 3 raderna:)"
+  { tail -n 3 "$fil" | grep -v ggml_metal; } || true
+}
+
+if [ "${1:-}" = "--bara-avgor" ]; then
+  # Bara for provet pa Linux med handskrivna filer; skriptet kors annars som forut.
+  [ "$#" -eq 6 ] || { echo "anvandning: $0 --bara-avgor OKANT FIL FORVAL KOD_OKANT KOD" >&2; exit 2; }
+  valj_satt "$2" "$5" || exit 1
+  avgor_forval "$2" "$3" "$4" "$6" || exit 1
+  exit 0
+fi
+
 ROT="$(cd "$(dirname "$0")/.." && pwd)"
 CLI="${1:?ange whisper-cli}"
 PYTHON="${2:?ange Pythonen i byggets venv}"
@@ -110,6 +191,9 @@ echo "== 7. JSON tolkad med app/motor.py"
 # 8. DTW-forvalen som app/modeller.py anvander (medium och large.v3) ska kanna igen av den har
 #    versionen. De stora modellerna behovs inte: forvalet tolkas av whisper-cli oavsett modell, och
 #    huvudena for medium och large passar inte tiny-modellen (resultatet sager inget om kvaliteten).
+#    Ett okant forval stoppar whisper-cli innan modellen laddas; ett kant forval leder till att modellen
+#    laddas. Darfor ar huvudtecknet om laddningsrader finns i stderr (whisper-cli kors utan flaggan som
+#    stanger av alla loggrader). 8a mater att det stammer for det har bygget innan nagot avgors.
 echo "== 8. DTW-forval"
 FORVAL="$("$PYTHON" -c 'import sys; sys.path.insert(0, sys.argv[1]); import modeller; print(" ".join(sorted(set(modeller.DTW_PER_STORLEK.values()))))' "$ROT/app")" || FORVAL=""
 if [ -z "$FORVAL" ]; then
@@ -118,43 +202,22 @@ if [ -z "$FORVAL" ]; then
 fi
 echo "Forval ur app/modeller.py: $FORVAL"
 
-# 8a. Ett pahittat forval: visar hur den har versionen sager ifran om ett forval inte finns.
+# 8a. Ett pahittat forval: mater om whisper-cli stoppar fore modelladdningen (sattet "laddning") eller
+#     laddar modellen och sager ifran med en dtw-rad (sattet "rader"). Annars gar det inte att avgora.
 echo "--- 8a. okant forval (--dtw finns-inte)"
 KOD=0
-med_tidsgrans 120 "$CLI" -m "$ARB/tiny.bin" -f "$ARB/en.wav" -l sv -d 3000 -np --dtw finns-inte 2> "$ARB/okant.txt" > /dev/null || KOD=$?
-echo "kod $KOD"
-tail -n 5 "$ARB/okant.txt"
-grep -i dtw "$ARB/okant.txt" > "$ARB/okant-dtw.txt" || true
-if [ ! -s "$ARB/okant-dtw.txt" ]; then
-  echo "FEL: kan inte avgora om DTW-forvalen kanns igen: whisper-cli sa ingenting om dtw for ett pahittat forval (se okant.txt-raderna ovan), sa jamforelsen har inget att jamfora mot" >&2
-  exit 1
-fi
-echo "Rader om dtw vid okant forval:"
-cat "$ARB/okant-dtw.txt"
+med_tidsgrans 120 "$CLI" -m "$ARB/tiny.bin" -f "$ARB/en.wav" -l sv -d 3000 --dtw finns-inte 2> "$ARB/okant.txt" > /dev/null || KOD=$?
+visa_utdrag "$ARB/okant.txt" "$KOD"
+valj_satt "$ARB/okant.txt" "$KOD" || exit 1
 
-# 8b. Varje riktigt forval: ingen av dtw-raderna ovan far finnas ordagrant i utskriften. Namnet pa det
-#     pahittade forvalet byts ocksa mot forvalets eget i raderna (annars skulle ett felmeddelande som
-#     namner forvalet, "unknown ... 'medium'", aldrig vara lika med "unknown ... 'finns-inte'").
+# 8b. Varje riktigt forval, med sattet fran 8a (se avgor_forval).
 for f in $FORVAL; do
   echo "--- 8b. forval $f"
   KOD=0
-  med_tidsgrans 120 "$CLI" -m "$ARB/tiny.bin" -f "$ARB/en.wav" -l sv -d 3000 -np -ml 1 -sow --dtw "$f" -nfa -ojf -oj -of "$ARB/dtw-$f" 2> "$ARB/dtw-$f.txt" > /dev/null || KOD=$?
-  echo "kod $KOD"
-  tail -n 5 "$ARB/dtw-$f.txt"
+  med_tidsgrans 120 "$CLI" -m "$ARB/tiny.bin" -f "$ARB/en.wav" -l sv -d 3000 -ml 1 -sow --dtw "$f" -nfa -ojf -oj -of "$ARB/dtw-$f" 2> "$ARB/dtw-$f.txt" > /dev/null || KOD=$?
+  visa_utdrag "$ARB/dtw-$f.txt" "$KOD"
   if [ -s "$ARB/dtw-$f.json" ]; then echo "JSON-filen blev till (information, ingen kontroll)"; else echo "ingen JSON-fil (information, ingen kontroll)"; fi
-  # Utan en enda rad fran whisper.cpp har kommandot inte kommit igang (till exempel tidsgrans), och da
-  # saknas det mesta som jamforelsen ska bygga pa.
-  if ! grep -q 'whisper_' "$ARB/dtw-$f.txt"; then
-    echo "FEL: kan inte avgora om DTW-forvalet $f kanns igen: whisper-cli gav inga whisper_-rader (kod $KOD), se raderna ovan" >&2
-    exit 1
-  fi
-  { cat "$ARB/okant-dtw.txt"; sed "s/finns-inte/$f/g" "$ARB/okant-dtw.txt"; } > "$ARB/mall-$f.txt"
-  if grep -n -x -F -f "$ARB/mall-$f.txt" "$ARB/dtw-$f.txt" > "$ARB/lika-$f.txt"; then
-    echo "FEL: forvalet $f kanns inte igen: en dtw-rad som for ett pahittat forval (namnet utbytt) finns i utskriften:" >&2
-    cat "$ARB/lika-$f.txt" >&2
-    exit 1
-  fi
-  echo "OK: forvalet $f kanns igen (ingen dtw-rad fran det pahittade forvalet finns i utskriften)"
+  avgor_forval "$ARB/okant.txt" "$ARB/dtw-$f.txt" "$f" "$KOD" || exit 1
 done
 
 echo "KONTROLL AV WHISPER-CLI: OK"
