@@ -202,8 +202,8 @@ Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-2
   `whisper-cli` startades från paketet, loggfilen hamnade i `~/Library/Logs/Akasha Meet`, och
   avslut med SIGTERM lämnade porten ledig. Det medföljande `whisper-cli` transkriberade ett
   testljud med en liten modell, med ordtider från DTW (42 ord). Metal fanns på Actions-maskinen
-  (en paravirtuell GPU) och kompilerade sina bibliotek första gången (23 s); hur lång tid det tar
-  på en riktig Mac är inte mätt.
+  (en paravirtuell GPU) och kompilerade sina bibliotek första gången (23 s); på en riktig MacBook
+  Air tog den första transkriberingen av 12 s ljud 8,0 s och den andra 2,6 s (se Vad som är testat).
 - **Uppmätt i andra körningen (2026-11-20).** Enhetstesterna på macOS gav 261 tester, OK, fyra
   överhoppade, och inga `Bad file descriptor` vid avslut (det som syntes i första körningen är
   rättat). Ett enda test tog 36 s: det första som skapar en testserver med `http.server`, vars
@@ -429,12 +429,13 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
   Gatekeeper (Klar, Öppna ändå under Integritet och säkerhet, Öppna ändå i nästa ruta, Touch ID
   eller lösenord); övertagande av en terminalinstallation (frågan kom, modellerna togs in utan
   hämtning, ikonen i Dock); installation från grunden (sidan erbjöd att hämta modellerna, hämtningen
-  på 1,6 GB blev klar på omkring fem minuter, uppskattat och inte mätt, och en inspelning på 11 s
-  transkriberades direkt efteråt utan märkbar väntan).
+  på 1,6 GB blev klar på omkring fem minuter, uppskattat och inte mätt, och en inspelning på 12 s
+  transkriberades på 8,0 s första gången och 2,6 s andra gången, enligt programmets logg;
+  skillnaden är troligen modellens inläsning och Metal-biblioteken vid första körningen).
 
 **Inte provat än:**
 
-- programmet på en riktig Mac: tider för en längre inspelning och för Metal vid första transkriberingen (inte mätta), avslut mitt i en transkribering och loggfilen (Gatekeeper, övertagande, första start, hämtning och en kort transkribering är provade, se ovan);
+- programmet på en riktig Mac: tider för en längre inspelning (inte mätta) och avslut mitt i en transkribering (Gatekeeper, övertagande, första start, hämtning, en kort transkribering och loggfilen är provade, se ovan);
 - faster-whisper och transkribering på Windows (CI installerar inte faster-whisper);
 - första start på Windows, och hämtning på ett företagsnät med proxy;
 - ett riktigt Google Meet-möte eller en Slack-huddle, där Chromes flikväljare och
