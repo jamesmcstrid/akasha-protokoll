@@ -6,7 +6,7 @@ Användning och installation står i [README](../README.md).
 ## Hur det fungerar
 
 ```
-Webbläsaren (http://127.0.0.1:8611)
+Webbläsaren (http://127.0.0.1:8611, eller den port som PORT anger)
   ├─ spelar in med MediaRecorder och skickar ljudet i delar om 5 s ──┐
   │    digitalt möte: mikrofonen i vänster kanal, mötesfliken i höger │
   └─ eller laddar upp en fil ─────────────────────────────────────────┤

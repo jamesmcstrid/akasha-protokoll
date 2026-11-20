@@ -209,8 +209,8 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 
 | Inställning | Standard | Vad |
 |---|---|---|
-| `MOTOR` | `auto` | `auto` väljer whisper.cpp med Metal på Apple Silicon och faster-whisper på processorn annars. Går att tvinga med `whispercpp` eller `faster` (starta om tjänsten; sidan erbjuder att hämta det som saknas) |
-| `MODELL` | `medium` | `large` gör färre fel men tar längre tid och behöver 1,1 GB till (3,1 GB utan Apple Silicon). Starta om tjänsten efter att du ändrat. Sidan erbjuder då att hämta modellen |
+| `MOTOR` | `auto` | `auto` väljer whisper.cpp med Metal på Apple Silicon och faster-whisper på processorn annars. Går att tvinga med `whispercpp` eller `faster` (starta om Akasha Meet; sidan erbjuder att hämta det som saknas). `faster` går inte i programmet, där följer faster-whisper inte med |
+| `MODELL` | `medium` | `large` gör färre fel men tar längre tid och behöver 1,1 GB till (3,1 GB utan Apple Silicon). Starta om Akasha Meet efter att du ändrat. Sidan erbjuder då att hämta modellen |
 | `ORDLISTA` | tom | Ord som alltid ska stavas rätt, till exempel företagets namn |
 | `DATAKATALOG` | `~/AkashaMeet` | Var inspelningar och texter sparas |
 | `PORT` | `8611` | Webbsidans port |
