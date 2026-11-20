@@ -167,7 +167,7 @@ def avsluta_text(vad):
 # --- loggning ----------------------------------------------------------------------------------
 
 def loggfil():
-    return os.path.join(plattform.loggkatalog(), "akasha-meet.log")
+    return os.path.join(plattform.loggkatalog(), "akasha-protokoll.log")
 
 
 def _logga_ohanterat(typ, varde, spar):
@@ -201,6 +201,31 @@ def stall_in_loggning():
     sys.excepthook = _logga_ohanterat
     threading.excepthook = _logga_ohanterat_trad
     return sokvag
+
+
+def flytta_till_nya_namn():
+    """Flyttar mapparna fran tiden som Akasha Meet till de nya namnen och raknar om standardplatserna.
+    Kors bara nar beslutet ar att starta (Tjanst.starta), fore allt som anvander installningarna.
+    Kastar aldrig: gar flytten fel anvands de gamla mapparna (se plattform.flytta_till_nya_namn)."""
+    import installningar  # lagger installningar.env i miljon, sa att ett satt DATAKATALOG syns nedan
+
+    try:
+        flyttat = plattform.flytta_till_nya_namn()
+    except Exception:
+        log.exception("flytten till de nya namnen misslyckades")
+        flyttat = []
+    for gammal, ny in flyttat:
+        log.info("flyttade %s till %s", gammal, ny)
+    installningar.uppdatera_platser()
+    # Ligger loggfilen i en katalog som flyttades (Linux, Windows) pekar loggern pa den gamla sokvagen.
+    rot = logging.getLogger()
+    for h in list(rot.handlers):
+        if isinstance(h, logging.handlers.RotatingFileHandler) and any(
+                h.baseFilename.startswith(os.path.abspath(g) + os.sep) for g, _ in flyttat):
+            rot.removeHandler(h)
+            h.close()
+            stall_in_loggning()
+    return flyttat
 
 
 # --- port och tjanst ---------------------------------------------------------------------------
@@ -254,6 +279,7 @@ class Tjanst:
         self.trad = None
 
     def starta(self):
+        flytta_till_nya_namn()
         import app
         import modeller
         import motor

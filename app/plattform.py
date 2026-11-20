@@ -18,6 +18,10 @@ log = logging.getLogger("akasha-protokoll")
 
 NAMN = "Akasha Protokoll"
 GAMMAL_ETIKETT = "local.akasha-meet"  # launchd-tjansten fran mac/installera.sh
+# Det gamla namnet (Akasha Meet) finns kvar bara har, for flytten till de nya mapparna.
+GAMMALT_NAMN = "Akasha Meet"
+GAMMAL_DATAKATALOG = "~/AkashaMeet"
+NY_DATAKATALOG = "~/AkashaProtokoll"
 
 FIL_GICK_INTE = "Filen gick inte att läsa ({orsak}). Inga inställningar ur den används."
 FIL_KODNING = ("Filen är inte sparad som ren text i UTF-8. Inga inställningar ur den används. "
@@ -36,20 +40,73 @@ def ar_paketerad():
     return bool(getattr(sys, "frozen", False))
 
 
-def programkatalog():
-    """Var programmet lagger sina egna filer (modeller, installningar). Skapar ingenting."""
+def _programkatalog(namn_mac, namn_linux):
     if system() == "Darwin":
-        return os.path.expanduser("~/Library/Application Support/Akasha Meet")
+        return os.path.expanduser("~/Library/Application Support/" + namn_mac)
     if system() == "Windows":
         bas = os.environ.get("LOCALAPPDATA") or os.path.expanduser(os.path.join("~", "AppData", "Local"))
-        return os.path.join(bas, "Akasha Meet")
+        return os.path.join(bas, namn_mac)
     bas = os.environ.get("XDG_DATA_HOME") or os.path.expanduser(os.path.join("~", ".local", "share"))
-    return os.path.join(bas, "akasha-meet")
+    return os.path.join(bas, namn_linux)
+
+
+def ny_programkatalog():
+    return _programkatalog("Akasha Protokoll", "akasha-protokoll")
+
+
+def gammal_programkatalog():
+    """Programkatalogen fran tiden da programmet hette Akasha Meet. Flyttas av flytta_till_nya_namn."""
+    return _programkatalog(GAMMALT_NAMN, "akasha-meet")
+
+
+def programkatalog():
+    """Var programmet lagger sina egna filer (modeller, installningar). Skapar ingenting.
+    Den nya katalogen om den finns eller om den gamla inte finns, annars den gamla: sa visas aldrig
+    en tom lista eller en ny hamtning, ocksa nar flytten annu inte har gjorts."""
+    ny = ny_programkatalog()
+    if os.path.exists(ny):
+        return ny
+    gammal = gammal_programkatalog()
+    return gammal if os.path.isdir(gammal) else ny
+
+
+def standard_datakatalog():
+    """Standardvardet for DATAKATALOG (med ~): samma upplosning som programkatalog()."""
+    if os.path.exists(os.path.expanduser(NY_DATAKATALOG)):
+        return NY_DATAKATALOG
+    return GAMMAL_DATAKATALOG if os.path.isdir(os.path.expanduser(GAMMAL_DATAKATALOG)) else NY_DATAKATALOG
+
+
+def flytta_till_nya_namn(datakatalog_satt=None):
+    """Flyttar de gamla mapparna (Akasha Meet) till de nya namnen: programkatalogen och, om DATAKATALOG
+    inte ar satt i miljon eller installningsfilen, inspelningsmappen. Gor bara os.rename, bara nar den
+    gamla finns som katalog och den nya inte finns. Tar aldrig bort eller skriver over nagot. Ett fel loggas och
+    lamnar den gamla pa plats (programkatalog() och standard_datakatalog() anvander den da).
+    Returnerar en lista med (gammal, ny) for det som flyttades."""
+    if datakatalog_satt is None:
+        datakatalog_satt = bool(os.environ.get("DATAKATALOG", "").strip())
+    par = [(gammal_programkatalog(), ny_programkatalog())]
+    if not datakatalog_satt:
+        par.append((os.path.expanduser(GAMMAL_DATAKATALOG), os.path.expanduser(NY_DATAKATALOG)))
+    flyttat = []
+    for gammal, ny in par:
+        if not os.path.isdir(gammal):
+            continue
+        if os.path.lexists(ny):
+            log.info("flytt: %s finns kvar och %s finns redan, ingen av dem rors", gammal, ny)
+            continue
+        try:
+            os.rename(gammal, ny)
+        except OSError as e:
+            log.warning("flytt: kunde inte flytta %s till %s (%s), den gamla anvands tills vidare", gammal, ny, e)
+            continue
+        flyttat.append((gammal, ny))
+    return flyttat
 
 
 def loggkatalog():
     if system() == "Darwin":
-        return os.path.expanduser("~/Library/Logs/Akasha Meet")
+        return os.path.expanduser("~/Library/Logs/Akasha Protokoll")
     return os.path.join(programkatalog(), "logg")
 
 
@@ -226,7 +283,9 @@ def gamla_modellkataloger():
                 kandidater.append(os.path.join(repo, "modeller"))
         except (OSError, plistlib.InvalidFileException, KeyError, IndexError, TypeError):
             pass
+    # Klonplatsen i README heter fortfarande akasha-meet; akasha-protokoll om repot en dag byter namn.
     kandidater.append(os.path.expanduser(os.path.join("~", "akasha-meet", "modeller")))
+    kandidater.append(os.path.expanduser(os.path.join("~", "akasha-protokoll", "modeller")))
     hittade, sedda = [], set()
     for katalog in kandidater:
         rot = skyddad_plats(katalog)

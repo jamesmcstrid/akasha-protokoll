@@ -54,7 +54,7 @@ ${FINNS}$RUBRIK
      Modellerna i modeller/ och installningarna i .env foljer med och hamtas inte igen.
   3. Kor installationen fran den nya platsen:
        cd "$MAL" && bash mac/installera.sh
-Inspelningarna i ~/AkashaMeet paverkas inte.
+Inspelningarna paverkas inte.
 TEXT
   exit 1
 fi
@@ -63,7 +63,8 @@ fi
 set -a; . "$REPO/.env"; set +a
 MOTOR="${MOTOR:-auto}"
 PORT="${PORT:-8611}"
-DATA="${DATAKATALOG:-$HOME/AkashaMeet}"; DATA="${DATA/#\~/$HOME}"
+if [ -n "${DATAKATALOG:-}" ]; then DATA_SATT=1; else DATA_SATT=0; fi
+DATA="${DATAKATALOG:-$HOME/AkashaProtokoll}"; DATA="${DATA/#\~/$HOME}"
 
 echo "== venv och beroenden"
 [ -d "$REPO/venv" ] || "$PY" -m venv "$REPO/venv"
@@ -93,10 +94,6 @@ echo "== modeller (motor: $AKTIV, KB-Whisper ${MODELL:-medium})"
 if [ "$AKTIV" = "whispercpp" ]; then LAGE=ggml; else LAGE=faster; fi
 "$REPO/venv/bin/python" "$REPO/app/modeller.py" "$LAGE" talare
 
-mkdir -p "$DATA" "$LA"
-chmod 700 "$DATA"   # motesinspelningar: bara du kommer at dem
-LOGG="$DATA/akasha-meet.log"
-
 TJANST="gui/$UIDN/$ETIKETT"
 # Ar programmet (Akasha Protokoll.app) igang pa porten utan att launchd-tjansten finns ska vi inte lagga
 # in den: annars kraschar tjansten om och om igen pa den upptagna porten, medan vantan nedan far
@@ -104,6 +101,31 @@ TJANST="gui/$UIDN/$ETIKETT"
 if ! launchctl print "$TJANST" >/dev/null 2>&1 && curl -s -o /dev/null "http://127.0.0.1:$PORT/health"; then
   echo "FEL: Akasha Protokoll (programmet) ar igang pa port $PORT. Avsluta det forst (Akasha Protokoll > Avsluta Akasha Protokoll) och kor skriptet igen."; exit 1
 fi
+
+# Fran tiden da programmet hette Akasha Meet: inspelningarna och programmets katalog far nya namn.
+# Bara mv, bara nar den gamla finns som katalog och den nya inte finns (samma regler som
+# plattform.flytta_till_nya_namn). Inspelningsmappen flyttas bara om DATAKATALOG inte ar satt.
+# Misslyckas mv lamnas den gamla mappen kvar och anvands, precis som i programmet.
+flytta() {  # flytta GAMMAL NY: ger 0 om mappen flyttades
+  [ -d "$1" ] && [ ! -e "$2" ] && [ ! -L "$2" ] || return 1
+  if launchctl print "$TJANST" >/dev/null 2>&1; then
+    echo "== stoppar tjansten medan mappen flyttas"
+    launchctl bootout "$TJANST" 2>/dev/null || true
+    sleep 1
+  fi
+  echo "== flyttar $1 till $2"
+  mv "$1" "$2" || { echo "VARNING: kunde inte flytta $1 till $2. Den gamla mappen lamnas kvar och anvands."; return 1; }
+}
+flytta "$HOME/Library/Application Support/Akasha Meet" "$HOME/Library/Application Support/Akasha Protokoll" || true
+if [ "$DATA_SATT" = 0 ]; then
+  if [ -d "$HOME/AkashaMeet" ] && [ ! -e "$HOME/AkashaProtokoll" ] && [ ! -L "$HOME/AkashaProtokoll" ]; then
+    flytta "$HOME/AkashaMeet" "$HOME/AkashaProtokoll" || DATA="$HOME/AkashaMeet"
+  fi
+fi
+
+mkdir -p "$DATA" "$LA"
+chmod 700 "$DATA"   # motesinspelningar: bara du kommer at dem
+LOGG="$DATA/akasha-protokoll.log"
 
 # Loggen fylls pa av launchd over tid. Vi minns hur lang den ar nu, sa att vi i slutet bara
 # visar det den har starten skrev och inte gamla rader fran en tidigare misslyckad installation.

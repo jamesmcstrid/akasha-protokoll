@@ -1,10 +1,18 @@
 """Gemensamt for testerna: tillfallig datakatalog och app/ i sokvagen. Importeras forst."""
+import atexit
 import os
 import shutil
 import sys
 import tempfile
 
 DATA = tempfile.mkdtemp(prefix="akasha-protokoll-test-")
+# Ingen test far rora den riktiga hemkatalogen (flytten av mapparna i start.py och plattform.py
+# gor os.rename under HOME): hela provkorningen far en tillfallig hemkatalog.
+HEM = tempfile.mkdtemp(prefix="akasha-protokoll-test-hem-")
+atexit.register(shutil.rmtree, HEM, True)
+os.environ["HOME"] = HEM
+os.environ["USERPROFILE"] = HEM
+os.environ.pop("XDG_DATA_HOME", None)
 os.environ["DATAKATALOG"] = DATA
 os.environ["MODELLKATALOG"] = os.path.join(DATA, "inga-modeller")
 os.environ["MOTOR"] = "faster"

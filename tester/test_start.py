@@ -331,6 +331,68 @@ class TestLoggning(Stadning):
         self.assertIn("kraschprov", text)
 
 
+class TestFlyttVidStart(Stadning):
+    """Flytten till de nya namnen (plattform.flytta_till_nya_namn) gors vid starta, fore import av app,
+    och inte nar beslutet ar redan_igang, upptagen eller ta_over."""
+
+    def test_starta_flyttar_fore_servern_skapas_och_raknar_om_platserna(self):
+        handelser = []
+        falsk = FalskServer()
+        with mock.patch.object(plattform, "flytta_till_nya_namn",
+                               lambda: handelser.append("flytt") or []), \
+             mock.patch.object(installningar, "uppdatera_platser", lambda: handelser.append("platser")), \
+             mock.patch.object(akasha, "forbered"), \
+             mock.patch.object(akasha, "skapa_server", lambda port: handelser.append("server") or falsk), \
+             mock.patch.object(motor, "stoppa"):
+            t = start.Tjanst(port=1234)
+            t.starta()
+            t.stang()
+        self.assertEqual(handelser, ["flytt", "platser", "server"])
+
+    def test_flytt_som_kastar_hindrar_inte_starten(self):
+        falsk = FalskServer()
+        with mock.patch.object(plattform, "flytta_till_nya_namn", side_effect=RuntimeError("fel")), \
+             mock.patch.object(akasha, "forbered"), \
+             mock.patch.object(akasha, "skapa_server", lambda port: falsk), \
+             mock.patch.object(motor, "stoppa"), \
+             self.assertLogs("akasha-protokoll", "ERROR"):
+            t = start.Tjanst(port=1234)
+            t.starta()
+            t.stang()
+        self.assertTrue(falsk.stangd)
+
+    def test_ingen_flytt_nar_beslutet_inte_ar_starta(self):
+        for beslut in ("redan_igang", "upptagen", "ta_over"):
+            with self.subTest(beslut=beslut), \
+                 mock.patch.object(plattform, "flytta_till_nya_namn") as flytta, \
+                 mock.patch.object(start, "forbered", return_value=beslut), \
+                 mock.patch.object(plattform, "oppna_webblasare"), \
+                 mock.patch.object(sys, "stderr", io.StringIO()):
+                start.main()
+            flytta.assert_not_called()
+
+    def test_loggfilen_foljer_med_nar_dess_katalog_flyttas(self):
+        gammal = os.path.join(self.katalog, "gammal")
+        ny = os.path.join(self.katalog, "ny")
+        os.makedirs(os.path.join(gammal, "logg"))
+        sokvag = {"nu": os.path.join(gammal, "logg")}
+        with mock.patch.object(plattform, "loggkatalog", lambda: sokvag["nu"]):
+            start.stall_in_loggning()
+            os.rename(gammal, ny)
+            sokvag["nu"] = os.path.join(ny, "logg")
+            with mock.patch.object(plattform, "flytta_till_nya_namn", lambda: [(gammal, ny)]), \
+                 mock.patch.object(installningar, "uppdatera_platser"):
+                start.flytta_till_nya_namn()
+            logging.getLogger("akasha-protokoll").info("efter flytten")
+            for h in logging.getLogger().handlers:
+                h.flush()
+        with open(os.path.join(ny, "logg", "akasha-protokoll.log"), encoding="utf-8") as f:
+            self.assertIn("efter flytten", f.read())
+        filhanterare = [h for h in logging.getLogger().handlers if h not in self.hanterare]
+        self.assertEqual(len(filhanterare), 1)
+        self.assertEqual(filhanterare[0].baseFilename, os.path.join(ny, "logg", "akasha-protokoll.log"))
+
+
 class TestMain(Stadning):
     def test_redan_igang(self):
         with mock.patch.object(start, "forbered", return_value="redan_igang"), \
@@ -497,6 +559,69 @@ class TestHelaStarten(unittest.TestCase):
         self.assertEqual(start.lage(self.port), "akasha")
         return forsta
 
+    def gamla_mappar(self, katalog):
+        """De gamla mapparna med en fil i vardera, i en tillfallig hemkatalog."""
+        for delar in (("AkashaMeet",), ("xdg", "akasha-meet")):
+            mapp = os.path.join(katalog, *delar)
+            os.makedirs(mapp)
+            with open(os.path.join(mapp, "flyttprov.txt"), "w", encoding="utf-8") as f:
+                f.write("prov")
+
+    def utan_satta_kataloger(self, katalog):
+        env = dict(os.environ, PORT=str(ledig_port()), MOTOR="faster", BROWSER="true",
+                   MODELLKATALOG=os.path.join(katalog, "m"), XDG_DATA_HOME=os.path.join(katalog, "xdg"), HOME=katalog)
+        for namn in ("DATAKATALOG", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"):
+            env.pop(namn, None)
+        return env
+
+    @unittest.skipIf(os.name == "nt", "SIGTERM och ett rent avslut finns inte pa Windows")
+    @unittest.skipIf(sys.platform == "darwin", "oppnar den riktiga webblasaren pa Mac")
+    def test_flytten_gors_vid_start_och_inte_nar_porten_ar_upptagen(self):
+        katalog = tempfile.mkdtemp(prefix="akasha-protokoll-flytt-")
+        self.addCleanup(shutil.rmtree, katalog, ignore_errors=True)
+        self.gamla_mappar(katalog)
+        env = self.utan_satta_kataloger(katalog)
+        kor = [sys.executable, os.path.join(APP, "start.py")]
+        # Upptagen port: ett annat program lyssnar, och ingenting flyttas.
+        s = socket.socket()
+        self.addCleanup(s.close)
+        s.bind(("127.0.0.1", int(env["PORT"])))
+        s.listen(5)
+        upptagen = subprocess.run(kor, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+        self.assertEqual(upptagen.returncode, 1)
+        self.assertTrue(os.path.isfile(os.path.join(katalog, "AkashaMeet", "flyttprov.txt")))
+        self.assertTrue(os.path.isfile(os.path.join(katalog, "xdg", "akasha-meet", "flyttprov.txt")))
+        self.assertFalse(os.path.exists(os.path.join(katalog, "AkashaProtokoll")))
+        self.assertFalse(os.path.exists(os.path.join(katalog, "xdg", "akasha-protokoll")))
+        s.close()
+        # Ledig port: flytten gors.
+        forsta = subprocess.Popen(kor, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(forsta.kill)
+        self.addCleanup(forsta.wait)
+        port = int(env["PORT"])
+        for _ in range(200):
+            if start.lage(port) == "akasha" or forsta.poll() is not None:
+                break
+            time.sleep(0.1)
+        self.assertEqual(start.lage(port), "akasha")
+        self.assertTrue(os.path.isfile(os.path.join(katalog, "AkashaProtokoll", "flyttprov.txt")))
+        self.assertTrue(os.path.isfile(os.path.join(katalog, "xdg", "akasha-protokoll", "flyttprov.txt")))
+        self.assertFalse(os.path.exists(os.path.join(katalog, "AkashaMeet")))
+        self.assertFalse(os.path.exists(os.path.join(katalog, "xdg", "akasha-meet")))
+        # Redan igang: en andra start flyttar inget, aven om nya gamla mappar dyker upp.
+        self.gamla_mappar(katalog)
+        andra = subprocess.run(kor, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+        self.assertEqual(andra.returncode, 0)
+        self.assertTrue(os.path.isfile(os.path.join(katalog, "AkashaMeet", "flyttprov.txt")))
+        self.assertTrue(os.path.isfile(os.path.join(katalog, "xdg", "akasha-meet", "flyttprov.txt")))
+        forsta.send_signal(signal.SIGTERM)
+        self.assertEqual(forsta.wait(20), 0)
+        loggfil = os.path.join(katalog, "xdg", "akasha-protokoll", "logg", "akasha-protokoll.log")
+        with open(loggfil, encoding="utf-8") as f:
+            logg = f.read()
+        self.assertIn("flyttade", logg)
+        self.assertIn("Akasha Protokoll avslutas", logg)
+
     # Pa Mac oppnar oppna_webblasare den riktiga webblasaren med /usr/bin/open (BROWSER hjalper inte).
     @unittest.skipIf(sys.platform == "darwin", "oppnar den riktiga webblasaren pa Mac")
     def test_start_och_andra_start(self):
@@ -516,7 +641,7 @@ class TestHelaStarten(unittest.TestCase):
         forsta.send_signal(signal.SIGTERM)
         self.assertEqual(forsta.wait(20), 0)
         self.assertEqual(start.lage(self.port), "ledig")
-        with open(os.path.join(self.katalog, "xdg", "akasha-meet", "logg", "akasha-meet.log"),
+        with open(os.path.join(self.katalog, "xdg", "akasha-protokoll", "logg", "akasha-protokoll.log"),
                   encoding="utf-8") as f:
             self.assertIn("Akasha Protokoll avslutas", f.read())
 

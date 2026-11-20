@@ -46,12 +46,23 @@ SPRAK = _env("SPRAK", "sv")
 
 # Inspelningar och transkriberingar. Medvetet INTE i Dokument eller Skrivbord: de synkas ofta
 # till iCloud, och motesinspelningar ska stanna pa datorn.
-DATAKATALOG = _sokvag(_env("DATAKATALOG", "~/AkashaMeet"))
-# Programmet (PyInstaller) har modellerna i sin programkatalog, terminalinstallationen i repot.
-_STANDARD_MODELLER = (
-    os.path.join(plattform.programkatalog(), "modeller") if plattform.ar_paketerad() else os.path.join(REPO, "modeller")
-)
-MODELLKATALOG = _sokvag(_env("MODELLKATALOG", _STANDARD_MODELLER))
+# Standardplatserna kommer fran plattform (den nya mappen, eller den gamla tills flytten har gjorts)
+# och raknas om av uppdatera_platser() efter flytten i start.py.
+DATAKATALOG = MODELLKATALOG = ""
+
+
+def uppdatera_platser():
+    """Satter DATAKATALOG och MODELLKATALOG. Det som ar satt i miljon vinner, som forut."""
+    global DATAKATALOG, MODELLKATALOG
+    DATAKATALOG = _sokvag(_env("DATAKATALOG", plattform.standard_datakatalog()))
+    # Programmet (PyInstaller) har modellerna i sin programkatalog, terminalinstallationen i repot.
+    standard = (
+        os.path.join(plattform.programkatalog(), "modeller") if plattform.ar_paketerad() else os.path.join(REPO, "modeller")
+    )
+    MODELLKATALOG = _sokvag(_env("MODELLKATALOG", standard))
+
+
+uppdatera_platser()
 
 # KB-Whisper medium (standard) eller large. Large gor farre fel men tar langre tid.
 MODELL = _env("MODELL", "medium").lower()

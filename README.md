@@ -138,11 +138,31 @@ ikonen för att öppna sidan igen. Avsluta med **⌘Q** eller genom att högerkl
 **Avsluta**. Det du redan spelat in ligger kvar.
 
 **Har du installerat från Terminal tidigare** frågar programmet om det ska ta över. Då stängs den
-gamla installationen av och startar inte längre när du loggar in. Inspelningarna i `~/AkashaMeet`
+gamla installationen av och startar inte längre när du loggar in. Inspelningarna
 och modellerna du redan har används av programmet, så ingenting hämtas igen. Vill du ha tillbaka den
 gamla kör du `bash mac/installera.sh` igen. Ligger den gamla mappen i Hämtade filer, Dokument eller
 Skrivbord letar programmet inte efter modeller där (macOS skulle annars fråga om lov), utan erbjuder
 att hämta dem. Flytta mappen till hemkatalogen först om du vill slippa hämta igen.
+
+### Från Akasha Meet till Akasha Protokoll
+
+Programmet hette tidigare Akasha Meet. Har du det installerat:
+
+1. Avsluta Akasha Meet med **⌘Q**.
+2. Ladda ned Akasha Protokoll och öppna det enligt stegen ovan. Första gången behövs **Öppna ändå**
+   igen, eftersom macOS ser det som ett nytt program.
+3. Inspelningarna och modellerna flyttas av sig själva när Akasha Protokoll startar första gången:
+   `~/AkashaMeet` blir `~/AkashaProtokoll`, och `~/Library/Application Support/Akasha Meet` (modeller
+   och inställningar) blir `~/Library/Application Support/Akasha Protokoll`. Mapparna döps bara om:
+   ingenting kopieras eller raderas. Finns den nya mappen redan rörs ingenting, och har du satt en
+   egen `DATAKATALOG` flyttas inte inspelningarna. Är Akasha Meet inte avslutat öppnar Akasha
+   Protokoll bara sidan i den, och flytten görs nästa gång.
+4. När Akasha Protokoll fungerar flyttar du Akasha Meet till Papperskorgen. Öppnas den gamla igen
+   hittar den varken inspelningar eller modeller och erbjuder en ny hämtning på cirka 1,6 GB.
+5. Mappen `~/Library/Logs/Akasha Meet` med de gamla loggarna kan tas bort. Loggarna flyttas inte.
+
+Har du installerat från Terminal flyttar `bash mac/installera.sh` mapparna på samma sätt när du kör
+den igen.
 
 ### Från Terminal
 
@@ -188,7 +208,7 @@ kvar tills du tar bort dem själv.
 
 ## Var hamnar inspelningarna?
 
-I mappen `~/AkashaMeet` i din hemkatalog. Bara ditt konto kommer åt mappen. För varje inspelning
+I mappen `~/AkashaProtokoll` i din hemkatalog. Bara ditt konto kommer åt mappen. För varje inspelning
 finns ljudet, en `.md` med texten och en `.json` med uppgifterna. **Radera** i listan tar bort alla
 tre. Det gäller både programmet och installationen från Terminal.
 
@@ -211,7 +231,7 @@ Vill du ha den någon annanstans anger du `DATAKATALOG` i inställningarna (se n
 ## Inställningar
 
 Allt har standardvärden. I programmet ligger inställningarna i filen `installningar.env` i mappen
-`~/Library/Application Support/Akasha Meet`. Filen finns inte från början. Skapa den med TextEdit
+`~/Library/Application Support/Akasha Protokoll`. Filen finns inte från början. Skapa den med TextEdit
 (Format → Gör till ren text), en inställning per rad, till exempel `MODELL=large`, och avsluta och
 öppna Akasha Protokoll igen. Mappen hittar du i Finder med Gå → Gå till mapp…
 
@@ -226,7 +246,7 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 | `MOTOR` | `auto` | `auto` väljer whisper.cpp med Metal på Apple Silicon och faster-whisper på processorn annars. Går att tvinga med `whispercpp` eller `faster` (starta om Akasha Protokoll; sidan erbjuder att hämta det som saknas). `faster` går inte i programmet, där följer faster-whisper inte med |
 | `MODELL` | `medium` | `large` gör färre fel men tar längre tid och behöver 1,1 GB till (3,1 GB utan Apple Silicon). Starta om Akasha Protokoll efter att du ändrat. Sidan erbjuder då att hämta modellen |
 | `ORDLISTA` | tom | Ord som alltid ska stavas rätt, till exempel företagets namn |
-| `DATAKATALOG` | `~/AkashaMeet` | Var inspelningar och texter sparas |
+| `DATAKATALOG` | `~/AkashaProtokoll` | Var inspelningar och texter sparas |
 | `PORT` | `8611` | Webbsidans port |
 | `TALARE_TROSKEL` | `0.6` | Två röster som liknar varandra mer än så räknas som samma person (0–1) |
 | `MAX_MB` | `1024` | Största fil som går att ladda upp |
@@ -235,7 +255,7 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 
 | Problem | Gör så här |
 |---|---|
-| Sidan öppnas inte | Programmet: avsluta och öppna Akasha Protokoll igen. Loggen finns i `~/Library/Logs/Akasha Meet/akasha-meet.log` (öppnas med appen Konsol). Från Terminal: `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`, och loggen `~/AkashaMeet/akasha-meet.log` |
+| Sidan öppnas inte | Programmet: avsluta och öppna Akasha Protokoll igen. Loggen finns i `~/Library/Logs/Akasha Protokoll/akasha-protokoll.log` (öppnas med appen Konsol). Från Terminal: `launchctl kickstart -k gui/$(id -u)/local.akasha-meet`, och loggen `~/AkashaProtokoll/akasha-protokoll.log` |
 | "Operation not permitted" i loggen, eller installationen säger att mappen ligger fel | Mappen med Akasha Protokoll ligger där macOS inte låter bakgrundstjänster läsa (Hämtade filer, Dokument, Skrivbord, iCloud Drive). Flytta den till hemkatalogen, ta bort mappen `venv` i den, och kör `bash mac/installera.sh` igen. Modellerna och .env följer med. |
 | "Akasha Protokoll svarar inte" | Programmet har avslutats eller stannat. Öppna Akasha Protokoll igen. Från Terminal: tjänsten startar av sig själv när du loggar in, så logga ut och in igen, eller kör `launchctl kickstart -k gui/$(id -u)/local.akasha-meet` i Terminal. Det du redan spelat in ligger kvar. Sidan märker själv när Akasha Protokoll är igång igen. |
 | "Akasha Protokoll" öppnades inte, eller "är skadat" | Se steg 3–6 under Som program: Klar, sedan Öppna ändå under Integritet och säkerhet → Säkerhet. Säger macOS att programmet är skadat, kör `xattr -dr com.apple.quarantine "/Applications/Akasha Protokoll.app"` i Terminal. |

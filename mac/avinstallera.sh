@@ -7,7 +7,9 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 ETIKETT="local.akasha-meet"
 launchctl bootout "gui/$(id -u)/$ETIKETT" 2>/dev/null || true
 rm -f "$HOME/Library/LaunchAgents/$ETIKETT.plist"
-DATA="${DATAKATALOG:-$HOME/AkashaMeet}"
+DATA="${DATAKATALOG:-$HOME/AkashaProtokoll}"
+# Har flytten fran det gamla namnet (Akasha Meet) annu inte gjorts ligger inspelningarna kvar dar.
+if [ -z "${DATAKATALOG:-}" ] && [ ! -e "$DATA" ] && [ -d "$HOME/AkashaMeet" ]; then DATA="$HOME/AkashaMeet"; fi
 echo "Akasha Protokoll ar stoppad och startar inte langre vid inloggning."
 echo "Kvar finns (ta bort for hand om du vill):"
 echo "  inspelningar och texter: ${DATA/#\~/$HOME}"

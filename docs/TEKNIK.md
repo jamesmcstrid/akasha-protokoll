@@ -11,7 +11,7 @@ Webbläsaren (http://127.0.0.1:8611, eller den port som PORT anger)
   │    digitalt möte: mikrofonen i vänster kanal, mötesfliken i höger │
   └─ eller laddar upp en fil ─────────────────────────────────────────┤
                                                                       ▼
-app/app.py (Flask, bara 127.0.0.1) ── sparar i ~/AkashaMeet ── köar ett jobb
+app/app.py (Flask, bara 127.0.0.1) ── sparar i ~/AkashaProtokoll ── köar ett jobb
   └─ bakgrundstråd, ett jobb åt gången:
        1. avkodar ljudet (PyAV)
        2. KB-Whisper medium: text med tidsstämpel per ord        app/motor.py
@@ -164,17 +164,33 @@ Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-2
   tjänster får aldrig dela datakatalog, eftersom `lagring.aterstall_avbrutna()` vid start annars
   skulle märka den andras pågående jobb som avbrutna. `mac/installera.sh` stannar åt andra hållet
   med en förklaring om programmet är igång på porten och launchd-tjänsten inte finns.
-- **Var saker ligger.** Inspelningar: `~/AkashaMeet`, som i terminalinstallationen. Modeller:
-  `~/Library/Application Support/Akasha Meet/modeller`. Inställningar:
-  `~/Library/Application Support/Akasha Meet/installningar.env`, med samma `NAMN=värde` som `.env`.
+- **Var saker ligger.** Inspelningar: `~/AkashaProtokoll`, som i terminalinstallationen. Modeller:
+  `~/Library/Application Support/Akasha Protokoll/modeller`. Inställningar:
+  `~/Library/Application Support/Akasha Protokoll/installningar.env`, med samma `NAMN=värde` som `.env`.
   Den läses bara när programmet är paketerat, och en miljövariabel som redan är satt vinner.
   Programmet stannar aldrig på grund av filen: det som inte går att läsa ersätts med
   standardvärdet, och rutan vid start, loggen och (utan fönster) stderr säger till. Problemtexterna
   innehåller bara radnummer och inställningens namn, aldrig något ur filen. Loggen ligger i
-  `~/Library/Logs/Akasha Meet/akasha-meet.log` (roterande, 2 MB, tre filer). Har någon modeller i
+  `~/Library/Logs/Akasha Protokoll/akasha-protokoll.log` (roterande, 2 MB, tre filer). Har någon modeller i
   repots `modeller/` från terminalinstallationen hårdlänkas de in i programmets katalog vid start,
   så att inget hämtas igen och terminalinstallationen fungerar som förut. Går länken inte (annan
   volym) erbjuder sidan hämtning som vid första start.
+- **Flytten från det gamla namnet.** Programmet hette förut Akasha Meet och hade `~/AkashaMeet` och
+  `~/Library/Application Support/Akasha Meet` (på Linux `~/.local/share/akasha-meet`, på Windows
+  `%LOCALAPPDATA%\Akasha Meet`). `plattform.programkatalog()` och `plattform.standard_datakatalog()`
+  ger den nya mappen om den finns eller om den gamla inte finns, annars den gamla, så att sidan aldrig
+  visar en tom lista eller erbjuder en ny hämtning även om flytten inte har gjorts. Flytten är
+  `plattform.flytta_till_nya_namn()`: bara `os.rename`, bara när den gamla finns som katalog och den
+  nya inte finns. Finns båda rörs ingenting (och det loggas), ett `OSError` loggas och lämnar den gamla
+  på plats, och inspelningsmappen flyttas inte om `DATAKATALOG` är satt i miljön eller i
+  inställningsfilen. Den görs i `Tjanst.starta()`, alltså bara när beslutet är att starta (inte när
+  en annan Akasha redan kör eller porten är upptagen), före `import app`, och efteråt räknar
+  `installningar.uppdatera_platser()` om standardplatserna. Ligger loggen i en katalog som flyttades
+  (Linux, Windows) byter loggern till den nya sökvägen. Terminalinstallationen (`app.py` utan
+  `start.py`) flyttar inget men följer samma upplösning; `mac/installera.sh` gör flytten med `mv`
+  innan tjänsten startas om. Loggkatalogen och loggfilen byter namn utan flytt.
+  `kontrollera.py` lägger de gamla mapparna före start och kontrollerar att de ligger under de nya
+  namnen efteråt.
 - **Det enda som skiljer.** Om koden körs som programmet avgörs av `sys.frozen`, PyInstallers eget
   märke, och bara i `app/plattform.py`. Det finns ingen testflagga eller testmiljövariabel i `app/`.
 - **Kontrollen i Actions.** Det byggda programmet ska startas med en tom hemkatalog (`HOME`). En
@@ -185,7 +201,7 @@ Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-2
   skickas SIGTERM och porten ska vara ledig. Dessutom ska den medföljande `whisper-cli`
   transkribera ett testljud med en liten riktig modell. Samma kontrollskript
   (`paketering/kontrollera.py`) körs mot provbygget på Linux. Kontrollen visar att programmet
-  startar, att standardplatserna, flytten av modeller, motorvalet, sherpa-onnx, PyAV, requests och
+  startar, att standardplatserna, flytten av modeller och av de gamla mapparna, motorvalet, sherpa-onnx, PyAV, requests och
   certifikaten fungerar i det frysta programmet, att hämtningen från Hugging Face fungerar, och att
   loggen och avslutet fungerar. Den visar inte att Metal används, att Gatekeeper släpper igenom
   programmet efter godkännandet i Systeminställningar, eller att en riktig KB-Whisper-modell

@@ -25,33 +25,237 @@ class Tillfallig(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.katalog, True)
 
 
-class TestKataloger(unittest.TestCase):
+class TillfalligtHem(Tillfallig):
+    """En tillfallig hemkatalog: HOME pekar dit, och DATAKATALOG och XDG_DATA_HOME ar inte satta.
+    Inget prov i den har filen ror de riktiga hemkatalogerna."""
+
+    def setUp(self):
+        super().setUp()
+        self.hem = os.path.join(self.katalog, "hem")
+        os.makedirs(self.hem)
+        env = {k: v for k, v in os.environ.items() if k not in ("DATAKATALOG", "XDG_DATA_HOME", "LOCALAPPDATA")}
+        env.update(HOME=self.hem, USERPROFILE=self.hem)
+        p = mock.patch.dict(os.environ, env, clear=True)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def mapp(self, *delar, fil="innehall.txt"):
+        """Skapar en katalog under hemkatalogen med en fil i, och ger katalogens sokvag."""
+        sokvag = os.path.join(self.hem, *delar)
+        os.makedirs(sokvag)
+        with open(os.path.join(sokvag, fil), "w", encoding="utf-8") as f:
+            f.write("/".join(delar))
+        return sokvag
+
+
+class TestKataloger(TillfalligtHem):
     def test_programkatalog_mac(self):
         with system("Darwin"):
             self.assertEqual(plattform.programkatalog(),
-                             os.path.expanduser("~/Library/Application Support/Akasha Meet"))
+                             os.path.join(self.hem, "Library", "Application Support", "Akasha Protokoll"))
 
     def test_programkatalog_windows(self):
         with system("Windows"), mock.patch.dict(os.environ, {"LOCALAPPDATA": "lokal"}):
-            self.assertEqual(plattform.programkatalog(), os.path.join("lokal", "Akasha Meet"))
+            self.assertEqual(plattform.programkatalog(), os.path.join("lokal", "Akasha Protokoll"))
 
     def test_programkatalog_linux(self):
         with system("Linux"), mock.patch.dict(os.environ, {"XDG_DATA_HOME": "xdg"}):
-            self.assertEqual(plattform.programkatalog(), os.path.join("xdg", "akasha-meet"))
-        env = {k: v for k, v in os.environ.items() if k != "XDG_DATA_HOME"}
-        with system("Linux"), mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(plattform.programkatalog(), os.path.join("xdg", "akasha-protokoll"))
+        with system("Linux"):
             self.assertEqual(plattform.programkatalog(),
-                             os.path.join(os.path.expanduser(os.path.join("~", ".local", "share")), "akasha-meet"))
+                             os.path.join(self.hem, ".local", "share", "akasha-protokoll"))
 
     def test_loggkatalog(self):
         with system("Darwin"):
-            self.assertEqual(plattform.loggkatalog(), os.path.expanduser("~/Library/Logs/Akasha Meet"))
+            self.assertEqual(plattform.loggkatalog(), os.path.join(self.hem, "Library", "Logs", "Akasha Protokoll"))
         with system("Linux"), mock.patch.dict(os.environ, {"XDG_DATA_HOME": "xdg"}):
-            self.assertEqual(plattform.loggkatalog(), os.path.join("xdg", "akasha-meet", "logg"))
+            self.assertEqual(plattform.loggkatalog(), os.path.join("xdg", "akasha-protokoll", "logg"))
 
     def test_installningsfil(self):
         with system("Linux"), mock.patch.dict(os.environ, {"XDG_DATA_HOME": "xdg"}):
-            self.assertEqual(plattform.installningsfil(), os.path.join("xdg", "akasha-meet", "installningar.env"))
+            self.assertEqual(plattform.installningsfil(), os.path.join("xdg", "akasha-protokoll", "installningar.env"))
+
+    def test_de_gamla_namnen(self):
+        with system("Darwin"):
+            self.assertEqual(plattform.gammal_programkatalog(),
+                             os.path.join(self.hem, "Library", "Application Support", "Akasha Meet"))
+        with system("Windows"), mock.patch.dict(os.environ, {"LOCALAPPDATA": "lokal"}):
+            self.assertEqual(plattform.gammal_programkatalog(), os.path.join("lokal", "Akasha Meet"))
+        with system("Linux"), mock.patch.dict(os.environ, {"XDG_DATA_HOME": "xdg"}):
+            self.assertEqual(plattform.gammal_programkatalog(), os.path.join("xdg", "akasha-meet"))
+        self.assertEqual((plattform.GAMMAL_DATAKATALOG, plattform.NY_DATAKATALOG), ("~/AkashaMeet", "~/AkashaProtokoll"))
+
+    def test_ingen_av_dem_finns_ger_de_nya_namnen(self):
+        with system("Darwin"):
+            self.assertTrue(plattform.programkatalog().endswith("Akasha Protokoll"))
+        self.assertEqual(plattform.standard_datakatalog(), "~/AkashaProtokoll")
+
+
+class TestUpplosning(TillfalligtHem):
+    """Den nya katalogen om den finns eller om den gamla inte finns, annars den gamla."""
+
+    def test_bara_gammal_finns_ger_den_gamla(self):
+        gammal = self.mapp("Library", "Application Support", "Akasha Meet")
+        self.mapp("AkashaMeet")
+        with system("Darwin"):
+            self.assertEqual(plattform.programkatalog(), gammal)
+            self.assertEqual(plattform.loggkatalog(), os.path.join(self.hem, "Library", "Logs", "Akasha Protokoll"))
+        self.assertEqual(plattform.standard_datakatalog(), "~/AkashaMeet")
+
+    def test_bara_ny_finns_ger_den_nya(self):
+        ny = self.mapp("Library", "Application Support", "Akasha Protokoll")
+        self.mapp("AkashaProtokoll")
+        with system("Darwin"):
+            self.assertEqual(plattform.programkatalog(), ny)
+        self.assertEqual(plattform.standard_datakatalog(), "~/AkashaProtokoll")
+
+    def test_bada_finns_ger_den_nya(self):
+        self.mapp("Library", "Application Support", "Akasha Meet")
+        ny = self.mapp("Library", "Application Support", "Akasha Protokoll")
+        self.mapp("AkashaMeet")
+        self.mapp("AkashaProtokoll")
+        with system("Darwin"):
+            self.assertEqual(plattform.programkatalog(), ny)
+        self.assertEqual(plattform.standard_datakatalog(), "~/AkashaProtokoll")
+
+    def test_en_fil_med_det_gamla_namnet_raknas_inte(self):
+        with open(os.path.join(self.hem, "AkashaMeet"), "w", encoding="utf-8") as f:
+            f.write("en fil")
+        self.assertEqual(plattform.standard_datakatalog(), "~/AkashaProtokoll")
+
+    def test_installningar_foljer_upplosningen_och_det_satta_vinner(self):
+        self.addCleanup(setattr, installningar, "DATAKATALOG", installningar.DATAKATALOG)
+        self.addCleanup(setattr, installningar, "MODELLKATALOG", installningar.MODELLKATALOG)
+        self.mapp("AkashaMeet")
+        installningar.uppdatera_platser()
+        self.assertEqual(installningar.DATAKATALOG, os.path.join(self.hem, "AkashaMeet"))
+        with mock.patch.dict(os.environ, {"DATAKATALOG": "~/Annat"}):
+            installningar.uppdatera_platser()
+            self.assertEqual(installningar.DATAKATALOG, os.path.join(self.hem, "Annat"))
+        os.rename(os.path.join(self.hem, "AkashaMeet"), os.path.join(self.hem, "AkashaProtokoll"))
+        installningar.uppdatera_platser()
+        self.assertEqual(installningar.DATAKATALOG, os.path.join(self.hem, "AkashaProtokoll"))
+
+
+class TestFlytt(TillfalligtHem):
+    """flytta_till_nya_namn: bara os.rename, bara nar den gamla finns som katalog och den nya inte finns."""
+
+    def trad(self):
+        """Allt under hemkatalogen som (relativ sokvag, innehall eller None for en katalog)."""
+        ut = {}
+        for rot, kataloger, filer in os.walk(self.hem):
+            for namn in kataloger:
+                ut[os.path.relpath(os.path.join(rot, namn), self.hem)] = None
+            for namn in filer:
+                sokvag = os.path.join(rot, namn)
+                with open(sokvag, encoding="utf-8") as f:
+                    ut[os.path.relpath(sokvag, self.hem)] = f.read()
+        return ut
+
+    def test_bara_gammal_finns_flyttas_och_upplosningen_ger_den_nya(self):
+        self.mapp("Library", "Application Support", "Akasha Meet", fil="installningar.env")
+        os.makedirs(os.path.join(self.hem, "Library", "Application Support", "Akasha Meet", "modeller"))
+        self.mapp("AkashaMeet", fil="20261119-140206.json")
+        with system("Darwin"):
+            self.assertTrue(plattform.programkatalog().endswith("Akasha Meet"))
+            flyttat = plattform.flytta_till_nya_namn()
+            self.assertEqual(flyttat, [
+                (os.path.join(self.hem, "Library", "Application Support", "Akasha Meet"),
+                 os.path.join(self.hem, "Library", "Application Support", "Akasha Protokoll")),
+                (os.path.join(self.hem, "AkashaMeet"), os.path.join(self.hem, "AkashaProtokoll"))])
+            self.assertTrue(plattform.programkatalog().endswith("Akasha Protokoll"))
+        self.assertEqual(plattform.standard_datakatalog(), "~/AkashaProtokoll")
+        self.assertEqual(self.trad(), {
+            "Library": None, "Library/Application Support": None,
+            "Library/Application Support/Akasha Protokoll": None,
+            "Library/Application Support/Akasha Protokoll/installningar.env": "Library/Application Support/Akasha Meet",
+            "Library/Application Support/Akasha Protokoll/modeller": None,
+            "AkashaProtokoll": None, "AkashaProtokoll/20261119-140206.json": "AkashaMeet"})
+        with system("Darwin"):
+            self.assertEqual(plattform.flytta_till_nya_namn(), [])  # en andra gang gor ingenting
+
+    def test_bada_finns_ror_ingenting_och_loggar(self):
+        self.mapp("AkashaMeet", fil="gammal.json")
+        self.mapp("AkashaProtokoll", fil="ny.json")
+        self.mapp(".local", "share", "akasha-meet", fil="gammal.env")
+        self.mapp(".local", "share", "akasha-protokoll", fil="ny.env")
+        fore = self.trad()
+        with system("Linux"), self.assertLogs("akasha-protokoll", "INFO") as lg:
+            self.assertEqual(plattform.flytta_till_nya_namn(), [])
+        self.assertEqual(self.trad(), fore)
+        self.assertTrue(any("ingen av dem rors" in m for m in lg.output), lg.output)
+        with system("Linux"):
+            self.assertTrue(plattform.programkatalog().endswith("akasha-protokoll"))
+
+    def test_en_tom_ny_katalog_skrivs_inte_over(self):
+        self.mapp("AkashaMeet", fil="gammal.json")
+        os.makedirs(os.path.join(self.hem, "AkashaProtokoll"))
+        fore = self.trad()
+        self.assertEqual(plattform.flytta_till_nya_namn(), [])
+        self.assertEqual(self.trad(), fore)
+
+    def test_satt_datakatalog_ger_ingen_flytt_av_inspelningarna(self):
+        self.mapp("AkashaMeet", fil="gammal.json")
+        self.mapp(".local", "share", "akasha-meet", fil="gammal.env")
+        with system("Linux"), mock.patch.dict(os.environ, {"DATAKATALOG": "~/AkashaMeet"}):
+            flyttat = plattform.flytta_till_nya_namn()  # ar DATAKATALOG satt avgors ur miljon
+        self.assertEqual([ny for _, ny in flyttat], [os.path.join(self.hem, ".local", "share", "akasha-protokoll")])
+        self.assertTrue(os.path.isfile(os.path.join(self.hem, "AkashaMeet", "gammal.json")))
+        self.assertFalse(os.path.exists(os.path.join(self.hem, "AkashaProtokoll")))
+
+    def test_tom_datakatalog_i_miljon_raknas_som_inte_satt(self):
+        self.mapp("AkashaMeet", fil="gammal.json")
+        with system("Linux"), mock.patch.dict(os.environ, {"DATAKATALOG": "  "}):
+            plattform.flytta_till_nya_namn()
+        self.assertTrue(os.path.isfile(os.path.join(self.hem, "AkashaProtokoll", "gammal.json")))
+
+    def test_datakatalog_som_argument_gar_for_miljon(self):
+        self.mapp("AkashaMeet", fil="gammal.json")
+        with system("Linux"):
+            self.assertEqual(plattform.flytta_till_nya_namn(datakatalog_satt=True), [])
+        self.assertTrue(os.path.isfile(os.path.join(self.hem, "AkashaMeet", "gammal.json")))
+
+    def test_rename_som_kastar_lamnar_den_gamla_som_anvands(self):
+        self.mapp("Library", "Application Support", "Akasha Meet", fil="installningar.env")
+        self.mapp("AkashaMeet", fil="gammal.json")
+        fore = self.trad()
+        with system("Darwin"), mock.patch("os.rename", side_effect=PermissionError(13, "nekad")), \
+                self.assertLogs("akasha-protokoll", "WARNING") as lg:
+            self.assertEqual(plattform.flytta_till_nya_namn(), [])
+            self.assertTrue(plattform.programkatalog().endswith("Akasha Meet"))
+        self.assertEqual(len(lg.output), 2)  # ett fel for varje mapp, och inget kastades
+        self.assertEqual(plattform.standard_datakatalog(), "~/AkashaMeet")
+        self.assertEqual(self.trad(), fore)
+
+    def test_ett_fel_pa_forsta_mappen_hindrar_inte_den_andra(self):
+        self.mapp("Library", "Application Support", "Akasha Meet", fil="installningar.env")
+        self.mapp("AkashaMeet", fil="gammal.json")
+        riktig = os.rename
+
+        def rename(a, b):
+            if a.endswith("Akasha Meet"):
+                raise OSError(5, "fel")
+            riktig(a, b)
+        with system("Darwin"), mock.patch("os.rename", rename), self.assertLogs("akasha-protokoll", "WARNING"):
+            flyttat = plattform.flytta_till_nya_namn()
+        self.assertEqual(flyttat, [(os.path.join(self.hem, "AkashaMeet"), os.path.join(self.hem, "AkashaProtokoll"))])
+
+    def test_en_fil_med_det_gamla_namnet_flyttas_inte(self):
+        with open(os.path.join(self.hem, "AkashaMeet"), "w", encoding="utf-8") as f:
+            f.write("en fil")
+        self.assertEqual(plattform.flytta_till_nya_namn(), [])
+        self.assertFalse(os.path.exists(os.path.join(self.hem, "AkashaProtokoll")))
+
+    def test_flytten_tar_aldrig_bort_eller_skriver_over(self):
+        """Koden anvander bara os.rename: inget annat som tar bort eller kopierar anropas."""
+        self.mapp("AkashaMeet", fil="gammal.json")
+        self.mapp("Library", "Application Support", "Akasha Meet")
+        with system("Darwin"), mock.patch("shutil.rmtree") as rmtree, mock.patch("os.remove") as remove, \
+                mock.patch("os.unlink") as unlink, mock.patch("shutil.move") as flytta, \
+                mock.patch("shutil.copytree") as kopiera:
+            plattform.flytta_till_nya_namn()
+        for falsk in (rmtree, remove, unlink, flytta, kopiera):
+            falsk.assert_not_called()
 
 
 class TestInstallningsfil(Tillfallig):
@@ -183,7 +387,7 @@ class TestRenProcess(Tillfallig):
 
     def kor(self, data):
         hem = os.path.join(self.katalog, "hem")
-        mapp = os.path.join(hem, "xdg", "akasha-meet")
+        mapp = os.path.join(hem, "xdg", "akasha-protokoll")
         os.makedirs(mapp)
         fil = os.path.join(mapp, "installningar.env")
         if data is None:
@@ -352,6 +556,12 @@ class TestGamlaModellkataloger(Tillfallig):
         self.assertEqual(resultat, [])
         self.assertFalse([p for p in anrop if str(p).startswith(skyddad)], anrop)
         self.assertTrue(any("modeller: letar inte i" in m for m in lg.output))
+
+    def test_klonplatsen_med_det_nya_namnet_tas_ocksa_med(self):
+        repo = os.path.join(self.katalog, "akasha-protokoll")
+        os.makedirs(os.path.join(repo, "modeller"))
+        with self._hem():
+            self.assertEqual(plattform.gamla_modellkataloger(), [os.path.join(repo, "modeller")])
 
     def test_repo_i_hemkatalogen_tas_med(self):
         repo = os.path.join(self.katalog, "akasha-meet")

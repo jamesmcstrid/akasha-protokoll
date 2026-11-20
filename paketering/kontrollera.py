@@ -24,6 +24,10 @@ sys.path.insert(0, os.path.join(ROT, "app"))
 MAC = sys.platform == "darwin"
 HEADERS = {"X-Akasha-Protokoll": "1"}
 TALARE_SAKNAS = "röstmodellen saknas. Hämta den på sidan."
+FLYTTPROV = "flyttprov"
+# Programkatalogen under hemkatalogen, med det gamla namnet (Akasha Meet) och det nya.
+GAMMAL_PROGRAMKATALOG = ("Library", "Application Support", "Akasha Meet") if MAC else (".local", "share", "akasha-meet")
+NY_PROGRAMKATALOG = ("Library", "Application Support", "Akasha Protokoll") if MAC else (".local", "share", "akasha-protokoll")
 
 proc = None
 args = None
@@ -115,6 +119,16 @@ def main():
         gamla.append(sokvag)
     ok(f"{len(gamla)} gamla modellfiler lagda (glesa, rätt storlek) i {hem}/akasha-meet/modeller")
 
+    # 1b. De gamla mapparna fran tiden som Akasha Meet: inspelningsmappen med en fil, och programkatalogen
+    # med en tom installningsfil. Programmet ska flytta dem till de nya namnen vid start (plattform.py).
+    gammal_data = os.path.join(hem, "AkashaMeet")
+    gammal_program = os.path.join(hem, *GAMMAL_PROGRAMKATALOG)
+    for mapp, fil, innehall in ((gammal_data, "flyttprov.txt", FLYTTPROV), (gammal_program, "installningar.env", "")):
+        os.makedirs(mapp, exist_ok=True)
+        with open(os.path.join(mapp, fil), "w", encoding="utf-8") as f:
+            f.write(innehall)
+    ok(f"gamla mappar lagda: {gammal_data} (flyttprov.txt) och {gammal_program} (installningar.env)")
+
     # 2. Starta programmet med tom hemkatalog. Inga MODELLKATALOG eller DATAKATALOG: standardvardena provas.
     miljo = {"HOME": hem, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "PORT": str(args.port),
              "LANG": "sv_SE.UTF-8"}
@@ -124,8 +138,8 @@ def main():
             if n in os.environ:
                 miljo[n] = os.environ[n]
     utskrift = os.path.join(hem, "program-utskrift.log")
-    logg = os.path.join(hem, "Library", "Logs", "Akasha Meet", "akasha-meet.log") if MAC else \
-        os.path.join(hem, ".local", "share", "akasha-meet", "logg", "akasha-meet.log")
+    logg = os.path.join(hem, "Library", "Logs", "Akasha Protokoll", "akasha-protokoll.log") if MAC else \
+        os.path.join(hem, *NY_PROGRAMKATALOG, "logg", "akasha-protokoll.log")
     with open(utskrift, "wb") as ut:
         proc = subprocess.Popen([program], env=miljo, stdout=ut, stderr=subprocess.STDOUT)
     ok(f"programmet startat (pid {proc.pid}, port {args.port})")
@@ -159,9 +173,19 @@ def main():
 
     # 5. /health.
     h = hamta("/health").json()
-    forvantad = os.path.join(hem, "AkashaMeet")
+    forvantad = os.path.join(hem, "AkashaProtokoll")
     kontrollera(os.path.realpath(h.get("datakatalog", "")) == os.path.realpath(forvantad),
                 f"datakatalog är {h.get('datakatalog')}", f"datakatalog är {h.get('datakatalog')}, väntade {forvantad}")
+    # Flytten: det som lades under de gamla namnen ska nu ligga under de nya, och de gamla ska vara borta.
+    ny_program = os.path.join(hem, *NY_PROGRAMKATALOG)
+    for gammal, ny, fil, innehall in ((gammal_data, forvantad, "flyttprov.txt", FLYTTPROV),
+                                      (gammal_program, ny_program, "installningar.env", "")):
+        sokvag = os.path.join(ny, fil)
+        text = open(sokvag, encoding="utf-8").read() if os.path.isfile(sokvag) else None
+        kontrollera(text == innehall and not os.path.exists(gammal),
+                    f"{gammal} flyttades till {ny} (innehållet orört, den gamla borta)",
+                    f"flytten av {gammal} till {ny} misslyckades (filen {sokvag}: {text!r}, den gamla finns: "
+                    f"{os.path.exists(gammal)})")
     kontrollera(h.get("talare") == TALARE_SAKNAS, "sherpa-onnx gick att importera (talare: röstmodellen saknas)",
                 f"talare är {h.get('talare')!r}, väntade {TALARE_SAKNAS!r}")
     kontrollera(h.get("motor") == args.vantad_motor, f"motor är {h.get('motor')}",
@@ -170,8 +194,7 @@ def main():
     # 6. /api/modeller: standardkatalog, bara talare saknas, gamla filer hardlankade.
     m = hamta("/api/modeller").json()
     kontrollera(m.get("hinder") is None, "hinder är null", f"hinder är {m.get('hinder')!r}")
-    delar = ["Library", "Application Support", "Akasha Meet", "modeller"] if MAC else \
-        [".local", "share", "akasha-meet", "modeller"]
+    delar = [*NY_PROGRAMKATALOG, "modeller"]
     kontrollera(os.path.realpath(m.get("katalog", "")) == os.path.realpath(os.path.join(hem, *delar)),
                 f"modellkatalogen är {m.get('katalog')}",
                 f"modellkatalogen är {m.get('katalog')!r}, väntade {os.path.join(hem, *delar)}")
