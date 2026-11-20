@@ -2,3 +2,8 @@ Akasha Meet
 Copyright 2026 Dennis Fredin
 
 Licensed under the Apache License, Version 2.0. See LICENSE.
+
+This product includes the following fonts, licensed under the SIL Open Font License, Version 1.1
+(see app/static/typsnitt/):
+- Anton, Copyright 2020 The Anton Project Authors (https://github.com/googlefonts/AntonFont.git)
+- Instrument Sans, Copyright 2022 The Instrument Sans Project Authors (https://github.com/Instrument/instrument-sans)

@@ -23,6 +23,17 @@ class Paketering(unittest.TestCase):
         for delar in (("app", "mac_app.py"), ("paketering", "akasha-meet.spec"), ("paketering", "kontrollera.py")):
             compile(las(*delar), "/".join(delar), "exec")  # inte importerad: PyObjC finns bara pa Mac
 
+    def test_typsnitten_stilmallen_pekar_pa_finns_med_sina_licenser(self):
+        stil = las("app", "static", "stil.css")
+        filer = re.findall(r'url\("(typsnitt/[^"]+)"\)', stil)
+        self.assertEqual(len(filer), 3)
+        for fil in filer:
+            self.assertTrue(os.path.isfile(os.path.join(APP, "static", fil)), fil)
+        for licens in ("OFL-Anton.txt", "OFL-Instrument-Sans.txt"):
+            text = las("app", "static", "typsnitt", licens)
+            self.assertIn("SIL OPEN FONT LICENSE Version 1.1", text)
+        self.assertIn("*.woff2 binary", las(".gitattributes"))
+
     def test_byggkraven_ar_last_till_exakta_versioner(self):
         rader = [r.strip() for r in las("paketering", "krav-bygg.txt").splitlines()]
         rader = [r for r in rader if r and not r.startswith("#")]

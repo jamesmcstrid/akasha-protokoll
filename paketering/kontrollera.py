@@ -152,6 +152,10 @@ def main():
     r = hamta("/static/app.js")
     kontrollera(r.status_code == 200, f"GET /static/app.js ger 200 ({len(r.content)} byte)",
                 f"GET /static/app.js gav {r.status_code}")
+    r = hamta("/static/typsnitt/instrument-sans-latin-wght-normal.woff2")
+    kontrollera(r.status_code == 200 and r.headers.get("Content-Type", "").startswith("font/woff2"),
+                f"GET /static/typsnitt/instrument-sans-latin-wght-normal.woff2 ger 200 font/woff2 ({len(r.content)} byte)",
+                f"typsnittet gav {r.status_code} med Content-Type {r.headers.get('Content-Type')!r}")
 
     # 5. /health.
     h = hamta("/health").json()

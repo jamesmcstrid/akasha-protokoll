@@ -278,4 +278,5 @@ Programmet för Mac byggs med `paketering/` och GitHub Actions (se [docs/TEKNIK.
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2.0 |
 | [PyAV](https://github.com/PyAV-Org/PyAV) med FFmpeg, Python, Flask, numpy, PyObjC och de andra delarna i programmet | Var och en sin licens. En förteckning läggs till innan programmet släpps |
 | NeMo TitaNet small (NVIDIA), via sherpa-onnx | CC-BY-4.0 |
+| Typsnitten [Anton](https://github.com/googlefonts/AntonFont) och [Instrument Sans](https://github.com/Instrument/instrument-sans) (följer med programmet) | SIL Open Font License 1.1, se app/static/typsnitt/ |
 | Testljud: [Google FLEURS](https://huggingface.co/datasets/google/fleurs) | CC-BY-4.0 |
