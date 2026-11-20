@@ -49,7 +49,8 @@ VSVersionInfo(
 )
 """
 NAMN = "Akasha Protokoll"
-UPPHOVSRATT = "\u00a9 2026 Dennis Fredin. Apache-2.0."
+UTGIVARE = "Dennis Fredin"  # i upphovsratten, och som utgivare i installationsfilen (AppPublisher i .iss)
+UPPHOVSRATT = f"\u00a9 2026 {UTGIVARE}. Apache-2.0."
 
 
 def versionstext(version, byggnummer):

@@ -28,6 +28,7 @@
 AppId={{9E5B73C9-B94B-4979-B5DF-00C834E09C1E}
 AppName={#Namn}
 AppVersion={#Version}
+AppPublisher=Dennis Fredin
 AppCopyright=© 2026 Dennis Fredin. Apache-2.0.
 VersionInfoVersion={#Version}
 VersionInfoDescription={#Namn}

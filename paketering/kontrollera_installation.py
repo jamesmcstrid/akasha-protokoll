@@ -18,6 +18,7 @@ import subprocess
 import sys
 import time
 
+import bygg_windows_verktyg
 import kontroll_hjalp
 
 ROT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -217,10 +218,13 @@ def main(argv=None):
     else:
         print("INFO: avinstallationsposten: " + "; ".join(f"{k}={post.get(k)}" for k in
               ("DisplayName", "DisplayVersion", "Publisher", "InstallLocation", "UninstallString"))
-              + " (Publisher kan vara tom: ingen utgivare ar satt)")
+              )
         res.kontrollera(post.get("DisplayVersion") == args.version and post.get("DisplayName") == NAMN,
                         f"avinstallationsposten har namnet {NAMN} och versionen {args.version}",
                         f"avinstallationsposten har namn {post.get('DisplayName')!r} och version {post.get('DisplayVersion')!r}")
+        res.kontrollera(post.get("Publisher") == bygg_windows_verktyg.UTGIVARE,
+                        f"avinstallationsposten har utgivaren {bygg_windows_verktyg.UTGIVARE}",
+                        f"avinstallationsposten har utgivare {post.get('Publisher')!r}, vantade {bygg_windows_verktyg.UTGIVARE!r}")
     skrivbord = os.path.join(os.path.expanduser("~"), "Desktop", NAMN + ".lnk")
     print(f"INFO: skrivbordsgenvag {'finns' if os.path.exists(skrivbord) else 'finns inte'} (ska inte finnas: valet ar av som standard)")
 

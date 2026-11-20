@@ -459,7 +459,12 @@ class Installationsfilen(unittest.TestCase):
         text = self.iss()
         self.assertIn(f"AppCopyright={v.UPPHOVSRATT}", text)
         self.assertIn(f"VersionInfoCopyright={v.UPPHOVSRATT}", text)
-        self.assertNotIn("AppPublisher", text)  # utgivare i applistan ar inte godkand av agaren
+        self.assertIn(f"AppPublisher={v.UTGIVARE}", text)  # samma namn som i upphovsratten (en gemensam konstant)
+        self.assertEqual(v.UTGIVARE, "Dennis Fredin")
+        self.assertIn(v.UTGIVARE, v.UPPHOVSRATT)
+        self.assertEqual(len(re.findall(r"(?m)^AppPublisher=", text)), 1)
+        self.assertIn("Publisher", las("paketering", "kontrollera_installation.py"))
+        self.assertNotIn("kan vara tom", las("paketering", "kontrollera_installation.py"))
         self.assertIn("OutputBaseFilename=Akasha-Protokoll-installation", text)
         self.assertIn("{#Namn}", text)
         self.assertEqual(v.NAMN, "Akasha Protokoll")
