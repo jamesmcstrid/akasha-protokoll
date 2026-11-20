@@ -89,6 +89,11 @@ if ls "$DIST/_internal/whisper"/ggml-cpu-*.dll > /dev/null 2>&1; then
 else
   fel "ingen ggml-cpu-*.dll bredvid whisper-cli.exe"
 fi
+echo "Filerna och katalogerna overst i $DIST och i $DIST/_internal:"
+ls -l "$DIST"
+ls -l "$DIST/_internal" | sed -n 1,80p
+find "$DIST" -type f | sort > build/app/filer.txt
+echo "Alla $(wc -l < build/app/filer.txt | tr -d ' ') filer i paketet: build/app/filer.txt"
 echo "Filerna i $DIST/_internal/whisper:"
 ls -l "$DIST/_internal/whisper" 2>/dev/null || true
 "$PY" "$VERKTYG" exeinfo "$DIST/$NAMN.exe" || fel "versionsresurs, ikon eller undersystem i $NAMN.exe stammer inte (se raderna ovan)"

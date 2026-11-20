@@ -1,0 +1,192 @@
+name: Windows-app
+on:
+  workflow_dispatch:
+    inputs:
+      whisper_version:
+        description: "whisper.cpp-version (tagg)"
+        type: string
+        default: "v1.9.5"
+permissions:
+  contents: read
+concurrency:
+  group: windows-app
+  cancel-in-progress: true
+jobs:
+  bygg:
+    # Bara for hand. Fast etikett, sa att maskinens Windows inte byts under steget (windows-latest kan byta).
+    # En Windows-minut kostar 1,7 Linux-minuter medan repot ar privat.
+    # Kontrollstegen stoppar inte jobbet vid forsta felet (continue-on-error): varje steg skriver OK: eller FEL:, alla
+    # kors, loggarna laddas alltid upp, och det sista steget (Sammanfattning) faller jobbet om nagot steg fell.
+    runs-on: windows-2025
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      AKASHA_VERSION: "0.2.0"
+      AKASHA_BYGGNUMMER: ${{ github.run_number }}
+      WHISPER_VERSION: ${{ inputs.whisper_version }}
+      # Actions-maskinens konsol ar inte UTF-8: utan detta kraschar ett Python-skript som skriver a-ring, a-prickar,
+      # o-prickar eller pilar till en omdirigerad utskrift med UnicodeEncodeError. Skripten staller dessutom in
+      # utskriften sjalva.
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+      # Git Bash skriver annars om argument som borjar med / (till exempel /v till reg och /FI till tasklist).
+      MSYS_NO_PATHCONV: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            app/requirements.txt
+            paketering/krav-bygg.txt
+      - name: Visa system
+        run: |
+          mkdir -p build/loggar
+          {
+            echo "== Windows"; systeminfo | head -25 || true
+            echo "== CMake"; cmake --version | head -1 || true
+            echo "== Visual Studio"; "/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products '*' -property catalog_productDisplayVersion || true
+            echo "== Python"; python -c "import platform, sys, locale; print(platform.platform(), sys.version); print('filsystemskodning', sys.getfilesystemencoding(), '| locale', locale.getpreferredencoding(False), '| stdout', sys.stdout.encoding)"
+            echo "== Kodtabell (chcp)"; chcp.com || true
+            echo "== 8.3-namn pa arbetsvolymen (bara information)"; fsutil 8dot3name query D: || true
+            echo "== Langa sokvagar (LongPathsEnabled, bara information)"; reg query "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled || true
+            echo "== Disk"; df -h . || true
+            echo "== Miljo"; echo "RUNNER_TEMP=$RUNNER_TEMP"; echo "NUMBER_OF_PROCESSORS=$NUMBER_OF_PROCESSORS"; echo "PYTHONUTF8=$PYTHONUTF8"
+          } 2>&1 | tee build/loggar/system.log
+      - name: Beroenden (utan faster-whisper)
+        run: |
+          python -m venv build/venv
+          grep -v '^faster-whisper' app/requirements.txt > build/krav.txt
+          build/venv/Scripts/python -m pip install -q -r build/krav.txt -r paketering/krav-bygg.txt
+          build/venv/Scripts/python -m pip list
+      - name: Enhetstester
+        id: tester
+        continue-on-error: true
+        run: build/venv/Scripts/python -m unittest discover -s tester --durations 15
+      - name: whisper-cli ur cachen
+        id: cli
+        uses: actions/cache/restore@v6
+        with:
+          path: build/whisper/ut
+          key: whisper-cli-win-${{ inputs.whisper_version }}-${{ hashFiles('paketering/bygg-whisper-cli-windows.sh', 'paketering/bygg_windows_verktyg.py', 'paketering/kontrollera_pe.py') }}-windows2025
+      - name: Bygg whisper-cli
+        id: bygg_cli
+        if: steps.cli.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          PYTHON=build/venv/Scripts/python bash paketering/bygg-whisper-cli-windows.sh "$WHISPER_VERSION" build/whisper 2>&1 | tee build/loggar/bygg-whisper-cli.log
+      - name: Spara whisper-cli i cachen
+        if: steps.cli.outputs.cache-hit != 'true' && steps.bygg_cli.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: build/whisper/ut
+          key: ${{ steps.cli.outputs.cache-primary-key }}
+      - name: Kontrollera whisper-cli
+        id: kontroll_cli
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          build/venv/Scripts/python paketering/kontrollera_whisper_cli_windows.py \
+            --cli build/whisper/ut/whisper-cli.exe --arbetskatalog "$RUNNER_TEMP/kontroll-whisper-cli" \
+            --ordtider-ut build/loggar/ordtider.json 2>&1 | tee build/loggar/kontrollera-whisper-cli.log
+      - name: Bygg programmet
+        id: bygg
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          bash paketering/bygg-windows.sh build/whisper/ut 2>&1 | tee build/loggar/bygg-windows.log
+      - name: Kontrollera programmet (uppackat ur zip-filen, från en sökväg med å, ä och ö)
+        id: kontroll_program
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          build/venv/Scripts/python paketering/kontrollera.py \
+            --program "build/uppackad/Åsa Ölund/Akasha Protokoll/Akasha Protokoll.exe" \
+            --hem "$RUNNER_TEMP/Åsa Ölund" --port 8611 \
+            --vantad-motor whispercpp --vantat-jobbfel whisper-cli --riktig-rostmodell 2>&1 | tee build/loggar/kontrollera.log
+      - name: Kontrollera sökvägar och talare
+        id: kontroll_windows
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ARGUMENT=()
+          if [ -f build/loggar/ordtider.json ]; then ARGUMENT=(--ordtider build/loggar/ordtider.json); fi
+          build/venv/Scripts/python paketering/kontrollera_windows.py --hem "$RUNNER_TEMP/Åsa Ölund" \
+            "${ARGUMENT[@]}" 2>&1 | tee build/loggar/kontrollera-windows.log
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          path: dist/Akasha-Protokoll-windows-x64.zip
+          archive: false
+          retention-days: 7
+      - name: Sammanfattning
+        if: ${{ always() }}
+        env:
+          TESTER: ${{ steps.tester.outcome }}
+          BYGG_CLI: ${{ steps.bygg_cli.outcome }}
+          KONTROLL_CLI: ${{ steps.kontroll_cli.outcome }}
+          BYGG: ${{ steps.bygg.outcome }}
+          KONTROLL_PROGRAM: ${{ steps.kontroll_program.outcome }}
+          KONTROLL_WINDOWS: ${{ steps.kontroll_windows.outcome }}
+        run: |
+          fel=0
+          for rad in "Enhetstester=$TESTER" "Bygg whisper-cli (skipped betyder ur cachen)=$BYGG_CLI" "Kontroll av whisper-cli=$KONTROLL_CLI" \
+                     "Bygg av programmet=$BYGG" "Kontroll av programmet=$KONTROLL_PROGRAM" "Sökvägar och talare=$KONTROLL_WINDOWS"; do
+            namn="${rad%=*}"
+            utfall="${rad##*=}"
+            echo "$namn: ${utfall:-ej körd}"
+            if [ "$utfall" = failure ] || [ -z "$utfall" ]; then fel=1; fi
+          done
+          if [ "$fel" -ne 0 ]; then
+            echo "FEL: minst ett steg föll eller kördes inte (se raderna ovan och loggen för det steget)"
+            exit 1
+          fi
+          echo "OK: alla steg lyckades"
+      - name: Samla loggar
+        if: ${{ always() }}
+        run: |
+          mkdir -p build/loggar
+          HEM="$RUNNER_TEMP/Åsa Ölund"
+          cp -R "$HEM/AppData/Local/Akasha Protokoll/logg" build/loggar/programlogg 2>/dev/null || true
+          cp "$HEM/program-utskrift.log" "$HEM/program-utskrift-andra.log" build/loggar/ 2>/dev/null || true
+          cp build/app/pyinstaller.log build/app/*.txt build/loggar/ 2>/dev/null || true
+          cp build/app/pyi/*/warn-*.txt build/loggar/ 2>/dev/null || true
+          cp build/whisper/*.log build/loggar/ 2>/dev/null || true
+          cp build/whisper/src/CMakeLists.txt build/loggar/whisper-CMakeLists.txt 2>/dev/null || true
+          cp build/whisper/bygg/CMakeCache.txt build/loggar/whisper-CMakeCache.txt 2>/dev/null || true
+          ls -lR build/whisper/ut > build/loggar/whisper-ut-filer.txt 2>&1 || true
+          ls -l dist > build/loggar/dist-filer.txt 2>&1 || true
+          ls -lR build/uppackad > build/loggar/uppackad-filer.txt 2>&1 || true
+          ls -l build/loggar
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: loggar
+          path: build/loggar
+          retention-days: 7
+
+  signera:
+    # Kodsignering med SignPath (gratis for oppen kallkod, om SignPath Foundation godkanner projektet). Jobbet kors
+    # aldrig nu (if: false) och har inga steg som kors, inga hemligheter och inga atgarder fran tredje part.
+    # Det som ska sta har nar projektet ar godkant:
+    #   1. ladda ned den osignerade zip-filen som jobbet bygg laddade upp (artefakten),
+    #   2. SignPaths GitHub-atgard for signeringsbegaran, med organisation, projekt och policy som variabler (vars.*)
+    #      och API-nyckeln som repots hemlighet. Konfigurationen hos SignPath anger vilka filer som signeras:
+    #      Akasha Protokoll.exe, _internal/whisper/*.exe och *.dll (byggda i bygg-jobbet), aldrig andras filer,
+    #   3. ladda upp den signerade zip-filen som artefakt.
+    # Bygget i jobbet bygg andras inte.
+    needs: bygg
+    if: false
+    runs-on: windows-2025
+    steps:
+      - name: Platshållare, körs aldrig
+        run: echo "Signeringen är inte påslagen"

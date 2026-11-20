@@ -2,6 +2,7 @@
 import ast
 import glob
 import os
+import importlib.util
 import io
 import re
 import shutil
@@ -355,6 +356,130 @@ class WindowsBygget(unittest.TestCase):
         # kontrollerna stoppar inte vid forsta felet: de gar genom fel(), och skriptet slutar med slutkod 1
         self.assertGreaterEqual(text.count("|| fel "), 4)
         self.assertIn('exit 1\nfi\necho "OK: bygget klart', text)
+
+
+class WindowsFlodet(unittest.TestCase):
+    """Statiska kontroller av .github/workflows/windows-app.yml (flodet kors bara i Actions)."""
+    FLODE = (".github", "workflows", "windows-app.yml")
+
+    def text(self):
+        return las(*self.FLODE)
+
+    def yaml(self):
+        if importlib.util.find_spec("yaml") is None:
+            self.skipTest("PyYAML saknas")
+        import yaml
+        return yaml.safe_load(self.text())
+
+    def test_yaml_gar_att_lasa(self):
+        d = self.yaml()
+        self.assertEqual(set(d["jobs"]), {"bygg", "signera"})
+
+    def test_bara_workflow_dispatch(self):
+        text = self.text()
+        self.assertRegex(text, r"(?m)^on:\n  workflow_dispatch:\n    inputs:\n      whisper_version:")
+        for utlosare in ("push:", "pull_request", "schedule:", "workflow_run", "release:", "workflow_call"):
+            self.assertNotIn(utlosare, text)
+        self.assertIn('default: "v1.9.5"', text)
+        if importlib.util.find_spec("yaml"):
+            self.assertEqual(list(self.yaml()[True]), ["workflow_dispatch"])  # "on" tolkas som True av YAML 1.1
+
+    def test_inga_hemligheter(self):
+        text = self.text()
+        self.assertNotIn("secrets", text.lower())
+        self.assertNotIn("GITHUB_TOKEN", text)
+        self.assertRegex(text, r"(?m)^permissions:\n  contents: read$")
+
+    def test_fast_etikett_tidsgrans_och_skal(self):
+        text = self.text()
+        self.assertEqual(re.findall(r"runs-on: (\S+)", text), ["windows-2025", "windows-2025"])
+        self.assertNotRegex(text, r"runs-on: windows-latest")
+        self.assertIn("timeout-minutes: 45", text)
+        self.assertRegex(text, r"defaults:\n      run:\n        shell: bash")
+        self.assertRegex(text, r"concurrency:\n  group: windows-app")
+
+    def test_teckenkodning_och_git_bash(self):
+        text = self.text()
+        self.assertIn('PYTHONUTF8: "1"', text)
+        self.assertIn("PYTHONIOENCODING: utf-8", text)
+        self.assertIn('MSYS_NO_PATHCONV: "1"', text)  # /v till reg och /FI till tasklist skrivs annars om
+
+    def test_samma_versioner_av_atgarderna_som_mac_flodet(self):
+        mac = dict(re.findall(r"uses: (\S+)@(\S+)", las(".github", "workflows", "mac-app.yml")))
+        win = re.findall(r"uses: (\S+)@(\S+)", self.text())
+        self.assertTrue(win)
+        for namn, version in win:
+            kalla = "actions/cache" if namn.startswith("actions/cache/") else namn
+            self.assertIn(kalla, mac, f"{namn} ar en atgard som Mac-flodet inte anvander")
+            self.assertEqual(version, mac[kalla], namn)
+        self.assertEqual({n for n, _ in win}, {"actions/checkout", "actions/setup-python", "actions/cache/restore",
+                                               "actions/cache/save", "actions/upload-artifact"})
+
+    def test_stegen_i_ordning_med_ratt_kommandon(self):
+        text = self.text()
+        ordning = ["bygg-whisper-cli-windows.sh", "kontrollera_whisper_cli_windows.py", "bygg-windows.sh",
+                   "paketering/kontrollera.py", "kontrollera_windows.py", "name: Sammanfattning", "name: Samla loggar"]
+        lage = [text.index(o) for o in ordning]
+        self.assertEqual(lage, sorted(lage))
+        for stycke in ('"$WHISPER_VERSION" build/whisper', "build/whisper/ut", "--port 8611", "--vantad-motor whispercpp",
+                       "--vantat-jobbfel whisper-cli", "--riktig-rostmodell", "--ordtider-ut", "--ordtider",
+                       'build/uppackad/Åsa Ölund/Akasha Protokoll/Akasha Protokoll.exe', '--hem "$RUNNER_TEMP/Åsa Ölund"',
+                       "build/venv/Scripts/python", "dist/Akasha-Protokoll-windows-x64.zip", "archive: false",
+                       "retention-days: 7", "name: loggar", "--durations 15"):
+            self.assertIn(stycke, text)
+        self.assertNotIn("faster-whisper\n", text.replace("'^faster-whisper'", ""))  # stacken installeras inte
+        self.assertIn("grep -v '^faster-whisper' app/requirements.txt", text)
+
+    def test_kontrollstegen_stoppar_inte_jobbet_och_allt_syns_i_sammanfattningen(self):
+        d = self.yaml()
+        steg = {s["id"]: s for s in d["jobs"]["bygg"]["steps"] if "id" in s}
+        kontroller = ("tester", "bygg_cli", "kontroll_cli", "bygg", "kontroll_program", "kontroll_windows")
+        for id_ in kontroller:
+            self.assertTrue(steg[id_].get("continue-on-error"), id_)
+        for id_ in ("kontroll_cli", "bygg", "kontroll_program", "kontroll_windows"):
+            self.assertEqual(steg[id_]["if"], "${{ !cancelled() }}", id_)  # kors aven om ett tidigare steg fell
+        sammanfattning = next(s for s in d["jobs"]["bygg"]["steps"] if s.get("name") == "Sammanfattning")
+        self.assertEqual(sammanfattning["if"], "${{ always() }}")
+        for id_ in kontroller:
+            self.assertIn(f"steps.{id_}.outcome", str(sammanfattning["env"]), id_)
+        self.assertIn("exit 1", sammanfattning["run"])
+        for s in d["jobs"]["bygg"]["steps"]:
+            if s.get("uses", "").startswith("actions/upload-artifact") and s.get("with", {}).get("name") == "loggar":
+                self.assertEqual(s["if"], "${{ always() }}")
+                break
+        else:
+            self.fail("ingen uppladdning av artefakten loggar")
+        samla = next(s for s in d["jobs"]["bygg"]["steps"] if s.get("name") == "Samla loggar")
+        self.assertEqual(samla["if"], "${{ always() }}")
+        for fil in ("pyinstaller.log", "warn-*.txt", "program-utskrift.log", "program-utskrift-andra.log", "programlogg"):
+            self.assertIn(fil, samla["run"])
+
+    def test_cachen_sparas_bara_nar_bygget_lyckades(self):
+        d = self.yaml()
+        spara = next(s for s in d["jobs"]["bygg"]["steps"] if s.get("uses", "").startswith("actions/cache/save"))
+        self.assertIn("steps.bygg_cli.outcome == 'success'", spara["if"])
+        nyckel = next(s for s in d["jobs"]["bygg"]["steps"] if s.get("id") == "cli")["with"]["key"]
+        self.assertIn("hashFiles('paketering/bygg-whisper-cli-windows.sh'", nyckel)
+        self.assertTrue(nyckel.endswith("-windows2025"))
+
+    def test_signera_finns_men_kors_aldrig(self):
+        text = self.text()
+        d = self.yaml()
+        signera = d["jobs"]["signera"]
+        self.assertIs(signera["if"], False)
+        self.assertEqual(signera["needs"], "bygg")
+        for steg in signera["steps"]:
+            self.assertNotIn("uses", steg)  # inga atgarder fran tredje part
+            self.assertNotIn("env", steg)
+        delar = text.split("\n  signera:\n")[1]
+        self.assertIn("SignPath", delar)
+        self.assertNotIn("uses:", delar)
+        self.assertIn("if: false", delar)
+        self.assertNotIn("secrets", delar.lower())
+
+    def test_kommentarerna_har_inga_aao(self):
+        for kommentar in kommentarer(self.FLODE):
+            self.assertIsNone(re.search("[åäöÅÄÖ]", kommentar), kommentar)
 
 
 if __name__ == "__main__":

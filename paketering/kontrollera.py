@@ -155,6 +155,9 @@ def main():
     args = ap.parse_args()
     hem = os.path.abspath(args.hem)
     program = os.path.abspath(args.program)
+    if WIN and not os.path.isfile(program):  # ett tydligt FEL i stallet for en traceback om bygget inte gav nagon exe
+        print(f"FEL: programmet {program} finns inte (se bygget)", flush=True)
+        sys.exit(1)
 
     # 1. Gamla modeller pa den gamla platsen. Tjansten kontrollerar bara storleken pa en befintlig
     # fil (steg 1, A3), sa en gles fil med ratt storlek racker: ingen hamtning av 1,5 GB (A8).

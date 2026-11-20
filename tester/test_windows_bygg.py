@@ -495,6 +495,7 @@ class KontrolleraPerPlattform(unittest.TestCase):
             self.assertEqual(k.tasklist("whisper-cli.exe"), [])
 
 
+@unittest.skipIf(os.name == "nt", "pa Windows kor flodet windows-app.yml skriptet pa riktigt, med den riktiga rostmodellen")
 class KontrollAvSokvagarOchTalare(unittest.TestCase):
     """paketering/kontrollera_windows.py med en falsk sherpa_onnx (tester/falsk_sherpa): ingen riktig rostmodell."""
 
