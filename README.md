@@ -81,7 +81,7 @@ Google Meet, en Slack-huddle i Slack i Chrome (`app.slack.com`), Teams eller Zoo
   ljudet från en flik, så där går valet inte att välja.
 - Möten i **apparna** (Slack-appen, Teams, Zoom) har ingen flik att dela. Öppna mötet i Chrome,
   eller använd högtalare och **Med mikrofonen**. En Mac-hjälpare som hämtar ljudet direkt från
-  apparna finns som förslag i [#1](https://github.com/jamesmcstrid/Akasha-Meet/issues/1).
+  apparna finns som förslag i [#1](https://github.com/jamesmcstrid/akasha-protokoll/issues/1).
 
 ### Bra att veta
 
@@ -257,7 +257,7 @@ Repot är privat, så du behöver läsrätt till det och en SSH-nyckel kopplad t
 
 ```bash
 brew install python@3.12 git
-git clone git@github.com:jamesmcstrid/Akasha-Meet.git ~/akasha-meet
+git clone git@github.com:jamesmcstrid/akasha-protokoll.git ~/akasha-meet
 cd ~/akasha-meet
 bash mac/installera.sh
 ```
