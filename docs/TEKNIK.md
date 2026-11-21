@@ -52,11 +52,14 @@ pratar med tjänsten via JSON. Allt som ändrar något är `POST` och kräver he
 | `POST /api/inspelningar/<id>/klar` | Inspelningen är slut. Tar emot `talare`, `ord` och `titel`, som läses vid stopp så att de kan ändras under mötet. En tom `titel` behåller rubriken från starten. Utan `talare` gäller inställningarna från starten ("Avsluta och transkribera") |
 | `POST /api/inspelningar/fil` | Uppladdad fil (multipart) |
 | `POST /api/inspelningar/<id>/transkribera` | "Transkribera igen" (och "Försök igen"): `talare` och `ord` från dialogen. Källan behålls alltid, eftersom kanalerna i filen inte ändras |
-| `GET /api/inspelningar`, `GET /api/inspelningar/<id>` | Listan, och en inspelning med text |
+| `GET /api/inspelningar`, `GET /api/inspelningar/<id>` | Listan, och en inspelning med text. Båda har `rattad` (talarna har rättats för hand). Maskinens version, `segment_original`, skickas inte: den finns bara i inspelningens `.json` |
 | `GET /api/modeller` | Vilka modeller som saknas (med storlek, källa och licens), hur mycket som redan är hämtat, ledigt utrymme, och hur hämtningen går. `hinder` är satt när något saknas som en hämtning inte kan rätta |
 | `POST /api/modeller/hamta` | Startar hämtningen av det som saknas, i en bakgrundstråd. Kroppen läses inte. En hämtning som redan pågår startas inte om. `POST /api/modeller/avbryt` stoppar den; det som hämtats ligger kvar |
 | `POST …/titel`, `…/namn`, `…/talare`, `…/talare/angra`, `…/radera` | Byt rubrik, spara talarnamn, rätta talare, ångra alla rättningar, radera |
 | `GET …/text.md`, `…/text.txt`, `…/ljud` | Nedladdningar. `?ladda_ner=1` på ljudet ger en fil att spara |
+| `POST /transcribe` | För skript och hälsokollen: multipart `audio`, valfritt `speakers`. Svarar med texten direkt. Ett anrop åt gången: pågår redan ett svarar tjänsten 429 |
+
+**Ljudet på disken.** Varje del läggs till i ljudfilen, och `.json` får `delar` och `byte` (ljudfilens längd efter delen). Sparas inte uppgifterna kortas ljudfilen tillbaka, och är filen längre än `byte` vid nästa del (programmet stannade mellan stegen) kortas den först. En del som webbläsaren skickar igen hamnar alltså aldrig två gånger i ljudet. En uppladdad fil skrivs först till `<id><ändelse>.delvis` och syns i listan först när den är hel. Det som en avbruten uppladdning lämnar (`.delvis` och en tom reservation) tas bort när programmet startar. Listan läser bara om en inspelnings `.json` när filen har ändrats.
 
 När tjänsten inte svarar visar sidan "Akasha Protokoll svarar inte…" där felet hör hemma, etiketten blir "Tjänsten svarar inte", och sidan frågar var femte sekund tills tjänsten svarar igen.
 
@@ -73,8 +76,12 @@ Sidan i korthet:
   nivåmätare ljudet, och en varning visas om nivån har legat under −80 dBFS i tio sekunder.
   Flikens titel visar ● och tiden.
 - **En sak i taget:** högra ytan visar formuläret eller den öppna inspelningen, aldrig båda, med knappen "Ny transkribering" för att komma tillbaka till formuläret. Det som pågår i formuläret (inspelning, kön för ljud som väntar, uppladdning) döljs aldrig, inte ens när modellkortet står ensamt vid första start (då ligger kortet över formuläret): öppnar man då en inspelning står den under formuläret. All visning och döljning sker i `visaYta()` i `app.js`.
-- **Ljud som väntar:** Under inspelningen behåller sidan alla delar i minnet (cirka 27 MB per timme med mikrofonen och 40 MB digitalt, uppmätt med låtsasmikrofon) och skickar dem i ordning. Svarar inte tjänsten försöker sidan igen utan slut, och efter Stoppa startar transkriberingen när allt har kommit fram. Vid ett serverfel slutar sidan skicka och erbjuder "Spara ljudet som fil". Inspelningen släpps först när allt är sparat eller filen är sparad.
-- **Listan:** byggs om varannan sekund medan något pågår. "Transkribera igen" öppnar en dialog
+- **Ljud som väntar:** Under inspelningen behåller sidan alla delar i minnet (cirka 27 MB per timme med mikrofonen och 40 MB digitalt, uppmätt med låtsasmikrofon) och skickar dem i ordning. Svarar inte tjänsten försöker sidan igen utan slut, och efter Stoppa startar transkriberingen när allt har kommit fram. Vid ett serverfel slutar sidan skicka och erbjuder "Spara ljudet som fil". Inspelningen släpps först när allt är sparat eller filen är sparad, och då släpps också ljudet ur minnet. Stannar inspelningen av sig själv (mikrofonen kopplas bort, ett fel i webbläsaren) skickas och transkriberas det som hann spelas in, som efter Stoppa, och sidan säger varför. Försvinner bara mikrofonen under ett digitalt möte fortsätter inspelningen med mötesljudet. Ett dubbelklick på Spela in startar en inspelning.
+- **Listan:** byggs om varannan sekund medan något transkriberas eller fliken själv spelar in. En annan
+  inspelning som står som "Spelar in" (oftast övergiven: fliken stängdes mitt i) ger var tionde sekund.
+  Medan fliken är dold frågar sidan inte efter listan, och hämtar den direkt när fliken syns igen. Ljudet
+  under en inspelning skickas ändå. Ett svar för en inspelning som man redan har lämnat visas inte.
+  "Transkribera igen" öppnar en dialog
   som fylls i från inspelningens egna inställningar, inte från formuläret högst upp.
 - **Visningen** i tre steg: 1 Vem är vem? (namnen sparas när fältet lämnas eller med Enter;
   "Lyssna" spelar upp till 10 s av talarens längsta säkra replik), 2 Kontrollera mot ljudet
@@ -238,8 +245,8 @@ Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-2
 ## Programmet (Windows)
 
 Windows-programmet är en katalog, `Akasha Protokoll\`, med `Akasha Protokoll.exe` och `_internal\`, för
-x64. Det använder samma kod i `app/` som Mac-programmet, och det finns ingen installationsfil än: zip-filen
-packas upp och programmet startas i mappen. Flödet `.github/workflows/windows-app.yml` bygger det bara för
+x64. Det använder samma kod i `app/` som Mac-programmet. Det finns som zip-fil, som packas upp och startas i
+mappen, och som installationsfil (se **Installationsfilen** nedan). Flödet `.github/workflows/windows-app.yml` bygger det bara för
 hand, på `windows-2025`. **Allt nedan är byggt och kontrollerat på den maskinen (byggmaskinen). Programmet
 har inte körts på en vanlig Windows-dator.**
 
@@ -557,6 +564,8 @@ stämmer överens betyder inte att de är rätt, eftersom samma modell gör samm
 facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
 ## Vad som är testat
+
+**Senast, på Windows 11 (utvecklingsdatorn, 2026-11-21):** 626 enhetstester, OK, 28 överhoppade (bland dem testet med symboliska länkar, som kräver utvecklarläge i Windows). Webbsidans ändringar samma dag (dubbelklick, inspelare som stannar, gamla svar, dold flik, tangentbord) är provade med en låtsas-DOM i Node, inte i en riktig webbläsare.
 
 **I en Linux-miljö utan grafikprocessor** (samma Python- och biblioteksversioner):
 
