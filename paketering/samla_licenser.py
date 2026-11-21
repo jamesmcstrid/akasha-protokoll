@@ -476,8 +476,10 @@ def python_tredjepart(res, python_binarer, plattform):
     if openssl:
         try:
             import ssl
-            version = ".".join(str(x) for x in ssl.OPENSSL_VERSION_INFO[:3])
+            # ur texten ("OpenSSL 3.0.16 11 Feb 2025"): OPENSSL_VERSION_INFO ar (3, 0, 0, 16, 0) for OpenSSL 3
             text = ssl.OPENSSL_VERSION
+            m = re.match(r"OpenSSL (\d+\.\d+\.\d+)", text)
+            version = m.group(1) if m else ""
         except ImportError:
             version, text = "", "(ssl gick inte att importera)"
         if not version:

@@ -355,7 +355,7 @@ class SamlaLicenser(unittest.TestCase):
                    "python3.12/lib-dynload/_ssl.cpython-312-darwin.so", "python3.12/lib-dynload/_lzma.cpython-312-darwin.so"]
         for plattform, xz in (("mac", "5.2.3"), ("windows", "5.2.5")):
             res = sl.Resultat()
-            with mock.patch("ssl.OPENSSL_VERSION_INFO", (3, 0, 16, 0, 0)), \
+            with mock.patch("ssl.OPENSSL_VERSION_INFO", (3, 0, 0, 16, 0)), \
                     mock.patch("ssl.OPENSSL_VERSION", "OpenSSL 3.0.16 11 Feb 2025"), \
                     mock.patch.object(sl.platform, "python_version", return_value="3.12.10"):
                 komp = sl.python_tredjepart(res, binarer, plattform)
@@ -367,7 +367,7 @@ class SamlaLicenser(unittest.TestCase):
             self.assertIn("liblzma is in the public domain", komp[1].text)
         # en annan OpenSSL eller Python ar FEL (texterna galler en version)
         res = sl.Resultat()
-        with mock.patch("ssl.OPENSSL_VERSION_INFO", (3, 5, 1, 0, 0)), \
+        with mock.patch("ssl.OPENSSL_VERSION", "OpenSSL 3.5.1 1 Jul 2025"), \
                 mock.patch.object(sl.platform, "python_version", return_value="3.12.11"):
             self.assertEqual(sl.python_tredjepart(res, binarer, "mac"), [])
         self.assertEqual(len(res.fel), 2, res.fel)
