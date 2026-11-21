@@ -258,15 +258,30 @@ def _faster(samples, per_ord, prompt, framsteg):
     return text, segs, ord_lista
 
 
-def wav_16k_mono(samples):
-    """float32 [-1, 1] -> WAV med 16 bit PCM, som whisper-cli laser utan ffmpeg."""
-    pcm = (np.clip(samples, -1.0, 1.0) * 32767.0).astype("<i2")
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
+WAV_BLOCK = 1 << 20  # sampel per skrivning: 1 M sampel ar 2 MB i filen
+
+
+def skriv_wav_16k_mono(samples, fil):
+    """float32 [-1, 1] -> WAV med 16 bit PCM, som whisper-cli laser utan ffmpeg.
+
+    fil: en sokvag eller en oppen binarfil (som kan soka). Ljudet skrivs i block om WAV_BLOCK sampel,
+    sa att hela filen aldrig ligger i minnet. Byten blir desamma som om allt skrevs pa en gang:
+    varje sampel raknas om likadant, och wave skriver om langderna i huvudet nar filen stangs.
+    """
+    samples = np.asarray(samples)
+    with wave.open(fil, "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(SR)
-        w.writeframes(pcm.tobytes())
+        for i in range(0, len(samples), WAV_BLOCK):
+            w.writeframes((np.clip(samples[i:i + WAV_BLOCK], -1.0, 1.0) * 32767.0).astype("<i2"))
+
+
+def wav_16k_mono(samples):
+    """float32 [-1, 1] -> WAV-filens byte (16 bit PCM). Transkriberingen skriver filen direkt med
+    skriv_wav_16k_mono(); den har finns kvar for kontrollerna i paketering/."""
+    buf = io.BytesIO()
+    skriv_wav_16k_mono(samples, buf)
     return buf.getvalue()
 
 
@@ -422,6 +437,30 @@ def _whispercpp(samples, per_ord, prompt, framsteg):
     return _whispercpp_en_gang(samples, per_ord, prompt, framsteg, False)[:3]
 
 
+def _avsluta_och_stang(p, vanta_s=5):
+    """Efter en korning av whisper-cli, aven nar lasningen avbrots av ett undantag: lever processen
+    annu stoppas den (terminate, efter vanta_s sekunder kill), den vantas in och stderr stangs.
+    Annars blev rorledningen kvar oppen (ResourceWarning) och processen kunde leva vidare utan att
+    nagon laste dess stderr. Kastar inte (utom KeyboardInterrupt och liknande)."""
+    try:
+        if p.poll() is None:
+            p.terminate()
+            try:
+                p.wait(timeout=vanta_s)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                p.wait(timeout=vanta_s)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        log.warning("whisper-cli gick inte att avsluta: %s", e)
+    finally:
+        stderr = getattr(p, "stderr", None)
+        if hasattr(stderr, "close"):  # testernas falska processer har en lista
+            try:
+                stderr.close()
+            except OSError:
+                pass
+
+
 def _whispercpp_en_gang(samples, per_ord, prompt, framsteg, grafik):
     """En korning av whisper-cli -> (text, segment, ord, sista diagnosraden)."""
     global _process
@@ -433,9 +472,7 @@ def _whispercpp_en_gang(samples, per_ord, prompt, framsteg, grafik):
     # ignore_cleanup_errors: pa Windows kan whisper-cli annu halla en fil oppen efter terminate(), och
     # PermissionError i stadningen far inte doldja Avbruten. Resten tas bort vid nasta start.
     with tempfile.TemporaryDirectory(prefix=TMP_PREFIX, dir=bas, ignore_cleanup_errors=True) as katalog:
-        wav = os.path.join(katalog, "ljud.wav")
-        with open(wav, "wb") as f:
-            f.write(wav_16k_mono(samples))
+        skriv_wav_16k_mono(samples, os.path.join(katalog, "ljud.wav"))  # i block, direkt till filen
         ut = os.path.join(katalog, "ut")  # whisper-cli lagger till .json
         cmd, svarsfil = cli_kommando(cli, os.path.basename(katalog), per_ord, prompt, CPU_TRADAR,
                                      plattform.system(), grafik)
@@ -473,6 +510,7 @@ def _whispercpp_en_gang(samples, per_ord, prompt, framsteg, grafik):
                      len(samples) / SR)
         finally:
             _process = None
+            _avsluta_och_stang(p)
         if kod != 0 and _avslutas:
             raise Avbruten("stoppad")
         if kod != 0:

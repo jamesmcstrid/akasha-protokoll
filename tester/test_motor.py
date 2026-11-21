@@ -1,11 +1,19 @@
+import contextlib
+import gc
+import io
 import json
 import os
 import shutil
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
+import warnings
+import wave
 from unittest import mock
+
+import numpy as np
 
 import hjalp  # noqa: F401
 import installningar
@@ -360,7 +368,8 @@ FALSK_CLI = textwrap.dedent("""
 class FalskCliMiljo(unittest.TestCase):
     """En riktig process (ett Python-skript som liknar whisper-cli) startad via plattform.starta_barn."""
 
-    def kor(self, mapp, system=None, prompt="Åsa Öberg"):
+    def kor(self, mapp, system=None, prompt="Åsa Öberg", cli=FALSK_CLI, processer=None, framsteg=None):
+        """processer: en lista som far de startade Popen-objekten. framsteg: i stallet for listan."""
         bas = tempfile.mkdtemp(prefix="akasha-motor-")
         self.addCleanup(shutil.rmtree, bas, True)
         modellkatalog = os.path.join(bas, mapp)
@@ -370,15 +379,19 @@ class FalskCliMiljo(unittest.TestCase):
             f.write(b"x")
         skript = os.path.join(bas, "falsk_cli.py")
         with open(skript, "w", encoding="utf-8") as f:
-            f.write(FALSK_CLI)
+            f.write(cli)
         logg = os.path.join(bas, "logg.json")
         riktig = plattform.starta_barn
 
         def starta(cmd, cwd=None, **kw):
             cmd = [sys.executable, skript] + cmd[1:]
             if os.name != "nt":  # Windows-grenen med falskt system(): Popen utan Windows-flaggor
-                return motor.subprocess.Popen(cmd, cwd=cwd, **kw)
-            return riktig(cmd, cwd=cwd, **kw)  # pa Windows den riktiga: jobbobjekt och inget fonster
+                p = motor.subprocess.Popen(cmd, cwd=cwd, **kw)
+            else:
+                p = riktig(cmd, cwd=cwd, **kw)  # pa Windows den riktiga: jobbobjekt och inget fonster
+            if processer is not None:
+                processer.append(p)
+            return p
 
         patchar = [mock.patch.object(modeller, "MODELLKATALOG", modellkatalog),
                    mock.patch.object(motor, "GGML_MODELL", modell),
@@ -390,10 +403,10 @@ class FalskCliMiljo(unittest.TestCase):
         for pa in patchar:
             pa.start()
             self.addCleanup(pa.stop)
-        framsteg = []
-        resultat = motor._whispercpp(np_tyst(), False, prompt, framsteg.append)
+        lista = []
+        resultat = motor._whispercpp(np_tyst(), False, prompt, framsteg or lista.append)
         with open(logg, encoding="utf-8") as f:
-            return modellkatalog, json.load(f), resultat, framsteg
+            return modellkatalog, json.load(f), resultat, lista
 
 
 class TestWhispercppKor(FalskCliMiljo):
@@ -430,6 +443,207 @@ class TestWhispercppKor(FalskCliMiljo):
     def test_windows_riktigt_med_modellkatalog_som_heter_asa_olund(self):
         mk, logg, res, fr = self.kor("Åsa Ölund")  # plattform.system() ar riktigt "Windows"
         self.kontrollera(mk, logg, res, fr)
+
+
+@contextlib.contextmanager
+def inga_resursvarningar(test):
+    """ResourceWarning som fel. En varning som uppstar nar ett objekt stads bort (en oppen rorledning
+    i en Popen som slapps) kan inte kastas dar; den fangas via sys.unraisablehook och ger ett fel har."""
+    fangade = []
+    gammal_hook = sys.unraisablehook
+    sys.unraisablehook = lambda u: fangade.append(repr(u.exc_value))
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", ResourceWarning)
+            yield
+            gc.collect()
+    finally:
+        sys.unraisablehook = gammal_hook
+    test.assertEqual(fangade, [])
+
+
+FALSK_CLI_FEL = textwrap.dedent("""
+    import sys
+    sys.stderr.write("whisper_model_load: type = 4 (medium)\\n")
+    sys.exit(3)
+""")
+
+FALSK_CLI_HANGER = textwrap.dedent("""
+    import sys, time
+    sys.stderr.write("whisper_print_progress_callback: progress =  10%\\n")
+    sys.stderr.flush()
+    time.sleep(60)
+""")
+
+
+class TestProcessenStangs(FalskCliMiljo):
+    """stderr stangs och whisper-cli vantas in i alla vagar: klar, fel, avbrott och undantag mitt i lasningen.
+    Forut gav de fem testerna i TestWhispercppKor ResourceWarning (stderr stangdes aldrig)."""
+
+    def kontrollera_stangd(self, processer, antal=1):
+        """antal None: minst en (pa Windows kan grafikkretsen ge ett andra forsok)."""
+        if antal is None:
+            self.assertTrue(processer)
+        else:
+            self.assertEqual(len(processer), antal)
+        for p in processer:
+            self.assertTrue(p.stderr.closed)
+            self.assertIsNotNone(p.returncode)  # vantad: ingen process lever kvar
+
+    def test_klar(self):
+        processer = []
+        with inga_resursvarningar(self):
+            _, _, resultat, _ = self.kor("modeller", system="Darwin", processer=processer)
+        self.assertEqual(resultat[0], "Hej Åsa.")
+        self.kontrollera_stangd(processer)
+
+    def test_windows_med_svarsfil(self):
+        processer = []
+        with inga_resursvarningar(self):
+            self.kor("Åsa Ölund", system="Windows", processer=processer)
+        self.kontrollera_stangd(processer, None)
+
+    def test_fel_kod(self):
+        processer = []
+        with inga_resursvarningar(self), self.assertRaises(motor.MotorFel) as e:
+            self.kor("modeller", system="Darwin", cli=FALSK_CLI_FEL, processer=processer)
+        self.assertIn("kod 3", str(e.exception))
+        self.kontrollera_stangd(processer)
+
+    def test_undantag_mitt_i_lasningen_stoppar_processen(self):
+        def framsteg(_andel):
+            raise RuntimeError("fel i framstegen")
+
+        processer = []
+        t0 = time.monotonic()
+        with inga_resursvarningar(self), self.assertRaises(RuntimeError):
+            self.kor("modeller", system="Darwin", cli=FALSK_CLI_HANGER, processer=processer, framsteg=framsteg)
+        self.assertLess(time.monotonic() - t0, 30)  # vantade inte ut sleep(60)
+        self.kontrollera_stangd(processer)
+        self.assertIsNone(motor._process)
+
+    def test_avbrott(self):
+        self.addCleanup(setattr, motor, "_avslutas", False)
+        motor._avslutas = True  # programmet avslutas: processen stoppas direkt
+        processer = []
+        with inga_resursvarningar(self), self.assertRaises(motor.Avbruten):
+            self.kor("modeller", system="Darwin", cli=FALSK_CLI_HANGER, processer=processer)
+        self.kontrollera_stangd(processer)
+
+
+class TestAvslutaOchStang(unittest.TestCase):
+    def process(self, poll=None, vanta=(0,)):
+        p = mock.Mock()
+        p.poll.return_value = poll
+        p.wait.side_effect = list(vanta)
+        return p
+
+    def test_redan_klar_stangs_bara(self):
+        p = self.process(poll=0)
+        motor._avsluta_och_stang(p)
+        p.terminate.assert_not_called()
+        p.stderr.close.assert_called_once()
+
+    def test_lever_stoppas_och_vantas_in(self):
+        p = self.process()
+        motor._avsluta_och_stang(p)
+        p.terminate.assert_called_once()
+        p.kill.assert_not_called()
+        p.wait.assert_called_once_with(timeout=5)
+        p.stderr.close.assert_called_once()
+
+    def test_timeout_ger_kill(self):
+        p = self.process(vanta=(motor.subprocess.TimeoutExpired("x", 5), 0))
+        motor._avsluta_och_stang(p)
+        p.kill.assert_called_once()
+        self.assertEqual(p.wait.call_count, 2)
+        p.stderr.close.assert_called_once()
+
+    def test_dor_inte_ens_av_kill_kastar_inte(self):
+        tid = motor.subprocess.TimeoutExpired("x", 5)
+        p = self.process(vanta=(tid, tid))
+        with self.assertLogs("akasha-protokoll", "WARNING"):
+            motor._avsluta_och_stang(p)
+        p.stderr.close.assert_called_once()
+
+    def test_falsk_process_med_lista_som_stderr(self):
+        motor._avsluta_och_stang(FalskProcess())  # inget close() och ingen terminate(): inget undantag
+
+
+def gammal_wav(samples):
+    """wav_16k_mono() fore skrivningen i block, ordagrant."""
+    pcm = (np.clip(samples, -1.0, 1.0) * 32767.0).astype("<i2")
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(motor.SR)
+        w.writeframes(pcm.tobytes())
+    return buf.getvalue()
+
+
+class TestWav(unittest.TestCase):
+    def setUp(self):
+        self.katalog = tempfile.mkdtemp(prefix="akasha-wav-")
+        self.addCleanup(shutil.rmtree, self.katalog, True)
+
+    def ljud(self):
+        rng = np.random.default_rng(5)
+        return {
+            "tomt": np.zeros(0, np.float32),
+            "tyst": np_tyst(),
+            "granser": np.array([-1.5, -1.0, -0.99999, -1e-9, 0.0, 1e-9, 0.99999, 1.0, 1.5], np.float32),
+            "klipps, over tva block": (rng.standard_normal(2 * motor.WAV_BLOCK + 12_345) * 0.8).astype(np.float32),
+            "float64": rng.uniform(-1.2, 1.2, 50_001),
+            "lista": [0.25, -0.5, 2.0],
+        }
+
+    def test_filen_har_samma_byte_som_forut(self):
+        for blockstorlek in (motor.WAV_BLOCK, 1000, 1):
+            for namn, samples in self.ljud().items():
+                if blockstorlek == 1 and len(samples) > 100:
+                    continue
+                with self.subTest(namn, block=blockstorlek), mock.patch.object(motor, "WAV_BLOCK", blockstorlek):
+                    fil = os.path.join(self.katalog, "ljud.wav")
+                    motor.skriv_wav_16k_mono(samples, fil)
+                    with open(fil, "rb") as f:
+                        data = f.read()
+                    self.assertEqual(data, gammal_wav(samples))
+                    self.assertEqual(motor.wav_16k_mono(samples), data)
+
+    def test_minnet_ar_ett_block_och_inte_hela_filen(self):
+        import tracemalloc
+        samples = np.random.default_rng(1).uniform(-1, 1, 2_000_000).astype(np.float32)  # 8 MB
+        fil = os.path.join(self.katalog, "ljud.wav")
+        with mock.patch.object(motor, "WAV_BLOCK", 65536):
+            tracemalloc.start()
+            try:
+                motor.skriv_wav_16k_mono(samples, fil)
+                topp = tracemalloc.get_traced_memory()[1]
+            finally:
+                tracemalloc.stop()
+        # Forut: klippt kopia, skalad kopia, int16, bytes, BytesIO och getvalue(): flera ganger ljudets storlek.
+        self.assertLess(topp, samples.nbytes / 4)
+        self.assertEqual(os.path.getsize(fil), 44 + 2 * len(samples))
+
+    def test_transkriberingen_skriver_ljudet_direkt_till_filen(self):
+        samples = (np.random.default_rng(2).standard_normal(3 * motor.SR) * 0.3).astype(np.float32)
+        sett = {}
+
+        def starta(cmd, cwd=None, **kw):
+            with open(os.path.join(cwd, cmd[cmd.index("-f") + 1]), "rb") as f:
+                sett["wav"] = f.read()
+            return FalskProcess()
+
+        with mock.patch.object(modeller, "MODELLKATALOG", self.katalog), \
+             mock.patch.object(plattform, "whisper_cli", lambda: "/x/whisper-cli"), \
+             mock.patch.object(plattform, "system", lambda: "Darwin"), \
+             mock.patch.object(motor, "wav_16k_mono", side_effect=AssertionError("hela filen i minnet")), \
+             mock.patch.object(plattform, "starta_barn", starta):
+            with self.assertRaises(motor.MotorFel):
+                motor._whispercpp(samples, False, "", None)
+        self.assertEqual(sett["wav"], gammal_wav(samples))  # whisper-cli far samma innehall som forut
+        self.assertEqual([n for n in os.listdir(self.katalog) if n.startswith(motor.TMP_PREFIX)], [])
 
 
 class StderrProcess(FalskProcess):

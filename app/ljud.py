@@ -50,7 +50,28 @@ def avkoda(sokvag, sr=SR, stereo=False):
     # Omsamplaren haller kvar minne tills den frigors.
     del omsamplare
     gc.collect()
-    ljud = (np.concatenate(delar) if delar else np.zeros(0, np.int16)).astype(np.float32) / 32768.0
+    ljud = _till_float32(delar)
     if stereo:
         return ljud[0::2], ljud[1::2]
+    return ljud
+
+
+def _till_float32(delar):
+    """int16-delar -> en float32-array i [-1, 1). Toemmer listan.
+
+    Delarna kopieras in en i taget i en array som allokeras en gang, och varje del slapps direkt
+    efter. Hogst finns da int16-delarna (2 byte per sampel) och resultatet (4 byte), 6 byte per
+    sampel. Tidigare fanns delarna, en sammanfogad int16-array och tva float32-arrayer samtidigt:
+    10 byte per sampel (tva timmar i stereo: 2,3 GB, nu 1,4 GB). Vardena ar desamma bit for bit:
+    int16 -> float32 ar exakt, och divisionen sker i float32 som forut.
+    """
+    ljud = np.empty(sum(len(d) for d in delar), dtype=np.float32)
+    delar.reverse()  # pop() tar da delarna i ordning och slapper var och en efter kopieringen
+    pos = 0
+    while delar:
+        del_ = delar.pop()
+        n = len(del_)
+        np.divide(del_, 32768.0, out=ljud[pos:pos + n], dtype=np.float32)
+        pos += n
+        del del_
     return ljud

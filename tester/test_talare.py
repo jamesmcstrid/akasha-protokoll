@@ -1,4 +1,6 @@
 """Talaruppdelningen (fonster + klustring). Rostmodellen ersatts av konstgjorda avtryck."""
+import random
+import time
 import unittest
 from unittest import mock
 
@@ -244,6 +246,80 @@ class TestDelar(unittest.TestCase):
         rep = talare.repliker(ord_lista, [7, 7, 3, 3, 7])
         self.assertEqual([(r["speaker"], r["text"]) for r in rep], [(1, "Hej Bo."), (2, "Hejsan."), (1, "Ja.")])
         self.assertEqual(talare.repliker([(0, 1, "  ")], [0]), [])
+
+
+def gammal_fonster_med_tal(ord_lista, langd_s):
+    """fonster_med_tal() som den var, ordagrant (kvadratisk): det snabba ska ge exakt samma svar."""
+    if langd_s <= talare.FONSTER_S:
+        return [0.0] if ord_lista else []
+    tal = sorted((max(0.0, o[0] - 0.1), min(langd_s, o[1] + 0.1)) for o in ord_lista)
+    starter = []
+    for start in np.arange(0.0, langd_s - talare.FONSTER_S + 1e-9, talare.STEG_S):
+        slut = start + talare.FONSTER_S
+        overlapp = sum(max(0.0, min(slut, b) - max(start, a)) for a, b in tal if b > start and a < slut)
+        if overlapp >= talare.MIN_TAL_I_FONSTER * talare.FONSTER_S:
+            starter.append(float(start))
+    return starter
+
+
+def slumpade_ord(rng, antal, min_paus, max_paus=1.5, langd=(0.05, 0.8)):
+    """Ord i foljd med pauser i [min_paus, max_paus] s och ibland en lang paus."""
+    ut, tid = [], rng.uniform(0, 2)
+    for _ in range(antal):
+        a = tid
+        b = a + rng.uniform(*langd)
+        ut.append((a, b, " ord"))
+        tid = b + rng.uniform(min_paus, max_paus) + (rng.uniform(2, 6) if rng.random() < 0.05 else 0.0)
+    return ut, tid + 1.0
+
+
+class TestFonsterMedTal(unittest.TestCase):
+    def test_overlappande_ord_raknas_som_forut(self):
+        # Tva korta ord som overlappar raknas var for sig (0,30 + 0,30 s), som nar troskeln provades
+        # pa riktiga moten. Att rakna dem som 0,35 s ar en kvalitetsfraga som maste provas pa nytt.
+        ord_lista = [(1.0, 1.1, " ja"), (1.05, 1.15, " jo")]
+        self.assertEqual(talare.fonster_med_tal(ord_lista, 3.0), gammal_fonster_med_tal(ord_lista, 3.0))
+        self.assertTrue(talare.fonster_med_tal(ord_lista, 3.0))
+        # ett langt ord fore korta: pekaren star kvar pa det langa, de korta som slutat raknas inte
+        ord_lista = [(0.0, 6.0, " lang"), (0.5, 0.6, " a"), (3.0, 3.1, " b")]
+        self.assertEqual(talare.fonster_med_tal(ord_lista, 8.0), gammal_fonster_med_tal(ord_lista, 8.0))
+
+    def test_ett_ord_som_racker_kommer_med(self):
+        self.assertEqual(talare.fonster_med_tal([(1.0, 1.3, " hej")], 3.0), [0.0, 0.5])  # 0,5 s tal; 1,0-2,5 har 0,4
+        self.assertEqual(talare.fonster_med_tal([(1.0, 1.3, " hej")], 1.5), [0.0])  # kort ljud som forut
+        self.assertEqual(talare.fonster_med_tal([], 1.0), [])
+        self.assertEqual(talare.fonster_med_tal([], 10.0), [])
+
+    def test_samma_som_forut_nar_orden_inte_overlappar(self):
+        # Pauser pa minst 0,2 s: intervallen med 0,1 s marginal overlappar inte, och resultatet ska vara
+        # exakt detsamma som forut (samma summor i samma ordning). Aven ord utanfor ljudet och tomma ord.
+        rng = random.Random(7)
+        for forsok in range(40):
+            ord_lista, langd = slumpade_ord(rng, rng.randint(1, 120), min_paus=0.2)
+            if forsok % 4 == 0:
+                langd *= rng.uniform(0.5, 1.0)  # ljudet slutar mitt i orden
+            if forsok % 5 == 0:
+                rng.shuffle(ord_lista)  # ordningen spelar ingen roll
+            with self.subTest(forsok=forsok):
+                self.assertEqual(talare.fonster_med_tal(ord_lista, langd), gammal_fonster_med_tal(ord_lista, langd))
+
+    def test_samma_som_forut_med_overlapp(self):
+        rng = random.Random(11)
+        for forsok in range(40):
+            ord_lista, langd = slumpade_ord(rng, rng.randint(1, 120), min_paus=-0.3, max_paus=0.6)
+            with self.subTest(forsok=forsok):
+                self.assertEqual(talare.fonster_med_tal(ord_lista, langd), gammal_fonster_med_tal(ord_lista, langd))
+
+    def test_tio_tusen_ord_gar_fort(self):
+        # Ett mote pa en timme: 10 000 ord, 7 198 fonster. Forut ungefar 4 s (varje fonster gick
+        # igenom alla ord), nu nagra millisekunder. Gransen 1 s har stor marginal.
+        ord_lista, langd = slumpade_ord(random.Random(3), 10_000, min_paus=0.0, max_paus=0.4, langd=(0.1, 0.5))
+        skala = 3599.0 / langd
+        ord_lista = [(a * skala, b * skala, t) for a, b, t in ord_lista]
+        t0 = time.perf_counter()
+        starter = talare.fonster_med_tal(ord_lista, 3600.0)
+        self.assertLess(time.perf_counter() - t0, 1.0)
+        self.assertGreater(len(starter), 5000)
 
 
 class TestTolkaAntal(unittest.TestCase):

@@ -8,6 +8,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import wave
+from unittest import mock
 
 import numpy as np
 
@@ -65,6 +67,75 @@ class TestAvkoda(unittest.TestCase):
             f.write(b"inte ljud")
         with self.assertRaises(Exception):
             ljud.avkoda(fil)
+
+
+def gammal_float32(delar):
+    """Omvandlingen som avkoda() gjorde fore minnesrattningen, ordagrant."""
+    return (np.concatenate(delar) if delar else np.zeros(0, np.int16)).astype(np.float32) / 32768.0
+
+
+def skriv_lang_wav(sokvag, sekunder, kanaler=1, sr=16000):
+    """Syntetiskt ljud (sinus och brus), 16 bit PCM."""
+    n = int(sekunder * sr)
+    t = np.arange(n) / sr
+    x = 0.3 * np.sin(2 * np.pi * 220 * t) + 0.05 * np.random.default_rng(0).standard_normal(n)
+    if kanaler == 2:
+        x = np.stack([x, 0.3 * np.sin(2 * np.pi * 330 * t)], axis=1).reshape(-1)
+    with wave.open(sokvag, "wb") as w:
+        w.setnchannels(kanaler)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        w.writeframes((x * 32767).astype("<i2").tobytes())
+
+
+class TestMinnet(unittest.TestCase):
+    """avkoda() ska ge samma float32-varden som forut, med lagre minnestopp."""
+
+    def test_samma_som_forut_pa_testljuden(self):
+        filer = [os.path.join(LJUD, n) for n in LANGDER] + [os.path.join(FORMAT, n) for n in FORMATLANGDER]
+        for sokvag in filer:
+            for stereo in (False, True):
+                with self.subTest(os.path.basename(sokvag), stereo=stereo):
+                    nu = ljud.avkoda(sokvag, stereo=stereo)
+                    with mock.patch.object(ljud, "_till_float32", gammal_float32):
+                        forut = ljud.avkoda(sokvag, stereo=stereo)
+                    for a, b in (zip(nu, forut) if stereo else [(nu, forut)]):
+                        self.assertEqual((a.dtype, a.shape, a.strides), (b.dtype, b.shape, b.strides))
+                        self.assertEqual(a.tobytes(), b.tobytes())  # bit for bit
+
+    def test_till_float32_bit_for_bit(self):
+        rng = np.random.default_rng(3)
+        delar = [np.array([-32768, -1, 0, 1, 32767], np.int16), np.zeros(0, np.int16)]
+        delar += [rng.integers(-32768, 32768, size=n, dtype=np.int16) for n in (1, 1000, 77_777)]
+        vantat = gammal_float32(list(delar))
+        kopia = list(delar)
+        ut = ljud._till_float32(kopia)
+        self.assertEqual(ut.dtype, np.float32)
+        self.assertEqual(ut.tobytes(), vantat.tobytes())
+        self.assertEqual(kopia, [])  # delarna slapps under tiden
+        self.assertEqual((ut[0], ut[4]), (-1.0, np.float32(32767 / 32768)))
+        tom = ljud._till_float32([])
+        self.assertEqual((tom.dtype, tom.shape), (np.float32, (0,)))
+
+    def test_minnestoppen_ar_lagre_an_forut(self):
+        # Forut: 2,5 ganger resultatets storlek (int16-delarna, en sammanfogad int16-array och tva
+        # float32-arrayer). Nu: delarna och resultatet, 1,5 ganger. Grans 2,0 med marginal.
+        import tracemalloc
+        katalog = tempfile.mkdtemp(prefix="akasha-ljud-")
+        self.addCleanup(shutil.rmtree, katalog, True)
+        for kanaler, stereo in ((1, False), (2, True)):
+            with self.subTest(kanaler=kanaler):
+                fil = os.path.join(katalog, f"lang-{kanaler}.wav")
+                skriv_lang_wav(fil, 120, kanaler)  # 2 min: flera grupper om _GRUPP sampel
+                tracemalloc.start()
+                try:
+                    x = ljud.avkoda(fil, stereo=stereo)
+                    topp = tracemalloc.get_traced_memory()[1]
+                finally:
+                    tracemalloc.stop()
+                storlek = x[0].base.nbytes if stereo else x.nbytes  # stereo: vyer i samma array
+                self.assertEqual(storlek, 120 * 16000 * kanaler * 4)
+                self.assertLess(topp, 2.0 * storlek, f"topp {topp / storlek:.2f} ganger resultatet")
 
 
 class TestInteFasterWhisper(unittest.TestCase):

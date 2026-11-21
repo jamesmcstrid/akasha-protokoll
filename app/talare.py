@@ -94,16 +94,30 @@ def _avtryck(extraktor, x):
 # --- ren matematik (testas utan modell) ----------------------------------------------------
 
 def fonster_med_tal(ord_lista, langd_s):
-    """Starttider for fonster dar minst MIN_TAL_I_FONSTER av tiden ar tal enligt ordtiderna."""
+    """Starttider for fonster dar minst MIN_TAL_I_FONSTER av tiden ar tal enligt ordtiderna.
+
+    Ordens intervall (0,1 s marginal pa var sida) ar sorterade, sa en pekare forbi intervall som
+    slutat fore fonstret racker: arbetet vaxer med antalet fonster plus antalet ord, inte med
+    produkten (10 000 ord i ett mote pa en timme tog 4 s). Summan ar exakt densamma som forut,
+    aven att ord som overlappar raknas var for sig: troskeln ar provad pa riktiga moten sa, och
+    en andring av det maste provas pa nytt (halsokoll/talardiagnos)."""
     if langd_s <= FONSTER_S:
         return [0.0] if ord_lista else []
     tal = sorted((max(0.0, o[0] - 0.1), min(langd_s, o[1] + 0.1)) for o in ord_lista)
-    starter = []
-    for start in np.arange(0.0, langd_s - FONSTER_S + 1e-9, STEG_S):
+    krav = MIN_TAL_I_FONSTER * FONSTER_S
+    starter, i = [], 0
+    for start in np.arange(0.0, langd_s - FONSTER_S + 1e-9, STEG_S).tolist():
         slut = start + FONSTER_S
-        overlapp = sum(max(0.0, min(slut, b) - max(start, a)) for a, b in tal if b > start and a < slut)
-        if overlapp >= MIN_TAL_I_FONSTER * FONSTER_S:
-            starter.append(float(start))
+        while i < len(tal) and tal[i][1] <= start:
+            i += 1  # alla fore i har slutat fore fonstret, och fore alla senare fonster
+        overlapp, j = 0.0, i
+        while j < len(tal) and tal[j][0] < slut:
+            a, b = tal[j]
+            if b > start:  # ett kort ord efter ett langt kan ha slutat fast pekaren star kvar
+                overlapp += max(0.0, min(slut, b) - max(start, a))
+            j += 1
+        if overlapp >= krav:
+            starter.append(start)
     return starter
 
 
