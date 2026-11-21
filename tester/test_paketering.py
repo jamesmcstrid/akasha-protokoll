@@ -938,7 +938,12 @@ class KontrolleraFfmpeg(unittest.TestCase):
 
     def test_symboliska_lankar_raknas_inte(self):
         katalog = self.bygg()
-        os.symlink(os.path.join(katalog, "av.libs", "libavcodec-abc123.so.60"), os.path.join(katalog, "libavcodec-abc123.so.60"))
+        try:
+            os.symlink(os.path.join(katalog, "av.libs", "libavcodec-abc123.so.60"), os.path.join(katalog, "libavcodec-abc123.so.60"))
+        except (OSError, NotImplementedError) as e:
+            # Windows tillater symboliska lankar bara med utvecklarlaget eller adminrattigheter (WinError 1314).
+            # Pa GitHubs Windows-datorer och pa Linux gar det, och dar kors testet.
+            self.skipTest(f"kan inte skapa symboliska länkar här: {e}")
         self.assertEqual(self.kor(katalog).fel_rader, [])
 
     def test_hjul_som_zip(self):
@@ -966,6 +971,27 @@ class KontrolleraFfmpeg(unittest.TestCase):
 
     def test_kommandoradens_utgang(self):
         self.assertEqual(self.k.main(["--katalog", os.path.join(self.katalog, "finns-inte")]), 1)
+
+
+class SymlankarUtanRattighet(unittest.TestCase):
+    """test_symboliska_lankar_raknas_inte hoppas over, i stallet for att ge fel, dar symboliska lankar inte far skapas."""
+
+    def kor_testet(self, fel):
+        res = unittest.TestResult()
+        with mock.patch.object(os, "symlink", side_effect=fel):
+            KontrolleraFfmpeg("test_symboliska_lankar_raknas_inte").run(res)
+        return res
+
+    def test_hoppas_over_utan_ratt_att_skapa_lankar(self):
+        for fel in (OSError("[WinError 1314] Klienten saknar ett nödvändigt privilegium"), NotImplementedError("symlink")):
+            with self.subTest(type(fel).__name__):
+                res = self.kor_testet(fel)
+                self.assertEqual((res.errors, res.failures, len(res.skipped)), ([], [], 1))
+                self.assertIn("symboliska länkar", res.skipped[0][1])
+
+    def test_andra_fel_ger_fortfarande_fel(self):
+        res = self.kor_testet(ValueError("annat"))
+        self.assertEqual((len(res.errors), len(res.skipped)), (1, 0))
 
 
 class FfmpegKontrollSomPaIPyPi(unittest.TestCase):

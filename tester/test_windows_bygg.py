@@ -33,6 +33,12 @@ def skriv(sokvag, data):
         f.write(data)
 
 
+def las_text(*delar):
+    """En textfil i repot (UTF-8), som stangs direkt efter lasningen."""
+    with open(os.path.join(ROT, *delar), encoding="utf-8") as f:
+        return f.read()
+
+
 def info(importer=(), fordrojda=(), maskin=X64, magic=pe.PE32_PLUS, fel=None):
     return pe.PEInfo(maskin, magic, list(importer), list(fordrojda), fel)
 
@@ -564,7 +570,7 @@ class KontrolleraPerPlattform(unittest.TestCase):
         skriv.assert_any_call("--- 3 FEL i kontrollen ---", flush=True)
 
     def test_windows_lagger_inte_den_gamla_programkatalogen_och_tal_att_loggen_saknas(self):
-        text = open(os.path.join(PAKETERING, "kontrollera.py"), encoding="utf-8").read()
+        text = las_text("paketering", "kontrollera.py")
         # Windows: bara inspelningsmappen flyttas, med en INFO-rad om varfor; Mac och Linux oforandrade
         self.assertIn("if not WIN:\n        flyttpar.append((gammal_program", text)
         self.assertIn("if not WIN:\n        kontrolleras.append((gammal_program", text)
@@ -623,14 +629,14 @@ class KontrolleraPerPlattform(unittest.TestCase):
         self.assertIn("mp3.mp3", k.fel_lista[0])
         self.assertIn("ljudet kunde inte läsas", k.fel_lista[0])
         self.assertIn("kontrollera_format(os.path.join(ROT, \"testljud\", \"format\"))",
-                      open(os.path.join(PAKETERING, "kontrollera.py"), encoding="utf-8").read())
+                      las_text("paketering", "kontrollera.py"))
 
     def test_flaggan_finns_och_flodet_anger_den_inte_for_mac(self):
-        text = open(os.path.join(PAKETERING, "kontrollera.py"), encoding="utf-8").read()
+        text = las_text("paketering", "kontrollera.py")
         self.assertIn('"--fortsatt-efter-fel"', text)
-        mac = open(os.path.join(ROT, ".github", "workflows", "mac-app.yml"), encoding="utf-8").read()
+        mac = las_text(".github", "workflows", "mac-app.yml")
         self.assertNotIn("fortsatt-efter-fel", mac)
-        win = open(os.path.join(ROT, ".github", "workflows", "windows-app.yml"), encoding="utf-8").read()
+        win = las_text(".github", "workflows", "windows-app.yml")
         self.assertIn("--fortsatt-efter-fel", win)
 
     def test_tasklist_hittar_bara_rader_med_avbildningens_namn(self):
@@ -700,6 +706,32 @@ class Kontrollskripten(unittest.TestCase):
         """)
         p = subprocess.run([sys.executable, "-c", kod, PAKETERING], capture_output=True)
         self.assertEqual(p.returncode, 0, p.stderr.decode("utf-8", "replace"))
+
+
+class FilernaStangs(unittest.TestCase):
+    """Testerna som laser kontrollera.py och flodena stanger filerna: ResourceWarning ger fel."""
+
+    TESTER = ("test_windows_lagger_inte_den_gamla_programkatalogen_och_tal_att_loggen_saknas",
+              "test_formaten_skickas_till_transcribe_och_400_med_ljudet_kunde_inte_lasas_ger_fel",
+              "test_flaggan_finns_och_flodet_anger_den_inte_for_mac")
+
+    def test_ingen_resourcewarning(self):
+        import gc
+        import warnings
+        fangade = []
+        gammal_hook = sys.unraisablehook
+        sys.unraisablehook = lambda u: fangade.append(repr(u.exc_value))  # varningar nar en fil stads bort
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", ResourceWarning)
+                for namn in self.TESTER:
+                    res = unittest.TestResult()
+                    KontrolleraPerPlattform(namn).run(res)
+                    self.assertEqual((res.errors, res.failures), ([], []), namn)
+                gc.collect()
+        finally:
+            sys.unraisablehook = gammal_hook
+        self.assertEqual(fangade, [])
 
 
 if __name__ == "__main__":
