@@ -77,7 +77,8 @@ echo "== configure"
 mkdir -p "$KAT/bygg"
 cd "$KAT/bygg"
 "$KAT/kalla/configure" --prefix="$PREFIX" "${FLAGGOR[@]}" ${TILLAGG[@]+"${TILLAGG[@]}"} > configure.log 2>&1 \
-  || { tail -40 configure.log; echo "FEL: configure misslyckades" >&2; exit 1; }
+  || { tail -40 configure.log; echo "-- slutet av ffbuild/config.log:"; tail -60 ffbuild/config.log 2>/dev/null || true
+       echo "FEL: configure misslyckades" >&2; exit 1; }
 grep -E '^License' configure.log
 echo "-- Externa bibliotek (ska vara tomma):"
 sed -n '/^External libraries:/,/^$/p;/^External libraries providing hardware acceleration:/,/^$/p' configure.log

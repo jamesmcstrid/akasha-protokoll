@@ -137,7 +137,8 @@ def paket_i_moduler(moduler, modulkarta, toppkarta):
     egna = appens_moduler()
     for mod in moduler:
         topp = mod.split(".")[0]
-        if topp in stdlib or topp in egna or topp.startswith(PYINSTALLERS_EGNA):
+        # (_sysconfigdata_* ar standardbibliotekets, men star inte i sys.stdlib_module_names)
+        if topp in stdlib or topp in egna or topp.startswith(PYINSTALLERS_EGNA) or topp.startswith("_sysconfigdata"):
             continue
         namn = modulkarta.get(mod) or {normnamn(n) for n in toppkarta.get(topp, [])}
         if not namn:

@@ -95,6 +95,9 @@ jobs:
         run: |
           uname -a
           pacman -Sy --noconfirm --needed make diffutils git xz mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm
+          echo "== gcc: ett litet program kompileras, lankas och kors"
+          printf 'int main(void) { return 0; }\n' > /tmp/akasha-prov.c
+          gcc -v /tmp/akasha-prov.c -o /tmp/akasha-prov.exe -static-libgcc && /tmp/akasha-prov.exe && echo "OK: gcc fungerar"
           mkdir -p build/loggar
           bash paketering/bygg-ffmpeg.sh build/ffmpeg 2>&1 | tee build/loggar/bygg-ffmpeg.log
       - name: Bygg PyAV (MSVC) mot det egna FFmpeg

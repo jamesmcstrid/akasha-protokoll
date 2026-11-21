@@ -78,7 +78,10 @@ NOTER = {
     "pyinstaller": "PyInstaller bygger programmet. Det som följer med är startprogrammet (bootloader) och körtidskrokarna; "
                    "undantagen i texten nedan gör att programmet inte behöver vara under GPL.",
 }
-MSVC = re.compile(r"^(msvcp|vcruntime|vcomp|concrt|vccorlib)140(_[a-z0-9_]+)?(-[0-9a-f]{8,})?\.dll$", re.I)
+# Microsofts runtime: Visual C++ (msvcp140 ...) och Universal C Runtime (ucrtbase.dll och vidarebefordrarna
+# api-ms-win-crt-*.dll, som PyInstaller kan ta med fran PATH)
+MSVC = re.compile(r"^((msvcp|vcruntime|vcomp|concrt|vccorlib)140(_[a-z0-9_]+)?(-[0-9a-f]{8,})?|ucrtbase|api-ms-win-[a-z0-9-]+)\.dll$",
+                  re.I)
 FFMPEG_BIBLIOTEK = ("avutil", "avcodec", "avformat", "avfilter", "avdevice", "swresample", "swscale")
 FFMPEG_NAMN = re.compile(r"^(?:lib)?(" + "|".join(FFMPEG_BIBLIOTEK) + r")(?=[-._])", re.I)
 WHISPER_NAMN = re.compile(r"^(whisper|ggml)", re.I)
@@ -578,11 +581,13 @@ def msvc_komponent(dllar):
              "distribuerbar kod (Distributable Code)",
              f"Källa: {url}",
              "",
-             "De här filerna i programmet är Microsofts Visual C++-runtime:"]
+             "De här filerna i programmet är Microsofts Visual C++-runtime och Universal C Runtime (ucrtbase.dll och "
+             "api-ms-win-*.dll):"]
     rader += [f"  {d}" for d in sorted(set(dllar))]
     rader += ["",
               "Filerna bredvid whisper-cli.exe är tagna ur Visual Studios Redist-katalog. De andra följer med Python och "
-              "Python-paketen. Alla är filer som Microsoft tillåter att andra program delar ut tillsammans med sig "
+              "Python-paketen, eller är Universal C Runtime, som Windows 10 och senare redan har (PyInstaller tar med "
+              "kopior som finns på byggmaskinen). Alla är filer som Microsoft tillåter att andra program delar ut tillsammans med sig "
               "(distribuerbar kod), på de villkor som står i licensvillkoren för Visual Studio. Villkoren följer med "
               "Visual Studio och finns på https://visualstudio.microsoft.com/license-terms/. Ingen licenstext från "
               "Microsoft är kopierad hit."]

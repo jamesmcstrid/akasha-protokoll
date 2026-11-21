@@ -422,7 +422,8 @@ class SamlaLicenser(unittest.TestCase):
             self.assertFalse(sl.ar_delat_bibliotek(n), n)
         for n in ("x.dll", "libx.1.dylib", "libx.so.60", "libx.so"):
             self.assertTrue(sl.ar_delat_bibliotek(n), n)
-        for n in ("MSVCP140.dll", "VCRUNTIME140_1.dll", "VCOMP140.DLL", "msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll"):
+        for n in ("MSVCP140.dll", "VCRUNTIME140_1.dll", "VCOMP140.DLL", "msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
+                  "ucrtbase.dll", "api-ms-win-crt-runtime-l1-1-0.dll", "api-ms-win-core-file-l1-2-0.dll"):
             self.assertTrue(sl.MSVC.match(n), n)
         self.assertFalse(sl.MSVC.match("msvcrt.dll"))
         # filnamnen far inte se ut som det som bygget forbjuder (bygg_windows_verktyg.ar_forbjudet, find i bygg-mac.sh)
@@ -468,6 +469,7 @@ class KontrolleraLicenser(unittest.TestCase):
 
     def test_allt_stammer(self):
         res = self.kor(["mittpaket", "rentpython", "rentpython.modul", "json", "os.path", "app", "start", "motor",
+                        "_sysconfigdata__darwin_darwin",
                         "pyimod02_importers", "_pyi_rth_utils"])
         self.assertEqual(res.fel_rader, [])
         self.assertTrue(any("alla 2 Python-paket" in r for r in res.ok_rader), res.ok_rader)
