@@ -25,12 +25,17 @@ const STATUS = {
 
 const $ = (id) => document.getElementById(id);
 let inspelning = null; // pagaende inspelning i den har fliken
+let startar = false; // Spela in ar tryckt och starten vantar pa mikrofonen eller tjansten
 let koInsp = null; // senaste inspelningen i fliken: rutan #ko och "Spara ljudet som fil" gar mot den
 let visadId = null;
 let visadMeta = null; // inspelningen som visas, med text: behovs nar talare ska rattas
+let begardId = null; // inspelningen som senast oppnades (null nar visningen stangts): andra svar kastas
+let visaNr = 0; // raknas upp for varje hamtning i visa()
+let renderadNr = 0; // hamtningen som senast visades: ett aldre svar for samma inspelning kastas
 let doljOsakraOrd = false;
 let senastOsakra = -1; // senaste replik som "Nasta osakra" visade
 let pollTimer = null;
+let listaVantar = false; // listan skulle ha hamtats medan fliken var dold
 let namnLage = null; // talarnamnen som sparats eller halls pa att sparas: { id, sparade, ko, vantar }
 let prov = null; // pagaende rostprov fran en Lyssna-knapp: { knapp, start, slut, timer }
 let talarvalAnkare = null; // det som oppnade talarvalsrutan, dit fokus gar tillbaka
@@ -549,7 +554,34 @@ function valjFormat() {
   return null;
 }
 
+// Knappen stangs av direkt och sparren satts innan nagot vantas pa: starten vantar pa
+// mikrofonen, fliken och tjansten, och ett andra klick under tiden gav tva ljudstrommar och tva
+// inspelningar pa servern.
 async function spelaIn() {
+  if (startar || inspelning) return;
+  startar = true;
+  const knapp = $("spela-in");
+  const hadeFokus = document.activeElement === knapp;
+  knapp.disabled = true;
+  try {
+    await startaInspelning();
+  } finally {
+    startar = false;
+    knapp.disabled = false; // ar inspelningen igang ar knappen dold
+    // Startade den inte ska fokus tillbaka till knappen, inte till sidans borjan.
+    if (!inspelning && hadeFokus && (!document.activeElement || document.activeElement === document.body)) knapp.focus();
+  }
+}
+
+// Beskedet nar webblasarens inspelare inte gar att skapa eller starta (t.ex. InvalidStateError
+// om mikrofonen eller fliken forsvann medan inspelningen skapades).
+function inspelarFel(e) {
+  return `Webbläsaren kunde inte starta inspelningen${e && e.name ? ` (${e.name})` : ""}. Tryck Spela in igen, eller ladda upp en fil.`;
+}
+
+const AVBROTT_STOPP = "Inspelningen stannade av sig själv, kanske för att mikrofonen kopplades bort.";
+
+async function startaInspelning() {
   const format = valjFormat();
   if (!format || !navigator.mediaDevices) {
     meddela("Webbläsaren kan inte spela in. Prova Safari eller Chrome, eller ladda upp en fil.", true);
@@ -568,6 +600,18 @@ async function spelaIn() {
     meddela(e.message, true);
     return;
   }
+  const stream = ljud.stream;
+  // Inspelaren skapas innan inspelningen finns pa servern: gar den inte att skapa blir det
+  // ingen tom inspelning i listan.
+  let rec;
+  try {
+    rec = new MediaRecorder(stream, {
+      mimeType: format.mime, audioBitsPerSecond: inst.kalla === "digitalt" ? 96000 : 64000 });
+  } catch (e) {
+    stangLjud(ljud);
+    meddela(inspelarFel(e), true);
+    return;
+  }
   let id;
   try {
     ({ id } = await api("POST", "/api/inspelningar", { andelse: format.andelse, ...inst }));
@@ -576,28 +620,53 @@ async function spelaIn() {
     meddela(`Kunde inte starta: ${e.message}`, true);
     return;
   }
+  try {
+    rec.start(DEL_MS);
+  } catch (e) {
+    stangLjud(ljud);
+    meddela(inspelarFel(e), true);
+    // Inspelningen pa servern har inget ljud: den ska inte ligga kvar som "Spelar in".
+    api("POST", `/api/inspelningar/${id}/radera`).catch(() => { /* syns i listan, gar att radera */ })
+      .finally(uppdateraLista);
+    return;
+  }
 
-  const stream = ljud.stream;
-  const rec = new MediaRecorder(stream, {
-    mimeType: format.mime, audioBitsPerSecond: inst.kalla === "digitalt" ? 96000 : 64000 });
   // delar: alla delar i ordning, aven de som redan ar sparade (raddningsfilen ska bli hela
   // inspelningen). sparade: antal delar servern har kvitterat.
   const insp = { id, rec, ljud, start: Date.now(), delar: [], sparade: 0, skickar: false, fel: null,
     lage: "spelar", mime: format.mime, andelse: format.andelse, filDelar: 0, vackning: null,
     nere: false, harVantat: false, stoppad: false, tomma: [], senastKoText: null };
+  // Inspelarens handelser hor till den har inspelningen (closure over insp), aldrig till den som
+  // pagar just nu: en aldre inspelares sista del far inte hamna i en nyare inspelning. Handelserna
+  // kommer tidigast i nasta uppgift, sa de hinner inte forsvinna innan lyssnarna finns.
+  rec.addEventListener("dataavailable", (e) => { if (e.data && e.data.size) skickaDel(insp, e.data); });
+  rec.addEventListener("error", (e) => {
+    const namn = e.error && e.error.name;
+    stoppaInspelning(insp, `Inspelningen stannade av ett fel i webbläsaren${namn ? ` (${namn})` : ""}.`);
+  });
+  // Stannar inspelaren utan att Stoppa tryckts (mikrofonen kopplades bort, alla spar tog slut)
+  // stoppas inspelningen som vanligt: det som hann spelas in skickas och transkriberas.
+  rec.addEventListener("stop", () => {
+    insp.recStoppad = true;
+    if (!insp.stoppad) stoppaInspelning(insp, AVBROTT_STOPP);
+  });
+  ljud.kallor[0].getAudioTracks()[0]?.addEventListener("ended", () => {
+    if (insp.stoppad) return;
+    // Vid digitalt mote gar inspelningen vidare med motesljudet (inspelaren far ljudet via
+    // AudioContext, och dess spar tar inte slut).
+    if (inst.kalla === "digitalt") meddela("Mikrofonen är inte längre ansluten. Nu spelas bara mötet in.", true);
+    else stoppaInspelning(insp, AVBROTT_STOPP);
+  });
   inspelning = insp;
   koInsp = insp;
   $("ko").hidden = true;
   visaYta();
-  rec.addEventListener("dataavailable", (e) => { if (e.data && e.data.size) skickaDel(e.data); });
-  rec.start(DEL_MS);
 
-  starta_niva(stream);
+  starta_niva(insp, stream);
   // Klockan, tystnadskollen och flikens titel gar pa en timer och inte pa requestAnimationFrame,
   // som star still nar fliken ar i bakgrunden (vid digitala moten ar man i motesfliken).
   insp.klocka = setInterval(() => uppdateraKlocka(insp), 500);
   uppdateraKlocka(insp);
-  try { insp.wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* valfritt */ }
 
   $("spela-in").hidden = true;
   $("valj-fil").disabled = true;
@@ -609,6 +678,13 @@ async function spelaIn() {
     ? "Spelar in dig och mötet. Ljudet sparas löpande på datorn."
     : "Spelar in. Ljudet sparas löpande på datorn.");
   uppdateraLista();
+  // Sist, sa att inget av ovanstaende vantar pa det. Hann inspelningen stanna under tiden
+  // slapps laset direkt.
+  try {
+    const las = await navigator.wakeLock?.request("screen");
+    if (insp.slut) las?.release().catch(() => { /* valfritt */ });
+    else insp.wakeLock = las;
+  } catch { /* valfritt */ }
 }
 
 // Mikrofonen, och vid digitalt mote aven ljudet fran en delad flik. Mikrofonen hamnar i
@@ -656,13 +732,19 @@ async function oppnaLjud(kalla) {
   return { stream: mal.stream, kallor: [mik, flik], ctx };
 }
 
+// Tal att anropas flera ganger: ett stoppat spar och ett stangt ljudsammanhang ar ofarliga.
 function stangLjud(ljud) {
   ljud.kallor.forEach((s) => s.getTracks().forEach((t) => t.stop()));
-  ljud.ctx?.close();
+  stangCtx(ljud.ctx);
 }
 
-function skickaDel(blob) {
-  const insp = inspelning;
+function stangCtx(ctx) {
+  if (ctx && ctx.state !== "closed") ctx.close().catch(() => { /* redan stangt */ });
+}
+
+// insp ar inspelningen som delen spelades in for (se dataavailable i startaInspelning).
+function skickaDel(insp, blob) {
+  if (insp.slappt) return; // inspelningen ar slappt: inget skickas eller sparas langre
   const sekunder = (Date.now() - insp.start) / 1000; // ljudet fram till hit finns i den har delen
   insp.delar.push({ blob, sekunder });
   skickaKo(insp);
@@ -783,7 +865,10 @@ function uppdateraKo(insp) {
   visaYta();
   // Klar visas bara nar filen ar sparad: da kan inspelningen slappas utan att ljud tappas.
   $("ko-klar").hidden = !(insp.stoppad && filenArHel(insp) && (insp.fel || insp.nere || insp.harVantat || insp.klarVantar));
-  if (text !== null && insp.stoppad && $("meddelande").textContent === "Sparar de sista sekunderna…") meddela("");
+  // Rutan ger beskedet nu. Varfor inspelningen stannade av sig sjalv star kvar.
+  if (text !== null && insp.stoppad && $("meddelande").textContent === insp.sparaText) {
+    meddela(insp.avbrott || "", !!insp.avbrott);
+  }
   if (text === null) insp.senastKoText = null;
   else if (insp.senastKoText !== nyckel) {
     insp.senastKoText = nyckel;
@@ -814,8 +899,7 @@ function sparaLjudSomFil(insp) {
     : "Ljudet är sparat som en fil bland dina hämtade filer. Sidan fortsätter att försöka spara inspelningen här.");
 }
 
-function starta_niva(stream) {
-  const insp = inspelning;
+function starta_niva(insp, stream) {
   try {
     const ctx = new AudioContext();
     ctx.resume().catch(() => { /* valfritt */ });
@@ -865,31 +949,63 @@ function visaTystnad(tyst) {
 }
 
 async function stoppa() {
-  const insp = inspelning;
-  if (!insp || insp.stoppad) return;
-  insp.stoppad = true;
-  insp.lage = "vantar";
-  // Antal talare, ord och rubrik lases nu, sa att de kan andras under motet. En tom rubrik
-  // skickas inte, och da behalls den fran starten.
-  const { talare, ord, titel } = installningar();
-  insp.klarData = { talare, ord, titel };
-  $("stoppa").disabled = true;
-  meddela("Sparar de sista sekunderna…");
-  // Den sista delen laggs i kon av dataavailable fore stop.
-  await new Promise((r) => { insp.rec.addEventListener("stop", r, { once: true }); insp.rec.stop(); });
-  // Mikrofonen och klockan stangs direkt, aven om ljud vantar pa tjansten.
-  insp.slut = true;
-  stangLjud(insp.ljud);
-  clearInterval(insp.klocka);
-  insp.ljudctx?.close();
-  try { await insp.wakeLock?.release(); } catch { /* valfritt */ }
+  if (inspelning) await stoppaInspelning(inspelning);
+}
 
+// Stoppar inspelaren och vantar pa stop-handelsen: den sista delen laggs i kon av dataavailable
+// fore stop. Har inspelaren redan stannat av sig sjalv vantas bara handelsen ut. Kommer den
+// aldrig gar det vidare efter en stund, sa att mikrofonen anda stangs.
+function stoppaInspelare(insp) {
+  return new Promise((klar) => {
+    if (insp.recStoppad) { klar(); return; }
+    const timer = setTimeout(klar, 3000);
+    insp.rec.addEventListener("stop", () => { clearTimeout(timer); klar(); }, { once: true });
+    if (insp.rec.state !== "inactive") {
+      try { insp.rec.stop(); } catch { /* InvalidStateError: inspelaren har redan stannat */ }
+    }
+  });
+}
+
+// Mikrofonen, flikljudet, klockan, nivamataren och skarmlaset stangs, och panelen doljs. Tal att
+// anropas flera ganger.
+function stangInspelningsljud(insp) {
+  clearInterval(insp.klocka);
+  if (insp.ljud) stangLjud(insp.ljud);
+  stangCtx(insp.ljudctx);
+  insp.lasNiva = null;
+  insp.wakeLock?.release().catch(() => { /* valfritt */ });
+  insp.wakeLock = null;
+  if (inspelning !== insp) return;
   $("stoppa").hidden = true;
   $("stoppa").disabled = false;
   $("inspelningspanel").hidden = true;
   $("niva").value = 0;
   visaTystnad(false);
   document.title = SIDTITEL;
+}
+
+// Stoppar inspelningen och skickar det som ar kvar. avbrott: varfor inspelaren stannade av sig
+// sjalv (ett fel, mikrofonen kopplades bort), eller null nar anvandaren tryckte Stoppa.
+async function stoppaInspelning(insp, avbrott = null) {
+  if (insp.stoppad) return;
+  insp.stoppad = true;
+  insp.lage = "vantar";
+  insp.avbrott = avbrott;
+  // Antal talare, ord och rubrik lases nu, sa att de kan andras under motet. En tom rubrik
+  // skickas inte, och da behalls den fran starten.
+  const { talare, ord, titel } = installningar();
+  insp.klarData = { talare, ord, titel };
+  $("stoppa").disabled = true;
+  insp.sparaText = avbrott ? `${avbrott} Sparar det som hann spelas in…` : "Sparar de sista sekunderna…";
+  meddela(insp.sparaText, !!avbrott);
+  try {
+    await stoppaInspelare(insp);
+  } finally {
+    // Mikrofonen och klockan stangs direkt, aven om ljud vantar pa tjansten eller inspelaren
+    // stannade av ett fel.
+    insp.slut = true;
+    stangInspelningsljud(insp);
+  }
   // "Spela in" forblir dold och "Ladda upp ljudfil" avstangd: inspelningen slapps i slappInspelning.
   if (insp.fel) insp.lage = "fel";
   uppdateraKo(insp);
@@ -925,7 +1041,19 @@ function slappEfterFil() {
   uppdateraLista();
 }
 
+// Anropas forst nar inget behover ljudet i fliken langre: allt ar sparat hos tjansten (efter
+// /klar, eller nar bara transkriberingen inte startade), eller filen ar sparad och Klar tryckt.
+// Da slapps delarna (cirka 30-40 MB per timme), inspelaren och spaven, och koInsp, sa att
+// minnet frigors. Fram till dess behover "Spara ljudet som fil" alla delar.
 function slappInspelning(insp) {
+  insp.slappt = true; // kon slutar skicka, och en sen del laggs inte till
+  stangInspelningsljud(insp); // redan gjort vid stopp, men ofarligt
+  insp.delar = [];
+  insp.tomma.splice(0).forEach((r) => r());
+  insp.rec = null;
+  insp.ljud = null;
+  insp.ljudctx = null;
+  if (koInsp === insp) koInsp = null;
   if (inspelning === insp) inspelning = null;
   $("spela-in").hidden = false;
   $("valj-fil").disabled = false;
@@ -941,7 +1069,7 @@ async function avslutaInspelning(insp) {
       break;
     } catch (e) {
       if (!(e instanceof TjanstFel)) {
-        meddela(`Inspelningen är sparad, men transkriberingen startade inte: ${e.message}`, true);
+        meddela(`${insp.avbrott ? `${insp.avbrott} ` : ""}Inspelningen är sparad, men transkriberingen startade inte: ${e.message}`, true);
         $("ko").hidden = true;
         slappInspelning(insp);
         return;
@@ -962,6 +1090,8 @@ async function avslutaInspelning(insp) {
   slappInspelning(insp);
   $("titel").value = ""; // annars far nasta inspelning samma rubrik
   meddela("Inspelningen är sparad och transkriberas nu." + (insp.filDelar > 0 ? " Filen du sparade behövs inte." : ""));
+  // Formularet doljs nar inspelningen oppnas: att den stannade av sig sjalv star i rutan nederst.
+  if (insp.avbrott) kvitto(`${insp.avbrott} Det som hann spelas in är sparat och transkriberas nu.`, true);
   visa(insp.id);
 }
 
@@ -1064,7 +1194,7 @@ function rendera(lista) {
     const f = framsteg(m);
     // "Klar" star som diskret text sist bland metadelarna; andra tillstand har en egen rad.
     ul.append(el("li", { "data-id": m.id },
-      el("button", { type: "button", class: "post", "data-roll": "visa", onclick: () => visa(m.id) },
+      el("button", { type: "button", class: "post", "data-roll": "visa", onclick: () => visa(m.id, false, true) },
         el("span", { class: "post-rubrik" }, m.rubrik),
         el("span", { class: "post-info" }, ...(m.info_delar || []).map((d) => el("span", {}, d)),
           m.status === "klar" ? statusElement(m) : null),
@@ -1092,19 +1222,36 @@ function markeraVisad() {
   }
 }
 
+// Nasta hamtning av listan. Medan fliken ar dold vantar den tills fliken syns igen. Det galler
+// bara listan: inspelningens ko och klocka gar pa egna timrar och fortsatter i motesfliken.
+function planeraLista(ms) {
+  clearTimeout(pollTimer);
+  pollTimer = null;
+  if (document.visibilityState === "hidden") listaVantar = true;
+  else pollTimer = setTimeout(uppdateraLista, ms);
+}
+
 async function uppdateraLista() {
   clearTimeout(pollTimer);
+  pollTimer = null;
+  listaVantar = false;
   try {
     const { inspelningar } = await api("GET", "/api/inspelningar");
     rendera(inspelningar);
     const visad = inspelningar.find((m) => m.id === visadId);
     if (visad && $("visning").dataset.status !== visad.status) visa(visadId, true);
     else if (visad) renderaForlopp(visad); // bara stapeln: ljudet och texten far vara ifred
-    if (inspelningar.some((m) => PAGAENDE.has(m.status) || m.status === "spelar_in")) {
-      pollTimer = setTimeout(uppdateraLista, 2000);
+    // Varannan sekund medan nagot transkriberas eller fliken sjalv spelar in. En annan
+    // inspelning som star som "Spelar in" (oftast overgiven: fliken stangdes mitt i) racker det
+    // att titta efter ibland.
+    const egen = inspelning && inspelning.id;
+    if (inspelningar.some((m) => PAGAENDE.has(m.status) || (m.status === "spelar_in" && m.id === egen))) {
+      planeraLista(2000);
+    } else if (inspelningar.some((m) => m.status === "spelar_in")) {
+      planeraLista(10000);
     }
   } catch (e) {
-    pollTimer = setTimeout(uppdateraLista, 5000);
+    planeraLista(5000);
   }
 }
 
@@ -1123,7 +1270,7 @@ let omInspelning = null; // inspelningen som dialogen galler
 
 // Oppnar dialogen. Antal talare och ord fylls i fran inspelningen sjalv, inte fran formularet
 // hogst upp: efter en omladdning star det 2 talare dar, vilket gjorde om stora moten fel.
-// m ar en post fran listan (m.rattad) eller hela inspelningen (m.resultat.segment_original).
+// m ar en post fran listan eller hela inspelningen: bada har m.rattad.
 function transkriberaIgen(m) {
   const inst = m.installningar || {};
   const talare = String(inst.talare ?? "2");
@@ -1132,7 +1279,7 @@ function transkriberaIgen(m) {
   fyllTalarval($("om-talare"), talare);
   $("om-ord").value = inst.ord || "";
   $("om-digital").hidden = inst.kalla !== "digitalt";
-  $("om-rattad").hidden = !(m.rattad || (m.resultat && m.resultat.segment_original));
+  $("om-rattad").hidden = !m.rattad;
   $("om-fel").textContent = "";
   $("om-starta").disabled = false;
   $("om-dialog").showModal();
@@ -1206,9 +1353,24 @@ function rulla(mal, block) {
   mal.scrollIntoView({ behavior: lugnt ? "auto" : "smooth", block });
 }
 
-async function visa(id, tyst = false) {
+// tyst: det som visas uppdateras (ingen rullning). Ett sadant anrop far inte ta over nar en annan
+// inspelning hamtas, och oppnar inget nar visningen ar stangd. fokus: fokus till rubriken (oppnad
+// fran listan). Ger true nar inspelningen visades.
+async function visa(id, tyst = false, fokus = false) {
+  if (tyst && begardId !== id) return false;
+  begardId = id;
+  const nr = ++visaNr;
   let m;
-  try { m = await api("GET", `/api/inspelningar/${id}`); } catch (e) { kvitto(e.message, true); return; }
+  try { m = await api("GET", `/api/inspelningar/${id}`); } catch (e) {
+    if (begardId !== id) return false; // anvandaren har gatt vidare
+    if (!tyst && nr === visaNr) begardId = visadId; // oppningen misslyckades: det som visas galler
+    kvitto(e.message, true);
+    return false;
+  }
+  // Ett langsamt svar for en inspelning man redan lamnat (A oppnad, sedan B), eller ett svar som
+  // ar aldre an det som redan visas for samma inspelning, kastas.
+  if (begardId !== id || nr < renderadNr) return false;
+  renderadNr = nr;
   const byttId = visadId !== id;
   visadId = id;
   const v = $("visning");
@@ -1240,7 +1402,9 @@ async function visa(id, tyst = false) {
   visadMeta = m;
   stangTalarval();
   renderaNamn(m);
-  renderaText(m);
+  // Texten byggs bara nar den syns (under en ny transkribering ligger den gamla kvar pa disken).
+  if (harText) renderaText(m);
+  else $("v-text").replaceChildren();
   $("v-text").hidden = !harText;
   renderaOsakert(m);
 
@@ -1252,7 +1416,7 @@ async function visa(id, tyst = false) {
   $("v-anvand-rubrik").hidden = !harText;
   $("v-atgarder").hidden = !harText;
   $("v-till-nedladdning").hidden = !harText;
-  $("v-rattad").hidden = !(harText && res.segment_original);
+  $("v-rattad").hidden = !(harText && m.rattad);
   v.classList.toggle("utan-text", !harText);
   numreraSteg();
 
@@ -1260,9 +1424,12 @@ async function visa(id, tyst = false) {
   $("v-txt").href = `/api/inspelningar/${id}/text.txt`;
   $("v-ljudfil").href = `/api/inspelningar/${id}/ljud?ladda_ner=1`;
   if (byttId && !tyst) rulla(v, "start");
+  // Rullar visningen redan dit far fokus inte avbryta den mjuka rullningen.
+  if (fokus) $("v-rubrik").focus({ preventScroll: byttId && !tyst });
   if (PAGAENDE.has(m.status)) uppdateraLista();
   markeraVisad();
   uppdateraSpelare();
+  return true;
 }
 
 // Vad som hant och vad man kan gora harnast, nar det inte finns nagon text att visa.
@@ -1603,6 +1770,19 @@ function klickPaOrd(e) {
   if (!ord || doljOsakraOrd || !visadMeta) return;
   const sel = window.getSelection();
   if (sel && !sel.isCollapsed) return;
+  spelaOrd(ord);
+}
+
+// Enter eller mellanslag pa ett osakert ord gor samma sak som ett klick.
+function ordTangent(e) {
+  if ((e.key !== "Enter" && e.key !== " ") || e.altKey || e.ctrlKey || e.metaKey) return;
+  const ord = e.target; // ordet sjalvt har fokus
+  if (!ord.classList || !ord.classList.contains("osakert-ord") || doljOsakraOrd || !visadMeta) return;
+  e.preventDefault(); // mellanslag ska inte rulla sidan
+  spelaOrd(ord);
+}
+
+function spelaOrd(ord) {
   const s = visadMeta.resultat.segment[Number(ord.closest("p[data-replik]").dataset.replik)];
   if (s) spelaFran(Math.max(s.start, ordTid(s, Number(ord.dataset.ord)) - 2));
 }
@@ -1647,7 +1827,7 @@ function renderaText(m) {
       s.text.trim().split(/\s+/).forEach((ord, k) => {
         if (k) text.append(" ");
         text.append(osakra.has(k)
-          ? el("span", { "data-ord": String(k), class: "osakert-ord", title: ordTitel() }, ord)
+          ? ordKlickbart(el("span", { "data-ord": String(k), class: "osakert-ord" }, ord))
           : el("span", { "data-ord": String(k) }, ord));
       });
       p.append(text);
@@ -1661,6 +1841,21 @@ function renderaText(m) {
 // Med dolda understrykningar gar orden inte att klicka pa, och da ska titeln inte lova det.
 function ordTitel() {
   return doljOsakraOrd ? undefined : "Programmet var osäkert på ordet. Klicka för att lyssna.";
+}
+
+// Ett osakert ord som gar att klicka pa ar en knapp aven for tangentbordet (Enter och
+// mellanslag, se ordTangent). Med dolda understrykningar ar det vanlig text igen.
+function ordKlickbart(ord) {
+  if (doljOsakraOrd) {
+    ord.removeAttribute("title");
+    ord.removeAttribute("role");
+    ord.removeAttribute("tabindex");
+  } else {
+    ord.title = ordTitel();
+    ord.setAttribute("role", "button");
+    ord.tabIndex = 0;
+  }
+  return ord;
 }
 
 // Forklaringen visar markeringarna sa som de ser ut i texten, och bara de som finns.
@@ -1701,10 +1896,7 @@ function vaxlaUnderstrykningar() {
   const knapp = $("v-understrykningar");
   knapp.setAttribute("aria-pressed", String(doljOsakraOrd));
   knapp.textContent = doljOsakraOrd ? "Visa understrykningar" : "Dölj understrykningar";
-  for (const ord of $("v-text").querySelectorAll(".osakert-ord")) {
-    if (doljOsakraOrd) ord.removeAttribute("title");
-    else ord.title = ordTitel();
-  }
+  for (const ord of $("v-text").querySelectorAll(".osakert-ord")) ordKlickbart(ord);
 }
 
 // Lage star som egen text intill knappen: "3 osaker" innan man borjat, "1 av 3" nar man star
@@ -1857,6 +2049,7 @@ async function ratta(i, val) {
     const svar = await api("POST", `/api/inspelningar/${m.id}/talare`, { replik: i, text: s.text, ...val });
     const y = window.scrollY;
     await visa(m.id, true);
+    if (begardId !== m.id) { uppdateraLista(); return; } // en annan inspelning oppnas, eller visningen ar stangd
     window.scrollTo(0, y);
     const nya = visadMeta.resultat.segment;
     const mal = replikVid(nya, t, svar.talare);
@@ -1941,11 +2134,18 @@ function visaRubrikform(visa) {
 
 async function sparaRubrik(e) {
   e.preventDefault();
+  const id = visadId;
   try {
-    const { rubrik } = await api("POST", `/api/inspelningar/${visadId}/titel`, { titel: $("v-titel").value });
+    const { titel, rubrik } = await api("POST", `/api/inspelningar/${id}/titel`, { titel: $("v-titel").value });
     visaRubrikform(false);
     kvitto(`Rubriken är ändrad till "${rubrik}".`);
-    visa(visadId, true);
+    // Bara rubriken andras: resten av visningen behover inte byggas om.
+    if (visadId === id && begardId === id) {
+      $("v-rubrik").textContent = rubrik;
+      $("v-titel").placeholder = rubrik;
+      $("visning").dataset.titel = titel || "";
+      if (visadMeta) { visadMeta.rubrik = rubrik; visadMeta.titel = titel || ""; }
+    }
     uppdateraLista();
   } catch (fel) { kvitto(fel.message, true); }
 }
@@ -1953,6 +2153,7 @@ async function sparaRubrik(e) {
 function stangVisning() {
   visadId = null;
   visadMeta = null;
+  begardId = null; // ett svar som ar pa vag oppnar inte visningen igen
   stangTalarval();
   visaYta();
   $("v-ljud").pause();
@@ -2006,6 +2207,7 @@ new ResizeObserver(([rad]) => {
 $("v-text").addEventListener("mouseup", efterMarkering);
 $("v-text").addEventListener("keyup", (e) => { if (e.shiftKey) efterMarkering(); });
 $("v-text").addEventListener("click", klickPaOrd);
+$("v-text").addEventListener("keydown", ordTangent);
 // Ett rostprov slutar galla sa fort anvandaren sjalv pausar eller hoppar i ljudet (spelarens
 // reglage, "Backa 5 s"); annars skulle provets stopp pausa det man valt att lyssna pa.
 $("v-ljud").addEventListener("pause", () => stoppaProv(false));
@@ -2043,6 +2245,18 @@ document.addEventListener("mousedown", (e) => {
 });
 window.addEventListener("beforeunload", (e) => {
   if (inspelning) { e.preventDefault(); e.returnValue = ""; }
+});
+// Listan fragas inte medan fliken ar dold, och hamtas direkt nar den syns igen (se planeraLista).
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    if (pollTimer !== null) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+      listaVantar = true;
+    }
+  } else if (listaVantar) {
+    uppdateraLista();
+  }
 });
 
 for (const g of document.querySelectorAll(".forlopp-stapel .gang")) g.append(vandrare());

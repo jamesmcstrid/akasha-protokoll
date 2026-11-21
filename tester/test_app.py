@@ -3,10 +3,12 @@ import io
 import json
 import os
 import threading
+import time
 import unittest
 from unittest import mock
 
 import numpy as np
+from werkzeug.datastructures import FileStorage
 
 import hjalp
 import app as akasha
@@ -439,7 +441,7 @@ class TestApp(unittest.TestCase):
             akasha._framsteg.pop(id_, None)
 
     def test_ovantat_fel_ger_json(self):
-        with mock.patch.object(lagring, "lista", side_effect=RuntimeError("disken borta")):
+        with mock.patch.object(lagring, "sammanfattningar", side_effect=RuntimeError("disken borta")):
             r = self.klient.get("/api/inspelningar")
         self.assertEqual(r.status_code, 500)
         self.assertIn("disken borta", r.get_json()["error"])
@@ -452,6 +454,220 @@ class TestApp(unittest.TestCase):
         self.assertEqual(r.status_code, 200, svar)
         self.assertEqual(svar["speakers"], 2)
         self.assertEqual(svar["segments"][1]["text"], "Hej Anna.")
+
+    # --- arbetstraden, kapplopningar och API:t -------------------------------------------
+
+    def vanta_pa_kon(self, sekunder=5):
+        """Som _ko.join(), men med en tidsgrans: en dod arbetstrad ska ge ett fel, inte hanga testerna."""
+        slut = time.monotonic() + sekunder
+        while akasha._ko.unfinished_tasks and time.monotonic() < slut:
+            time.sleep(0.02)
+        self.assertEqual(akasha._ko.unfinished_tasks, 0, "arbetstraden tar inte jobben i kon")
+
+    def ladda_upp_och_vanta(self):
+        r = self.klient.post("/api/inspelningar/fil", headers=H, content_type="multipart/form-data",
+                             data={"ljud": (io.BytesIO(b"ljud"), "mote.m4a"), "talare": "2"})
+        self.assertEqual(r.status_code, 201, r.get_json())
+        self.vanta_pa_kon()
+        return r.get_json()["id"]
+
+    def test_arbetstraden_overlever_nar_felstatus_inte_gar_att_skriva(self):
+        def raderad_under_jobbet(*a, **k):
+            for m in lagring.lista():  # raderad utanfor programmet: felstatus ger 404
+                lagring.radera(m["id"])
+            raise motor.MotorFel("whisper-cli avslutades med kod 1")
+
+        def motorfel(*a, **k):
+            raise motor.MotorFel("whisper-cli avslutades med kod 1")
+
+        riktig = lagring.uppdatera
+
+        def full_disk(id_, **falt):
+            if falt.get("status") == "fel":
+                raise OSError(28, "No space left on device")
+            return riktig(id_, **falt)
+
+        fall = [("404", [mock.patch.object(motor, "transkribera", raderad_under_jobbet)]),
+                ("OSError", [mock.patch.object(motor, "transkribera", motorfel),
+                             mock.patch.object(lagring, "uppdatera", full_disk)])]
+        for namn, patchar in fall:
+            with self.subTest(namn), self.assertLogs("akasha-protokoll", "WARNING") as logg:
+                for p in patchar:
+                    p.start()
+                try:
+                    self.ladda_upp_och_vanta()
+                finally:
+                    for p in patchar:
+                        p.stop()
+                # Nasta jobb ska fortfarande koras.
+                self.assertEqual(lagring.las(self.ladda_upp_och_vanta())["status"], "klar")
+                self.assertTrue(any("kunde inte spara status fel" in rad for rad in logg.output), logg.output)
+
+    def test_radera_kontrollerar_status_och_raderar_under_samma_las(self):
+        # "Transkribera igen" (koa) far inte hinna emellan kontrollen och raderingen.
+        id_ = self.ladda_upp()
+        huvud = threading.current_thread()
+        riktig = lagring.las
+        koad = []
+        klar = threading.Event()
+        forsta = [True]
+
+        def koa_igen():
+            try:
+                akasha.koa(id_, {"talare": "2", "ord": ""})
+                koad.append("koad")
+            except lagring.Fel as e:
+                koad.append(e.kod)
+            klar.set()
+
+        def las_och_koa_emellan(i):
+            meta = riktig(i)
+            if forsta[0] and threading.current_thread() is huvud:
+                forsta[0] = False
+                t = threading.Thread(target=koa_igen)
+                t.start()
+                klar.wait(0.3)  # utan las hinner koa() bli klar har
+            return meta
+
+        with mock.patch.object(lagring, "las", las_och_koa_emellan):
+            r = self.klient.post(f"/api/inspelningar/{id_}/radera", headers=H)
+            self.assertTrue(klar.wait(5))
+        akasha._ko.join()
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(koad, [404])  # koa() fick vanta och sag att inspelningen var borta
+
+    def test_angra_talare_vagrar_under_transkribering(self):
+        id_ = self.ladda_upp()
+        url = f"/api/inspelningar/{id_}"
+        r = self.klient.post(f"{url}/talare", json={"replik": 0, "text": "Hej Bo.", "talare": 2}, headers=H)
+        self.assertEqual(r.status_code, 200, r.get_json())
+        for status in sorted(lagring.PAGAENDE):
+            lagring.uppdatera(id_, status=status)
+            r = self.klient.post(f"{url}/talare/angra", headers=H)
+            self.assertEqual((r.status_code, r.get_json()["error"]), (409, "Inspelningen transkriberas just nu."), status)
+        self.assertIn("segment_original", lagring.las(id_)["resultat"])
+        lagring.uppdatera(id_, status="klar")
+        self.assertEqual(self.klient.post(f"{url}/talare/angra", headers=H).status_code, 200)
+
+    def test_en_inspelning_skickar_inte_maskinens_version(self):
+        id_ = self.ladda_upp()
+        url = f"/api/inspelningar/{id_}"
+        m = self.klient.get(url).get_json()
+        self.assertIs(m["rattad"], False)
+        self.assertNotIn("segment_original", m["resultat"])
+        self.klient.post(f"{url}/talare", json={"replik": 0, "text": "Hej Bo.", "talare": 2}, headers=H)
+        m = self.klient.get(url).get_json()
+        self.assertIs(m["rattad"], True)
+        self.assertNotIn("segment_original", m["resultat"])
+        self.assertEqual([s["text"] for s in m["resultat"]["segment"]], ["Hej Bo. Hej Anna."])
+        self.assertIn("segment_original", lagring.las(id_)["resultat"])  # pa disken, for att kunna angra
+        self.assertIs(self.klient.get("/api/inspelningar").get_json()["inspelningar"][0]["rattad"], True)
+        self.klient.post(f"{url}/talare/angra", headers=H)
+        self.assertIs(self.klient.get(url).get_json()["rattad"], False)
+        pagar = self.klient.post("/api/inspelningar", headers=H, json={}).get_json()["id"]
+        self.assertIs(self.klient.get(f"/api/inspelningar/{pagar}").get_json()["rattad"], False)
+
+    def test_listan_har_samma_falt_som_forut(self):
+        # Samma poster som nar listan byggdes ur hela uppgifterna (lagring.lista()).
+        def som_forut(meta):
+            m = akasha.med_framsteg(meta)
+            res = m.pop("resultat", None) or {}
+            m["har_text"] = bool(res.get("segment"))
+            m["langd_s"] = res.get("langd_s")
+            m["rattad"] = "segment_original" in res
+            return m
+
+        rattad = self.ladda_upp()
+        self.klient.post(f"/api/inspelningar/{rattad}/talare", json={"replik": 0, "text": "Hej Bo.", "talare": 2},
+                         headers=H)
+        self.ladda_upp(talare_="1", titel="")
+        self.ladda_upp(innehall=b"trasig fil")
+        self.klient.post("/api/inspelningar", headers=H, json={"andelse": ".webm", "titel": "Pågår"})
+        lista = self.klient.get("/api/inspelningar").get_json()["inspelningar"]
+        self.assertEqual(len(lista), 4)
+        self.assertEqual(lista, [som_forut(m) for m in lagring.lista()])
+        self.assertTrue(all("resultat" not in m for m in lista))
+
+    def test_stereomixen_ar_densamma_och_kanalerna_orora(self):
+        n = motor.SR * 3
+        x = np.linspace(-0.9, 0.9, n, dtype=np.float32)
+        # Som ljud.avkoda: tva kanaler ur samma buffert, varannan sampel.
+        buffert = np.empty(2 * n, dtype=np.float32)
+        buffert[0::2], buffert[1::2] = x, x * 0.8
+        vanster, hoger = buffert[0::2], buffert[1::2]
+        v0, h0 = vanster.copy(), hoger.copy()
+        for tva in (True, False):
+            fick, kanaler = [], []
+
+            def transkribera(samples, per_ord=False, prompt="", framsteg=None):
+                fick.append(samples.copy())
+                return falsk_transkribera(samples, per_ord, prompt, framsteg)
+
+            def dela_upp_kanaler(v, h, ord_lista, antal, framsteg=None, ord_p=None):
+                kanaler.append((v.copy(), h.copy()))
+                return talare.repliker(ord_lista, [1, 1, 2, 2], fasta_nummer=True), 2, None
+
+            with self.subTest(tva_kanaler=tva), \
+                    mock.patch.object(motor, "avkoda_kanaler", lambda p: (vanster, hoger)), \
+                    mock.patch.object(talare, "har_tva_kanaler", lambda v, h: tva), \
+                    mock.patch.object(motor, "transkribera", transkribera), \
+                    mock.patch.object(talare, "dela_upp_kanaler", dela_upp_kanaler):
+                id_ = self.inspelning_i_delar({"talare": "2", "kalla": "digitalt"})
+                self.assertEqual(lagring.las(id_)["status"], "klar")
+                vantat = np.clip(v0 + h0, -1.0, 1.0) if tva else (v0 + h0) / 2
+                self.assertEqual(fick[0].dtype, vantat.dtype)
+                self.assertTrue(np.array_equal(fick[0], vantat))
+                if tva:
+                    self.assertGreater(np.abs(v0 + h0).max(), 1.0)  # klippningen provas
+                    self.assertTrue(np.array_equal(kanaler[0][0], v0) and np.array_equal(kanaler[0][1], h0))
+                self.assertTrue(np.array_equal(vanster, v0) and np.array_equal(hoger, h0))
+
+    def test_transcribe_sparar_uppladdningen_direkt_pa_disk(self):
+        sparade, lasta = [], []
+        riktig = FileStorage.save
+
+        def save(fil, dst, *a, **k):
+            sparade.append(dst)
+            return riktig(fil, dst, *a, **k)
+
+        def avkoda(sokvag):
+            with open(sokvag, "rb") as f:
+                lasta.append(f.read())
+            return np.zeros(motor.SR * 3, dtype=np.float32)
+
+        with mock.patch.object(FileStorage, "save", save), mock.patch.object(motor, "avkoda", avkoda):
+            r = self.klient.post("/transcribe", headers=H, content_type="multipart/form-data",
+                                 data={"audio": (io.BytesIO(b"ljud"), "a.m4a")})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        self.assertEqual(len(sparade), 1)
+        self.assertEqual(lasta, [b"ljud"])
+
+    def test_transcribe_ett_anrop_at_gangen(self):
+        inne, slapp = threading.Event(), threading.Event()
+
+        def langsam(samples, per_ord=False, prompt="", framsteg=None):
+            inne.set()
+            slapp.wait(2)
+            return falsk_transkribera(samples, per_ord, prompt, framsteg)
+
+        def anrop(klient=None, innehall=b"ljud"):
+            return (klient or self.klient).post("/transcribe", headers=H, content_type="multipart/form-data",
+                                                data={"audio": (io.BytesIO(innehall), "a.m4a")})
+
+        forsta = []
+        with mock.patch.object(motor, "transkribera", langsam):
+            t = threading.Thread(target=lambda: forsta.append(anrop(akasha.app.test_client()).status_code))
+            t.start()
+            self.assertTrue(inne.wait(5))
+            r = anrop()
+            slapp.set()
+            t.join(5)
+        self.assertEqual(r.status_code, 429)
+        self.assertIn("/transcribe", r.get_json()["error"])
+        self.assertEqual(forsta, [200])
+        # Laset slapps efter varje anrop, aven efter ett fel.
+        self.assertEqual(anrop(innehall=b"trasig fil").status_code, 400)
+        self.assertEqual(anrop().status_code, 200)
 
 
 
