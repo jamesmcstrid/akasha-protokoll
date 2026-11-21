@@ -24,7 +24,7 @@ Akasha Protokoll är ett program som du öppnar som vilket annat som helst. Sjä
 
 1. Öppna **Akasha Protokoll** i Program. Webbläsaren öppnas på sidan av sig själv. Har du installerat från
    Terminal går du i stället till **http://127.0.0.1:8611** i Chrome (eller Safari). Spara gärna
-   sidan som bokmärke. På Windows startar du **Akasha Protokoll.exe** i den uppackade mappen (se
+   sidan som bokmärke. På Windows startar du **Akasha Protokoll** från Start-menyn (se
    [Som program (prov, Windows)](#som-program-prov-windows)). Webbläsaren öppnas på sidan när programmet
    har startat.
 2. Välj **Hur spelas mötet in?** och **Hur många pratar?**. Skriv gärna namn och facktermer som
@@ -105,8 +105,9 @@ På en MacBook Air med Apple Silicon tog ett möte på 1 timme och 24 minuter 12
 transkribera och dela upp per talare, alltså drygt 8 minuter per timme möte. Medan texten tas
 fram visar sidan ungefär hur lång tid som är kvar.
 
-På Windows är tiden inte mätt. Programmet har inte transkriberat något med KB-Whisper på en Windows-dator
-än, så här står ingen siffra förrän det är gjort. Sidan visar ändå ungefär hur lång tid som är kvar.
+På Windows används processorn, och det tar längre tid. På en Dell med Intel Core (12:e generationen)
+tog transkriberingen ungefär 1,3–1,6 gånger så lång tid som ljudet: ett möte på en timme tar alltså
+runt 80–95 minuter. Med laddaren i och energiläget **Bästa prestanda** går det fortare.
 
 ## Installera
 
@@ -115,8 +116,9 @@ På Windows är tiden inte mätt. Programmet har inte transkriberat något med K
 Programmet byggs i GitHub Actions och är ännu inte signerat av Apple. Det kräver en Mac med Apple
 Silicon (M1 eller senare) och macOS 14 eller senare.
 
-1. Öppna repot på GitHub, gå till **Actions → Mac-app**, välj den senaste gröna körningen och ladda
-   ned **Akasha-Protokoll-mac-arm64.zip** under **Artifacts**.
+1. Öppna repot på GitHub (du måste vara inloggad), gå till **Actions → Mac-app**, välj den senaste gröna
+   körningen och ladda ned **Akasha-Protokoll-mac-arm64.zip** under **Artifacts**. Filen sparas bara i sju
+   dagar i Actions. Är den borta behövs en ny körning.
 2. Öppna zip-filen i Hämtade filer om Safari inte redan har gjort det, och dra **Akasha Protokoll** till
    **Program**.
 3. Dubbelklicka på Akasha Protokoll. Första gången säger macOS att "Akasha Protokoll" öppnades inte, eftersom
@@ -172,11 +174,10 @@ den igen.
 
 ### Som program (prov, Windows)
 
-Windows-programmet är nytt. Det har bara byggts och kontrollerats på en byggmaskin i GitHub Actions
-(Windows Server 2025), inte provats på en vanlig Windows-dator, och det är ännu inte signerat. Räkna med
-att något kan behöva rättas, och berätta vad du ser. Stegen nedan är därför kortare än för Mac: de
-fylls på, med bilder, när programmet har provats på en riktig dator. Programmet är byggt för
-64-bitars Windows (x64). Vilka versioner av Windows det fungerar på är inte provat.
+Windows-programmet är nytt och ännu inte signerat. Det är provat på en vanlig Windows 11-dator (Dell med
+Intel Core, 12:e generationen): installation, uppdatering ovanpå en äldre version, hämtning av modellerna,
+transkribering, ikonen vid klockan och avslut. Berätta vad du ser om något inte fungerar. Programmet är
+byggt för 64-bitars Windows (x64). Andra versioner än Windows 11 är inte provade.
 
 1. Öppna repot på GitHub (du måste vara inloggad), gå till **Actions → Windows-app**, välj den senaste
    gröna körningen och ladda ned **Akasha-Protokoll-installation.exe** under **Artifacts**. Filen sparas
@@ -195,17 +196,16 @@ fylls på, med bilder, när programmet har provats på en riktig dator. Programm
    **Akasha Protokoll** läggs alltid i Start-menyn. Sist kan du låta kryssrutan **Starta Akasha Protokoll**
    vara ikryssad, så startar programmet när guiden är klar.
 4. Ikonen kommer upp vid klockan och sidan öppnas av sig själv, så snart programmet har startat.
-   Sidan erbjuder att hämta modellerna (cirka 1,6 GB, bara första gången). Att hämta modellerna är
-   inte provat på Windows än.
+   Sidan erbjuder att hämta modellerna (cirka 1,6 GB, bara första gången).
 
-Hur guiden ser ut och fungerar med mus och tangentbord är inte provat på en riktig dator: det som är provat
-är en tyst installation på byggmaskinen (se docs/TEKNIK.md).
+Guiden är provad på en vanlig Windows-dator. Byggmaskinen provar dessutom en tyst installation vid varje
+bygge (se docs/TEKNIK.md).
 
 **Uppdatera:** kör den nya installationsfilen. Är Akasha Protokoll igång säger guiden till: "Installationsprogrammet
 har upptäckt att Akasha Protokoll är igång. Avsluta det angivna programmet nu. Klicka sedan på OK för att gå vidare
 eller på Avbryt för att avsluta." Avsluta programmet (högerklicka på ikonen vid klockan och välj
 **Avsluta Akasha Protokoll**) och klicka på OK. Guiden stänger inte programmet själv, eftersom en inspelning kan
-pågå. Uppdatering från en äldre installation är inte provad.
+pågå. Att uppdatera ovanpå en äldre installation är provat och fungerade.
 
 **Avinstallera:** Inställningar → Appar → Akasha Protokoll (inte provat). Bara programmet och genvägarna tas bort.
 Slutrutan säger: "Dina inspelningar ligger kvar i mappen AkashaProtokoll i din hemkatalog, och modellerna i
@@ -242,8 +242,8 @@ där den slutade nästa gång, och en inspelning fortsätter i webbläsaren och 
 Akasha Protokoll igen, så stäng inte fliken. Det du redan spelat in ligger kvar. Dubbelklickar du på
 **Akasha Protokoll.exe** igen medan programmet är igång öppnas sidan i det som redan körs, och det startar
 ingen annan kopia. Loggar du ut eller stänger av datorn är det avsett att programmet avslutas utan att
-fråga, med samma följder som om du svarade *Ja*. Hur ikonen, menyn och rutorna ser ut, och vad som händer
-vid utloggning, är inte provat på en riktig Windows-dator än.
+fråga, med samma följder som om du svarade *Ja*. Ikonen och **Avsluta Akasha Protokoll** är provade på en
+vanlig Windows-dator. Frågan före avslut och vad som händer vid utloggning är inte provade än.
 
 Ingen har haft det gamla namnet Akasha Meet på Windows, så avsnittet nedan om att byta namn gäller bara Mac.
 
@@ -252,17 +252,17 @@ Ingen har haft det gamla namnet Akasha Meet på Windows, så avsnittet nedan om 
 Det här avsnittet gäller Mac. För Windows finns än så länge bara programmet ovan.
 
 Kräver: en Mac (helst Apple Silicon), [Homebrew](https://brew.sh) och cirka 4 GB ledigt utrymme.
-Repot är privat, så du behöver läsrätt till det och en SSH-nyckel kopplad till ditt GitHub-konto.
 Öppna Terminal och kör:
 
 ```bash
 brew install python@3.12 git
-git clone git@github.com:jamesmcstrid/akasha-protokoll.git ~/akasha-meet
+git clone https://github.com/jamesmcstrid/akasha-protokoll.git ~/akasha-meet
 cd ~/akasha-meet
 bash mac/installera.sh
 ```
 
-Mappen ska ligga direkt i din hemkatalog, som `~/akasha-meet` ovan, och inte i Hämtade filer,
+Mappen heter `akasha-meet` efter programmets gamla namn, och installationen räknar med det namnet.
+Den ska ligga direkt i din hemkatalog, som `~/akasha-meet` ovan, och inte i Hämtade filer,
 Dokument, Skrivbord eller iCloud Drive. Där låter macOS inte bakgrundstjänster läsa, och
 installationen säger ifrån. Har du laddat ned repot som zip-fil, flytta den uppackade mappen till
 hemkatalogen innan du kör installationen.
@@ -347,6 +347,7 @@ Starta sedan om tjänsten med `launchctl kickstart -k gui/$(id -u)/local.akasha-
 | `ORDLISTA` | tom | Ord som alltid ska stavas rätt, till exempel företagets namn |
 | `DATAKATALOG` | `~/AkashaProtokoll` (på Windows `C:\Users\<namn>\AkashaProtokoll`) | Var inspelningar och texter sparas |
 | `PORT` | `8611` | Webbsidans port |
+| `GRAFIK` | `av` | Bara Windows-programmet. `pa` provar grafikkretsen (Vulkan) i stället för processorn. På en Dell med Intels inbyggda grafik blev det långsammare (71 s mot 54 s för 34 s ljud), så processorn är standard. Mät själv, se Felsökning |
 | `TALARE_TROSKEL` | `0.6` | Två röster som liknar varandra mer än så räknas som samma person (0–1) |
 | `MAX_MB` | `1024` | Största fil som går att ladda upp |
 
