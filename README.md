@@ -113,12 +113,11 @@ runt 80–95 minuter. Med laddaren i och energiläget **Bästa prestanda** går 
 
 ### Som program (prov, Mac med Apple Silicon)
 
-Programmet byggs i GitHub Actions och är ännu inte signerat av Apple. Det kräver en Mac med Apple
+Programmet byggs i GitHub Actions och läggs ut under [Releases](https://github.com/jamesmcstrid/akasha-protokoll/releases/latest). Det är ännu inte signerat av Apple. Det kräver en Mac med Apple
 Silicon (M1 eller senare) och macOS 14 eller senare.
 
-1. Öppna repot på GitHub (du måste vara inloggad), gå till **Actions → Mac-app**, välj den senaste gröna
-   körningen och ladda ned **Akasha-Protokoll-mac-arm64.zip** under **Artifacts**. Filen sparas bara i sju
-   dagar i Actions. Är den borta behövs en ny körning.
+1. Öppna [den senaste releasen](https://github.com/jamesmcstrid/akasha-protokoll/releases/latest) och ladda ned **Akasha-Protokoll-mac-arm64.zip**
+   under **Assets**. Du behöver inget GitHub-konto.
 2. Öppna zip-filen i Hämtade filer om Safari inte redan har gjort det, och dra **Akasha Protokoll** till
    **Program**.
 3. Dubbelklicka på Akasha Protokoll. Första gången säger macOS att "Akasha Protokoll" öppnades inte, eftersom
@@ -179,11 +178,9 @@ Intel Core, 12:e generationen): installation, uppdatering ovanpå en äldre vers
 transkribering, ikonen vid klockan och avslut. Berätta vad du ser om något inte fungerar. Programmet är
 byggt för 64-bitars Windows (x64). Andra versioner än Windows 11 är inte provade.
 
-1. Öppna repot på GitHub (du måste vara inloggad), gå till **Actions → Windows-app**, välj den senaste
-   gröna körningen och ladda ned **Akasha-Protokoll-installation.exe** under **Artifacts**. Filen sparas
-   bara i sju dagar i Actions. Är den borta behövs en ny körning. Under Artifacts ligger också
-   `SHA256SUMS.txt` (se Kontrollera nedladdningen nedan) och zip-filen, om du hellre vill slippa
-   installera (se längre ned).
+1. Öppna [den senaste releasen](https://github.com/jamesmcstrid/akasha-protokoll/releases/latest) och ladda ned **Akasha-Protokoll-installation.exe**
+   under **Assets**. Du behöver inget GitHub-konto. Där ligger också `SHA256SUMS.txt` (se Kontrollera
+   nedladdningen nedan) och zip-filen, om du hellre vill slippa installera (se längre ned).
 2. Dubbelklicka på filen. Första gången brukar Windows varna för program som det inte känner igen,
    särskilt filer som hämtats från internet. Den här varningen beror på att programmet inte är
    signerat. Rutan har en länk för mer information, och efter den en knapp för att köra ändå. Vad rutan
@@ -217,8 +214,8 @@ välj **Extrahera alla…**. Följ rutan som öppnas. Mappen **Akasha Protokoll*
 där den får ligga kvar, och starta inte programmet inifrån zip-filen. Det behöver filerna i mappen bredvid sig.
 Öppna mappen och dubbelklicka på **Akasha Protokoll.exe**. Windows varnar på samma sätt som ovan.
 
-**Kontrollera nedladdningen:** varje körning lägger också en fil, `SHA256SUMS.txt`, bland artefakterna. Den har
-en kontrollsumma (SHA-256) för zip-filen och för installationsfilen. Är du osäker på att filen är orörd, jämför
+**Kontrollera nedladdningen:** releasen har också en fil, `SHA256SUMS.txt`, med en kontrollsumma (SHA-256) för
+varje fil i releasen. Är du osäker på att filen är orörd, jämför
 summan. Öppna PowerShell och skriv, om filen ligger i Hämtade filer:
 
 ```powershell
@@ -227,7 +224,8 @@ Get-FileHash "$HOME\Downloads\Akasha-Protokoll-installation.exe" -Algorithm SHA2
 
 Summan som visas ska vara densamma som på raden för filen i `SHA256SUMS.txt`. Stora och små bokstäver spelar
 ingen roll. Kontrollsumman visar att filen inte har ändrats på vägen eller blivit skadad, men inte vem som har
-byggt den: den kommer från samma körning, så den ersätter ingen signering. Mac-programmet har ingen sådan fil.
+byggt den: den ligger i samma release, så den ersätter ingen signering. På Mac kontrollerar du summan i Terminal
+med `shasum -a 256 ~/Downloads/Akasha-Protokoll-mac-arm64.zip`.
 
 **Igång och avsluta på Windows:** när Akasha Protokoll är igång finns en ikon vid klockan, längst ned i
 aktivitetsfältet. Syns den inte, klicka på pilen **^** vid klockan: Windows lägger ofta nya ikoner där.
