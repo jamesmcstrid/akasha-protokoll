@@ -144,33 +144,6 @@ direkt efter ett försök att öppna det, kör en gång i Terminal:
 ikonen för att öppna sidan igen. Avsluta med **⌘Q** eller genom att högerklicka på ikonen och välja
 **Avsluta**. Det du redan spelat in ligger kvar.
 
-**Har du installerat från Terminal tidigare** frågar programmet om det ska ta över. Då stängs den
-gamla installationen av och startar inte längre när du loggar in. Inspelningarna
-och modellerna du redan har används av programmet, så ingenting hämtas igen. Vill du ha tillbaka den
-gamla kör du `bash mac/installera.sh` igen. Ligger den gamla mappen i Hämtade filer, Dokument eller
-Skrivbord letar programmet inte efter modeller där (macOS skulle annars fråga om lov), utan erbjuder
-att hämta dem. Flytta mappen till hemkatalogen först om du vill slippa hämta igen.
-
-### Från Akasha Meet till Akasha Protokoll
-
-Programmet hette tidigare Akasha Meet. Det här avsnittet gäller Mac. Har du det installerat:
-
-1. Avsluta Akasha Meet med **⌘Q**.
-2. Ladda ned Akasha Protokoll och öppna det enligt stegen ovan. Första gången behövs **Öppna ändå**
-   igen, eftersom macOS ser det som ett nytt program.
-3. Inspelningarna och modellerna flyttas av sig själva när Akasha Protokoll startar första gången:
-   `~/AkashaMeet` blir `~/AkashaProtokoll`, och `~/Library/Application Support/Akasha Meet` (modeller
-   och inställningar) blir `~/Library/Application Support/Akasha Protokoll`. Mapparna döps bara om:
-   ingenting kopieras eller raderas. Finns den nya mappen redan rörs ingenting, och har du satt en
-   egen `DATAKATALOG` flyttas inte inspelningarna. Är Akasha Meet inte avslutat öppnar Akasha
-   Protokoll bara sidan i den, och flytten görs nästa gång.
-4. När Akasha Protokoll fungerar flyttar du Akasha Meet till Papperskorgen. Öppnas den gamla igen
-   hittar den varken inspelningar eller modeller och erbjuder en ny hämtning på cirka 1,6 GB.
-5. Mappen `~/Library/Logs/Akasha Meet` med de gamla loggarna kan tas bort. Loggarna flyttas inte.
-
-Har du installerat från Terminal flyttar `bash mac/installera.sh` mapparna på samma sätt när du kör
-den igen.
-
 ### Som program (prov, Windows)
 
 Windows-programmet är nytt och ännu inte signerat. Det är provat på en vanlig Windows 11-dator (Dell med
@@ -243,7 +216,6 @@ ingen annan kopia. Loggar du ut eller stänger av datorn är det avsett att prog
 fråga, med samma följder som om du svarade *Ja*. Ikonen och **Avsluta Akasha Protokoll** är provade på en
 vanlig Windows-dator. Frågan före avslut och vad som händer vid utloggning är inte provade än.
 
-Ingen har haft det gamla namnet Akasha Meet på Windows, så avsnittet nedan om att byta namn gäller bara Mac.
 
 ### Från Terminal
 
