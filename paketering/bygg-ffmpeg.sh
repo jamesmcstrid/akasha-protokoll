@@ -41,9 +41,10 @@ case "$(uname -s)" in
     ANTAL="$(sysctl -n hw.ncpu)" ;;
   MINGW*|UCRT64*|CLANG64*|MSYS*|CYGWIN*)  # MSYS2: uname -s foljer MSYSTEM (UCRT64_NT-... i UCRT64)
     SYSTEM=windows
-    # w32threads sags uttryckligen (configure raknar tradarna som autodetekterade), och libgcc lankas in statiskt:
-    # annars skulle DLL-filerna behova libgcc_s_seh-1.dll
-    TILLAGG=(--enable-w32threads --extra-ldflags=-static-libgcc)
+    # w32threads sags uttryckligen (configure raknar tradarna som autodetekterade), och libgcc och winpthreads lankas in
+    # statiskt (-static): annars skulle DLL-filerna behova libgcc_s_seh-1.dll och libwinpthread-1.dll (gcc i MSYS2 har
+    # tradmodellen posix, och clock_gettime kommer fran winpthreads)
+    TILLAGG=(--enable-w32threads "--extra-ldflags=-static-libgcc -static")
     # gcc ar ett Windows-program: MSYS2 maste skriva om /d/a/... och /tmp/... till Windows-form (som MSYS_NO_PATHCONV,
     # satt for Git Bash, stanger av)
     unset MSYS_NO_PATHCONV MSYS2_ARG_CONV_EXCL
@@ -127,6 +128,11 @@ if [ "$SYSTEM" = windows ]; then
   # mingw-w64-runtimen (startkoden och delar av libmingwex lankas in i varje DLL): dess licenstext
   fil="$(find /ucrt64/share/licenses -name 'COPYING.MinGW-w64-runtime*' 2>/dev/null | sed -n 1p)"
   [ -n "$fil" ] && cp "$fil" "$UT/ffmpeg/COPYING.MinGW-w64-runtime.txt" || echo "VARNING: hittade inte mingw-w64-runtimens licens"
+  # winpthreads (statiskt inlankad, -static ovan)
+  fil="$(find /ucrt64/share/licenses -path '*winpthreads*' -name 'COPYING*' 2>/dev/null | sed -n 1p)"
+  [ -n "$fil" ] && cp "$fil" "$UT/ffmpeg/COPYING.winpthreads.txt" || echo "VARNING: hittade inte winpthreads licens"
+  echo "-- licenserna i /ucrt64/share/licenses som galler runtimen:"
+  find /ucrt64/share/licenses \( -path '*crt*' -o -path '*winpthreads*' -o -path '*gcc*' \) -type f 2>/dev/null | sed -n 1,40p
   ls -l "$UT/ffmpeg"
 fi
 # kallkoden som arkiv: samma innehall varje gang (git archive ar deterministiskt, xz med en trad)

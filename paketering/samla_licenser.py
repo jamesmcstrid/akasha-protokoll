@@ -86,6 +86,8 @@ FFMPEG_BIBLIOTEK = ("avutil", "avcodec", "avformat", "avfilter", "avdevice", "sw
 FFMPEG_NAMN = re.compile(r"^(?:lib)?(" + "|".join(FFMPEG_BIBLIOTEK) + r")(?=[-._])", re.I)
 WHISPER_NAMN = re.compile(r"^(whisper|ggml)", re.I)
 MINGW_RUNTIME = "COPYING.MinGW-w64-runtime.txt"  # bygg-ffmpeg.sh kopierar den ur MSYS2 UCRT64
+WINPTHREADS = "COPYING.winpthreads.txt"  # winpthreads, statiskt inlankad i FFmpeg-DLL:erna (-static)
+MINGW_TEXTER = ("COPYING3", "COPYING.RUNTIME", MINGW_RUNTIME, WINPTHREADS)
 TECKEN_I_NYCKEL = re.compile(r"[a-z]+")
 STOPPORD = {"core", "base", "shared", "static", "cpython", "darwin", "linux", "win32", "amd64", "x86_64", "arm64", "dylib",
             "lib", "dll", "api"}
@@ -518,24 +520,24 @@ def ffmpeg_komponenter(katalog, bibliotek, res):
               if os.path.isfile(os.path.join(katalog, n))]
     ut = [Komponent("FFmpeg", version, "LGPL-2.1-or-later", kalla, "ffmpeg.txt", huvud(rader) + text_ur_filer(texter))]
     # Windows (MinGW-w64 i MSYS2 UCRT64): libgcc och mingw-w64-runtimen ar statiskt inlankade i FFmpeg-DLL:erna
-    gcc = [(n, os.path.join(katalog, n)) for n in ("COPYING3", "COPYING.RUNTIME", MINGW_RUNTIME)
+    gcc = [(n, os.path.join(katalog, n)) for n in MINGW_TEXTER
            if os.path.isfile(os.path.join(katalog, n))]
     mingw = info.get("system") == "windows" or bool(gcc)
     if mingw:
-        saknas = [n for n in ("COPYING3", "COPYING.RUNTIME", MINGW_RUNTIME) if not os.path.isfile(os.path.join(katalog, n))]
+        saknas = [n for n in MINGW_TEXTER if not os.path.isfile(os.path.join(katalog, n))]
         if saknas:
-            res.fel.append(f"FFmpeg (Windows): {', '.join(saknas)} saknas i {katalog}: libgcc och mingw-w64-runtimen är "
-                           f"inlänkade i DLL-filerna (bygg-ffmpeg.sh kopierar texterna ur MSYS2 UCRT64)")
+            res.fel.append(f"FFmpeg (Windows): {', '.join(saknas)} saknas i {katalog}: libgcc, mingw-w64-runtimen och "
+                           f"winpthreads är inlänkade i DLL-filerna (bygg-ffmpeg.sh kopierar texterna ur MSYS2 UCRT64)")
         rader = ["GCC- och mingw-w64-runtimen (i FFmpeg-biblioteken på Windows)",
                  "Licens: GPL-3.0-or-later WITH GCC-exception-3.1 (libgcc); mingw-w64-runtimen: ZPL-2.1, public domain "
                  "och andra fria licenser (se texten nedan)",
                  "Källa: https://gcc.gnu.org/ och https://www.mingw-w64.org/ (MSYS2 UCRT64, https://www.msys2.org/)",
-                 "libgcc (-static-libgcc) och mingw-w64-runtimens startkod är statiskt inlänkade i FFmpeg-biblioteken på "
-                 "Windows. Undantaget i COPYING.RUNTIME gör att programmet inte behöver vara under GPL."]
+                 "libgcc, mingw-w64-runtimens startkod och winpthreads (-static) är statiskt inlänkade i "
+                 "FFmpeg-biblioteken på Windows. Undantaget i COPYING.RUNTIME gör att programmet inte behöver vara under GPL."]
         if info.get("kompilator"):
             rader.append(f"Kompilator: {info['kompilator']}")
         ut.append(Komponent("GCC- och mingw-w64-runtimen (i FFmpeg)", "-",
-                            "GPL-3.0-or-later WITH GCC-exception-3.1; ZPL-2.1 m.fl.",
+                            "GPL-3.0-or-later WITH GCC-exception-3.1; ZPL-2.1, MIT m.fl.",
                             "https://gcc.gnu.org/, https://www.mingw-w64.org/", "gcc-mingw-runtime.txt",
                             huvud(rader) + text_ur_filer(gcc)))
     return ut

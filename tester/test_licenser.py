@@ -89,6 +89,7 @@ def ffmpeg_katalog(test, kompilator=True, gcc=True, mingw=True):
         skriv(os.path.join(mapp, "COPYING.RUNTIME"), "GCC RUNTIME LIBRARY EXCEPTION\nVersion 3.1, 31 March 2009\n")
         if mingw:
             skriv(os.path.join(mapp, "COPYING.MinGW-w64-runtime.txt"), "MinGW-w64 runtime licensing\n***************************\n")
+            skriv(os.path.join(mapp, "COPYING.winpthreads.txt"), "Copyright (c) 2011 mingw-w64 project\n")
     return mapp
 
 
@@ -283,6 +284,7 @@ class SamlaLicenser(unittest.TestCase):
         text = las_fil(os.path.join(self.ut, "gcc-mingw-runtime.txt"))
         self.assertIn("GCC RUNTIME LIBRARY EXCEPTION", text)
         self.assertIn("MinGW-w64 runtime licensing", text)
+        self.assertIn("===== COPYING.winpthreads.txt =====", text)
         self.assertIn("i samma GitHub Release som programmet", ffmpeg[3])
         self.assertIn("finns i samma GitHub Release som\nprogrammet (ffmpeg-6.1.6-kallkod.tar.xz)",
                       las_fil(os.path.join(self.ut, sl.FORTECKNING)))
@@ -294,7 +296,7 @@ class SamlaLicenser(unittest.TestCase):
         self.lagg_av()
         res = self.samla({"av": self.p.filer("av")}, ffmpeg_licenser=ffmpeg_katalog(self, mingw=False))
         self.assertEqual(len(res.fel), 1, res.fel)
-        self.assertIn("COPYING.MinGW-w64-runtime.txt saknas", res.fel[0])
+        self.assertIn("COPYING.MinGW-w64-runtime.txt, COPYING.winpthreads.txt saknas", res.fel[0])
         res = self.samla({"av": self.p.filer("av")}, ffmpeg_licenser=ffmpeg_katalog(self, gcc=False))
         self.assertEqual(res.fel, [])  # Linux och Mac: ingen MinGW
         _, rader = rader_i_forteckningen(self.ut)
