@@ -63,6 +63,7 @@ def filtyp(sokvag, tabell=FILTYPER):
 _ko = queue.Queue()
 _framsteg = {}  # id -> {"fas": ..., "andel": 0..1, "start": monotonic}, bara i minnet
 _arbetare_startad = threading.Event()
+_direkt_las = threading.Lock()  # /transcribe: ett anrop at gangen
 
 
 # --- skydd --------------------------------------------------------------------------------
@@ -151,12 +152,11 @@ def med_framsteg(meta):
     return meta
 
 
-def sammanfattning(meta):
-    m = med_framsteg(meta)
-    res = m.pop("resultat", None) or {}
-    m["har_text"] = bool(res.get("segment"))
-    m["langd_s"] = res.get("langd_s")
-    m["rattad"] = "segment_original" in res  # talarna har rättats för hand
+def sammanfattning(kort):
+    """En post i listan, ur lagring.sammanfattningar(): har_text, langd_s och rattad ar redan
+    utraknade, och resultat har bara det som export.info behover."""
+    m = med_framsteg(kort)
+    m.pop("resultat", None)
     return m
 
 
@@ -210,12 +210,15 @@ def kor(id_):
     try:
         if inst.get("kalla") == "digitalt":
             vanster, hoger = motor.avkoda_kanaler(lagring.ljudfil(meta))
+            # Summan far en egen buffert som klipps eller halveras pa plats: en kopia i stallet for
+            # tva. vanster och hoger far inte skrivas over, de gar till talare.dela_upp_kanaler.
+            samples = np.add(vanster, hoger)
             if talare.har_tva_kanaler(vanster, hoger):
                 kanaler = (vanster, hoger)
                 # Whisper far bada kanalerna: din rost och motet.
-                samples = np.clip(vanster + hoger, -1.0, 1.0)
+                np.clip(samples, -1.0, 1.0, out=samples)
             else:
-                samples = (vanster + hoger) / 2
+                samples /= 2
         else:
             samples = motor.avkoda(lagring.ljudfil(meta))
     except Exception as e:
@@ -264,6 +267,18 @@ def kor(id_):
     skriv_text(meta)
 
 
+def _skriv_status(id_, **falt):
+    """Status for ett jobb som inte blev klart. Kastar aldrig: den enda arbetstraden far inte do av
+    att inspelningen har raderats (Fel 404) eller av ett diskfel, da blir alla kommande jobb
+    liggande i kon."""
+    try:
+        lagring.uppdatera(id_, **falt)
+    except lagring.Fel as e:
+        log.warning("kunde inte spara status %s for %s: %s", falt.get("status"), id_, e)
+    except Exception:  # noqa: BLE001
+        log.exception("kunde inte spara status %s for %s", falt.get("status"), id_)
+
+
 def _arbetare():
     while True:
         id_ = _ko.get()
@@ -271,23 +286,17 @@ def _arbetare():
             with plattform.hall_vaken():
                 kor(id_)
         except lagring.Fel as e:
-            lagring.uppdatera(id_, status="fel", fel=str(e))
+            _skriv_status(id_, status="fel", fel=str(e))
         except motor.Avbruten:
             # Programmet avslutas: samma status och text som aterstall_avbrutna() ger vid nasta start.
             log.info("avbruten %s: programmet avslutas", id_)
-            try:
-                lagring.uppdatera(id_, status="avbruten", fel=lagring.AVBRUTEN)
-            except lagring.Fel:
-                pass  # inspelningen raderades under tiden
+            _skriv_status(id_, status="avbruten", fel=lagring.AVBRUTEN)
         except motor.MotorFel as e:
             log.error("motorfel %s: %s", id_, e)
-            lagring.uppdatera(id_, status="fel", fel=f"Transkriberingen misslyckades: {e}")
+            _skriv_status(id_, status="fel", fel=f"Transkriberingen misslyckades: {e}")
         except Exception as e:  # noqa: BLE001 - jobbet far aldrig ta ner arbetstraden
             log.exception("ovantat fel i %s", id_)
-            try:
-                lagring.uppdatera(id_, status="fel", fel=f"Oväntat fel: {e}")
-            except lagring.Fel:
-                pass  # inspelningen raderades under tiden
+            _skriv_status(id_, status="fel", fel=f"Oväntat fel: {e}")
         finally:
             _framsteg.pop(id_, None)
             _ko.task_done()
@@ -390,7 +399,7 @@ def modeller_avbryt():
 
 @app.get("/api/inspelningar")
 def inspelningar():
-    return jsonify(inspelningar=[sammanfattning(m) for m in lagring.lista()])
+    return jsonify(inspelningar=[sammanfattning(m) for m in lagring.sammanfattningar()])
 
 
 @app.post("/api/inspelningar")
@@ -444,7 +453,14 @@ def transkribera_igen(id_):
 
 @app.get("/api/inspelningar/<id_>")
 def en_inspelning(id_):
-    return jsonify(med_framsteg(lagring.las(id_)))
+    m = med_framsteg(lagring.las(id_))
+    res = m.get("resultat") or {}
+    # Maskinens version (for att kunna angra) stannar pa disken. Sidan behover bara veta att den
+    # finns, som i listan.
+    m["rattad"] = "segment_original" in res
+    if m["rattad"]:
+        m["resultat"] = {k: v for k, v in res.items() if k != "segment_original"}
+    return jsonify(m)
 
 
 @app.post("/api/inspelningar/<id_>/titel")
@@ -515,6 +531,8 @@ def angra_talare(id_):
     """Tillbaka till maskinens version: alla rättningar av talare försvinner."""
     with lagring._las:
         meta = lagring.las(id_)
+        if meta["status"] in lagring.PAGAENDE:
+            raise lagring.Fel("Inspelningen transkriberas just nu.", 409)
         res = meta.get("resultat") or {}
         if "segment_original" not in res:
             raise lagring.Fel("Det finns inga rättningar att ångra.", 409)
@@ -555,9 +573,11 @@ def ljud(id_):
 
 @app.post("/api/inspelningar/<id_>/radera")
 def radera(id_):
-    if lagring.las(id_)["status"] in lagring.PAGAENDE:
-        raise lagring.Fel("Vänta tills transkriberingen är klar.", 409)
-    lagring.radera(id_)
+    # Under samma las: annars kan koa() hinna emellan, och ett jobb i kon far sin inspelning raderad.
+    with lagring._las:
+        if lagring.las(id_)["status"] in lagring.PAGAENDE:
+            raise lagring.Fel("Vänta tills transkriberingen är klar.", 409)
+        lagring.radera(id_)
     return jsonify(raderad=id_)
 
 
@@ -575,13 +595,23 @@ def transkribera_direkt():
             raise lagring.Fel("speakers maste vara 1-10 eller auto")
         if antal != 1 and talare.problem():
             return jsonify(error=talare.problem()), 503
-    data = fil.read()
+    # Ett anrop at gangen: varje anrop har ljudet i minnet och upptar en trad i waitress, och fler
+    # skulle anda bara vanta pa varandra (motor.transkribera kor en transkribering at gangen).
+    if not _direkt_las.acquire(blocking=False):
+        return jsonify(error="Ett annat anrop till /transcribe pågår. Försök igen om en stund."), 429
+    try:
+        return _transkribera_direkt(fil, antal)
+    finally:
+        _direkt_las.release()
+
+
+def _transkribera_direkt(fil, antal):
     # En egen katalog i stallet for NamedTemporaryFile: Windows later inte en oppen temporar fil
-    # oppnas igen med namnet, och avkodaren oppnar den.
+    # oppnas igen med namnet, och avkodaren oppnar den. Filen sparas direkt dit, utan att hela
+    # uppladdningen lases in i minnet forst.
     with tempfile.TemporaryDirectory(prefix="akasha-protokoll-") as katalog:
         sokvag = os.path.join(katalog, "ljud" + (os.path.splitext(fil.filename or "")[1] or ".audio"))
-        with open(sokvag, "wb") as f:
-            f.write(data)
+        fil.save(sokvag)
         t0 = time.time()
         try:
             samples = motor.avkoda(sokvag)
@@ -607,6 +637,7 @@ def forbered():
     """Det som maste goras en gang innan tjansten tar emot anrop."""
     os.makedirs(DATAKATALOG, mode=0o700, exist_ok=True)
     motor.stada_kvarglomda()
+    lagring.stada_halvfardiga()
     lagring.aterstall_avbrutna()
     starta_arbetare()
 
