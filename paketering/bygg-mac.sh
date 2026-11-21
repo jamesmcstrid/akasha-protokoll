@@ -3,7 +3,8 @@
 #   bash paketering/bygg-mac.sh CLI          (kors fran repots rot, pa Mac, med byggets venv i build/venv)
 # CLI = den byggda whisper-cli (paketering/bygg-whisper-cli.sh). Resultat: dist/Akasha Protokoll.app,
 # dist/Akasha-Protokoll-mac-arm64.zip och en uppackad kopia i build/uppackad (den som kontrollera.py provar).
-# AKASHA_VERSION och AKASHA_BYGGNUMMER (om satta) lases av spec-filen.
+# AKASHA_VERSION och AKASHA_BYGGNUMMER (om satta) lases av spec-filen. Licenserna (samla_licenser.py, i spec-filen) tar
+# whisper.cpp:s licens ur licens/ bredvid CLI (bygg-whisper-cli.sh) och FFmpegs ur AKASHA_FFMPEG_LICENSER (om satt).
 set -euo pipefail
 trap 'echo "FEL: bygg-mac.sh stannade pa rad $LINENO: $BASH_COMMAND" >&2' ERR
 
@@ -12,6 +13,8 @@ cd "$ROT"
 CLI="${1:?ange sokvagen till whisper-cli}"
 [ -x "$CLI" ] || { echo "FEL: $CLI finns inte eller ar inte korbar" >&2; exit 1; }
 CLI="$(cd "$(dirname "$CLI")" && pwd)/$(basename "$CLI")"
+WHISPER_LICENS="${AKASHA_WHISPER_LICENS:-$(dirname "$CLI")/licens}"
+[ -f "$WHISPER_LICENS/LICENSE" ] || { echo "FEL: $WHISPER_LICENS/LICENSE saknas (whisper.cpp:s licens, fran bygg-whisper-cli.sh)" >&2; exit 1; }
 [ -x build/venv/bin/pyinstaller ] || { echo "FEL: build/venv/bin/pyinstaller saknas (skapa venv och installera paketering/krav-bygg.txt)" >&2; exit 1; }
 [ -f paketering/ikon-1024.png ] || { echo "FEL: paketering/ikon-1024.png saknas" >&2; exit 1; }
 mkdir -p build/app dist
@@ -34,7 +37,8 @@ echo "OK: ikonen build/app/ikon.icns ($(wc -c < build/app/ikon.icns | tr -d ' ')
 
 # 2. PyInstaller. Utskriften sparas i build/app/pyinstaller.log (laddas upp som artefakt).
 echo "== 2. PyInstaller"
-AKASHA_WHISPER_CLI="$CLI" AKASHA_IKON="$ROT/build/app/ikon.icns" \
+AKASHA_WHISPER_CLI="$CLI" AKASHA_IKON="$ROT/build/app/ikon.icns" AKASHA_WHISPER_LICENS="$WHISPER_LICENS" \
+  AKASHA_FFMPEG_LICENSER="${AKASHA_FFMPEG_LICENSER:-}" \
   build/venv/bin/pyinstaller --noconfirm --clean --distpath dist --workpath build/app/pyi \
   paketering/akasha-protokoll.spec 2>&1 | tee build/app/pyinstaller.log
 APP="dist/Akasha Protokoll.app"
@@ -161,4 +165,14 @@ if xattr "$UPPACKAD" | grep -q 'com.apple.quarantine'; then
   echo "FEL: karantanmarkeringen gick inte att ta bort fran $UPPACKAD" >&2
   exit 1
 fi
+
+# 9. FFmpeg i programmet ar det egna LGPL-bygget (kontrollera_ffmpeg.py): sju bibliotek, LGPL 2.1 eller senare, inga
+# GPL-, version3-, nonfree- eller lib-flaggor, configure-raden som i ffmpeg-komponenter.txt, inga libx264, libx265 m.fl.
+echo "== 9. FFmpeg i programmet"
+build/venv/bin/python paketering/kontrollera_ffmpeg.py --katalog "$APP"
+
+# 10. Licenserna i Contents/Resources/licenser: forteckningen, en fil per komponent och alla Python-paket i programmet.
+# Sist, sa att de andra kontrollerna och zip-filen hinner goras aven nar en licenstext saknas.
+echo "== 10. licenserna"
+build/venv/bin/python paketering/kontrollera_licenser.py --program "$APP/Contents/MacOS/Akasha Protokoll"
 echo "OK: bygget klart: $APP, $ZIP och $UPPACKAD"

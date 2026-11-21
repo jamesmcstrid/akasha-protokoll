@@ -32,6 +32,14 @@ if [ -n "$VANTAD" ] && [ "$FAKTISK" != "$VANTAD" ]; then
 fi
 [ -n "$VANTAD" ] || echo "OBS: $VERSION ar inte last till en commit i bygg-whisper-cli.sh"
 
+# whisper.cpp:s licens och kallan foljer med programmet (samla_licenser.py, via spec-filen och bygg-mac.sh):
+#   UTKATALOG/licens/LICENSE ur kallkoden och KALLA.txt. Floden cachar katalogen tillsammans med whisper-cli.
+mkdir -p "$UT/licens"
+cp "$UT/src/LICENSE" "$UT/licens/LICENSE"
+printf 'whisper.cpp %s\ntagg: %s\ncommit: %s\nkalla: https://github.com/ggml-org/whisper.cpp\n' \
+  "$VERSION" "$VERSION" "$FAKTISK" > "$UT/licens/KALLA.txt"
+echo "OK: licensen i $UT/licens ($(wc -c < "$UT/licens/LICENSE" | tr -d ' ') byte)"
+
 # Statiskt (BUILD_SHARED_LIBS=OFF): inga libwhisper/libggml-dylib som skulle behova ligga bredvid
 #   programmet; hos anvandaren finns inget Homebrew.
 # Metal med biblioteket inbaddat (GGML_METAL_EMBED_LIBRARY=ON): ingen .metal-fil behovs bredvid binaren.

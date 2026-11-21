@@ -406,7 +406,14 @@ Programmen för Mac och Windows byggs med `paketering/` och GitHub Actions (se [
 | [pystray](https://github.com/moses-palmer/pystray) (ikonen vid klockan; följer med Windows-programmet) | LGPL-3.0. Dess kod ligger som vanliga `.py`-filer i programmet, så att den går att byta ut |
 | [Pillow](https://github.com/python-pillow/Pillow) (bilden till ikonen; följer med Windows-programmet) | MIT-CMU |
 | Microsofts Visual C++-runtime (`MSVCP140.dll`, `VCOMP140.DLL`, `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`; följer med Windows-programmet) | Microsofts licensvillkor för Visual Studio. Filerna är tagna ur Visual Studios Redist-katalog |
-| [PyAV](https://github.com/PyAV-Org/PyAV) med FFmpeg, Python, Flask, numpy, PyObjC och de andra delarna i programmet | Var och en sin licens. En förteckning läggs till innan programmet släpps |
+| [PyAV](https://github.com/PyAV-Org/PyAV) med [FFmpeg](https://ffmpeg.org), Python, Flask, numpy, PyObjC, [ONNX Runtime](https://onnxruntime.ai) (i sherpa-onnx) och de andra delarna i programmet | Var och en sin licens. FFmpeg ska vara det egna bygget under LGPL-2.1-or-later ([paketering/bygg-ffmpeg.sh](paketering/bygg-ffmpeg.sh)), och källkoden till den versionen delas ut tillsammans med programmet |
 | NeMo TitaNet small (NVIDIA), via sherpa-onnx | CC-BY-4.0 |
 | Typsnitten [Anton](https://github.com/googlefonts/AntonFont) och [Instrument Sans](https://github.com/Instrument/instrument-sans) (följer med programmet) | SIL Open Font License 1.1, se app/static/typsnitt/ |
 | Testljud: [Google FLEURS](https://huggingface.co/datasets/google/fleurs) | CC-BY-4.0 |
+
+Programmen för Mac och Windows har den fullständiga licenstexten, med upphovsrättsraderna, för varje del
+som följer med dem, och en förteckning med namn, version, licens och källa för varje del. De ligger i
+katalogen `licenser`: på Mac i `Akasha Protokoll.app/Contents/Resources/licenser/` (högerklicka på
+programmet och välj Visa paketinnehåll), på Windows i `licenser\` bredvid `Akasha Protokoll.exe`, i
+zip-filen och i installationen (`%LOCALAPPDATA%\Programs\Akasha Protokoll\licenser`). Börja med
+`LICENSER.txt`. Modellerna följer inte med programmen, och deras licenser står i tabellen ovan.

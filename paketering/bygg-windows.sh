@@ -5,7 +5,9 @@
 # Resultat: dist/Akasha Protokoll/ (Akasha Protokoll.exe och _internal\), dist/Akasha-Protokoll-windows-x64.zip och en
 # uppackad kopia i build/uppackad/<katalogen UPPACKAD nedan>/Akasha Protokoll/ (den som kontrollera.py provar: programmet
 # ska fungera fran en sokvag med a-ring, a-prickar och o-prickar och mellanslag, som en installation under anvandarens profil).
-# AKASHA_VERSION och AKASHA_BYGGNUMMER (om satta) lases av spec-filen och versionsresursen.
+# AKASHA_VERSION och AKASHA_BYGGNUMMER (om satta) lases av spec-filen och versionsresursen. Licenserna (samla_licenser.py,
+# i spec-filen) tar whisper.cpp:s licens ur licens/ bredvid WHISPERKATALOG (bygg-whisper-cli-windows.sh) och FFmpegs ur
+# AKASHA_FFMPEG_LICENSER (om satt); de hamnar i licenser\ bredvid Akasha Protokoll.exe.
 # Kontrollerna efter bygget (steg 4-7) stoppar inte vid forsta felet: alla kors, zip-filen skapas anda, och skriptet
 # ger slutkod 1 sist om nagot var FEL. Bara ett misslyckat PyInstaller-bygge stoppar direkt.
 set -euo pipefail
@@ -43,6 +45,13 @@ if [ ! -d "$WHISPER" ]; then
   mkdir -p "$WHISPER"
 fi
 WHISPER_ABS="$(winsokvag "$WHISPER")"
+# whisper.cpp:s licens (bygg-whisper-cli-windows.sh lagger den i UTKATALOG/licens, bredvid ut/) och FFmpegs (om satt).
+# Saknas nagon blir LICENSER.txt markerad OFULLSTANDIG, och steg 4b ger FEL.
+WHISPER_LICENS="${AKASHA_WHISPER_LICENS:-$(dirname "$WHISPER")/licens}"
+WHISPER_LICENS_ABS=""
+if [ -f "$WHISPER_LICENS/LICENSE" ]; then WHISPER_LICENS_ABS="$(winsokvag "$WHISPER_LICENS")"; fi
+FFMPEG_LICENSER_ABS=""
+if [ -n "${AKASHA_FFMPEG_LICENSER:-}" ] && [ -d "$AKASHA_FFMPEG_LICENSER" ]; then FFMPEG_LICENSER_ABS="$(winsokvag "$AKASHA_FFMPEG_LICENSER")"; fi
 
 # 1. Ikonen: .ico med storlekarna 16-256 ur paketering/ikon-1024.png.
 echo "== 1. ikon"
@@ -67,6 +76,7 @@ echo "== 3. PyInstaller"
 rm -rf "dist/$NAMN"
 AKASHA_WHISPER_KATALOG="$WHISPER_ABS" AKASHA_IKON="$IKON" AKASHA_VERSIONSFIL="$VERSIONSFIL" \
   AKASHA_VERSION="$VERSION" AKASHA_BYGGNUMMER="$BYGGNUMMER" \
+  AKASHA_WHISPER_LICENS="$WHISPER_LICENS_ABS" AKASHA_FFMPEG_LICENSER="$FFMPEG_LICENSER_ABS" \
   "$PY" -m PyInstaller --noconfirm --clean --distpath dist --workpath build/app/pyi \
   paketering/akasha-protokoll.spec 2>&1 | tee build/app/pyinstaller.log
 DIST="dist/$NAMN"
@@ -102,6 +112,16 @@ echo "Alla $(wc -l < build/app/filer.txt | tr -d ' ') filer i paketet: build/app
 echo "Filerna i $DIST/_internal/whisper:"
 ls -l "$DIST/_internal/whisper" 2>/dev/null || true
 "$PY" "$VERKTYG" exeinfo "$DIST/$NAMN.exe" || fel "versionsresurs, ikon eller undersystem i $NAMN.exe stammer inte (se raderna ovan)"
+
+# 4b. Licenserna i licenser\ bredvid exe-filen: forteckningen, en fil per komponent och alla Python-paket i programmet.
+echo "== 4b. licenserna"
+"$PY" paketering/kontrollera_licenser.py --program "$DIST/$NAMN.exe" \
+  || fel "licenserna i programmet stammer inte (se raderna ovan och raderna LICENSER: i build/app/pyinstaller.log)"
+
+# 4c. FFmpeg i programmet ar det egna LGPL-bygget (kontrollera_ffmpeg.py): sju DLL-filer, LGPL 2.1 eller senare, inga
+# GPL-, version3-, nonfree- eller lib-flaggor, configure-raden som i ffmpeg-komponenter.txt, och importer bara fran Windows.
+echo "== 4c. FFmpeg i programmet"
+"$PY" paketering/kontrollera_ffmpeg.py --katalog "$DIST" || fel "FFmpeg i programmet ar inte det egna LGPL-bygget (se raderna ovan)"
 
 # 5. Beroenden: varje exe, dll och pyd ska hitta alla sina importer (Windows motsvarighet till otool -L) och vara x64.
 echo "== 5. DLL-beroenden och arkitektur"

@@ -41,19 +41,58 @@ jobs:
           xcodebuild -version
           cmake --version | sed -n 1p
           python -c "import platform, sys; print(platform.platform(), sys.version)"
-      - name: Beroenden (utan faster-whisper)
+      # Utan faster-whisper och utan PyAV-hjulet fran PyPI (dess FFmpeg ar GPL-bygget med x264, x265 m.fl.): PyAV kommer
+      # fran det egna LGPL-bygget nedan. app/requirements.txt (av==12.3.0) galler som forut for terminalinstallationen.
+      - name: Beroenden (utan faster-whisper och utan PyAV fran PyPI)
         run: |
           python -m venv build/venv
-          grep -v '^faster-whisper' app/requirements.txt > build/krav.txt
+          grep -v -E '^(faster-whisper|av)==' app/requirements.txt > build/krav.txt
           build/venv/bin/pip install -q -r build/krav.txt -r paketering/krav-bygg.txt
+      # FFmpeg 6.1.6 (bara LGPL-delar) och PyAV 12.3.0 fran kallkod, som i prova-linux.sh. Cachen: hjulet, licenstexterna
+      # (ut/ffmpeg) och kallkodsarkivet (ut/kallkod), med nyckel pa skripten, komponentlistan och verktygens versioner.
+      - name: FFmpeg och PyAV ur cachen
+        id: ffmpeg
+        uses: actions/cache/restore@v6
+        with:
+          path: build/ffmpeg/ut
+          key: ffmpeg-pyav-${{ hashFiles('paketering/bygg-ffmpeg.sh', 'paketering/ffmpeg-komponenter.txt', 'paketering/bygg-pyav.sh', 'paketering/krav-ffmpeg.txt') }}-macos26-py312
+      - name: Bygg FFmpeg och PyAV (LGPL, fran kallkod)
+        id: bygg_ffmpeg
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        run: |
+          command -v xz > /dev/null || brew install xz
+          bash paketering/bygg-ffmpeg.sh build/ffmpeg
+          bash paketering/bygg-pyav.sh build/ffmpeg python
+      - name: Spara FFmpeg och PyAV i cachen
+        if: steps.ffmpeg.outputs.cache-hit != 'true' && steps.bygg_ffmpeg.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: build/ffmpeg/ut
+          key: ${{ steps.ffmpeg.outputs.cache-primary-key }}
+      - name: Det egna PyAV-hjulet i byggets venv (aldrig PyPI-hjulet)
+        run: |
+          build/venv/bin/pip install --no-deps --no-index --force-reinstall build/ffmpeg/ut/av-12.3.0-*.whl
           build/venv/bin/pip list
+          build/venv/bin/python -c "import av._core as c; print('libavcodec:', c.library_meta['libavcodec']['license'])"
+          build/venv/bin/python paketering/kontrollera_ffmpeg.py --hjul "build/ffmpeg/ut/av-12.3.0-*.whl"
+      # Kallkoden till FFmpeg (LGPL): arkivet med bygg-ffmpeg.sh och ffmpeg-komponenter.txt, for releasen bredvid programmet.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ffmpeg-6.1.6-kallkod
+          path: build/ffmpeg/ut/kallkod
+          retention-days: 7
       - name: Enhetstester
+        env:
+          AKASHA_FFMPEG_LGPL: "1"
         run: build/venv/bin/python -m unittest discover -s tester --durations 15
+      # Med whisper-cli cachas whisper.cpp:s licens (build/whisper/licens, fran samma kloning), som foljer med programmet.
       - name: whisper-cli ur cachen
         id: cli
         uses: actions/cache@v6
         with:
-          path: build/whisper/whisper-cli
+          path: |
+            build/whisper/whisper-cli
+            build/whisper/licens
           key: whisper-cli-${{ inputs.whisper_version }}-${{ hashFiles('paketering/bygg-whisper-cli.sh') }}-macos26
       - name: Bygg whisper-cli
         if: steps.cli.outputs.cache-hit != 'true'
@@ -61,6 +100,8 @@ jobs:
       - name: Kontrollera whisper-cli
         run: bash paketering/kontrollera-whisper-cli.sh build/whisper/whisper-cli build/venv/bin/python
       - name: Bygg programmet
+        env:
+          AKASHA_FFMPEG_LICENSER: build/ffmpeg/ut/ffmpeg
         run: bash paketering/bygg-mac.sh build/whisper/whisper-cli
       - name: Kontrollera programmet (uppackat ur zip-filen)
         run: |
@@ -80,6 +121,8 @@ jobs:
           cp -R "$RUNNER_TEMP/hem/Library/Logs" build/loggar/ 2>/dev/null || true
           cp "$RUNNER_TEMP/hem/program-utskrift.log" build/app/pyinstaller.log build/app/*.txt build/loggar/ 2>/dev/null || true
           cp build/app/pyi/akasha-protokoll/warn-*.txt build/loggar/ 2>/dev/null || true
+          cp -R build/app/pyi/akasha-protokoll/licenser build/loggar/ 2>/dev/null || true
+          cp build/ffmpeg/bygg/configure.log build/ffmpeg/ut/ffmpeg/configure.txt build/loggar/ 2>/dev/null || true
       - uses: actions/upload-artifact@v7
         if: always()
         with:

@@ -1,0 +1,8 @@
+ONNX Runtime 1.28.2
+commit: 33ca9628233dc8f002435e868d4c2e9f82766ca1
+kalla: https://github.com/microsoft/onnxruntime
+filerna: LICENSE och ThirdPartyNotices.txt ur onnxruntime-linux-x64-glibc2_17-MinSizeRel-1.28.2.zip
+arkivet: https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.28.2/onnxruntime-linux-x64-glibc2_17-MinSizeRel-1.28.2.zip
+sha256: 1e00fc1a6361f775bc349684eacc59aca58f013d37a2342f98c4967284eb2147
+hamtad: 2026-11-21
+galler: onnxruntime-biblioteket som sherpa-onnx-core 2.0.1 bar med sig (onnxruntime.dll har versionen 1.28.2)

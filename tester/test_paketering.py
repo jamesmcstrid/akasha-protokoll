@@ -306,7 +306,8 @@ class WindowsBygget(unittest.TestCase):
         ns = {n: falsk(n) for n in ("Analysis", "PYZ", "EXE", "COLLECT", "BUNDLE")}
         ns.update(SPECPATH=PAKETERING, workpath=os.path.join(mapp, "pyi"), DISTPATH=mapp)
         miljo = {"AKASHA_WHISPER_CLI": "", "AKASHA_WHISPER_KATALOG": "", "AKASHA_IKON": "", "AKASHA_VERSIONSFIL": "", **miljo}
-        with mock.patch.object(sys, "platform", plattform), mock.patch.dict(os.environ, miljo):
+        # (utskriften tystas: spec-filen skriver raderna LICENSER: fran samla_licenser.py)
+        with mock.patch.object(sys, "platform", plattform), mock.patch.dict(os.environ, miljo), mock.patch("builtins.print"):
             exec(compile(las("paketering", "akasha-protokoll.spec"), "spec", "exec"), ns)
         return anrop
 
@@ -435,7 +436,7 @@ class Installationsfilen(unittest.TestCase):
         text = self.iss()
         self.assertIn("LicenseFile=..\\LICENSE", text)
         self.assertTrue(os.path.isfile(os.path.join(ROT, "LICENSE")))
-        self.assertNotIn("LICENSER", text)  # filen finns inte an
+        self.assertNotIn("LICENSER", text)  # licenser\ ligger i programkatalogen och kommer med via [Files]
 
     def test_inga_sokvagar_fran_byggmaskinen(self):
         text = self.iss()
@@ -660,7 +661,8 @@ class WindowsFlodet(unittest.TestCase):
                        "retention-days: 7", "name: loggar", "--durations 15"):
             self.assertIn(stycke, text)
         self.assertNotIn("faster-whisper\n", text.replace("'^faster-whisper'", ""))  # stacken installeras inte
-        self.assertIn("grep -v '^faster-whisper' app/requirements.txt", text)
+        # faster-whisper och PyPI-hjulet av (GPL-FFmpeg) installeras inte: PyAV kommer fran det egna LGPL-bygget
+        self.assertIn("grep -v -E '^(faster-whisper|av)==' app/requirements.txt", text)
 
     def test_kontrollstegen_stoppar_inte_jobbet_och_allt_syns_i_sammanfattningen(self):
         d = self.yaml()
@@ -714,7 +716,8 @@ class WindowsFlodet(unittest.TestCase):
 
     def test_cachen_sparas_bara_nar_bygget_lyckades(self):
         d = self.yaml()
-        spara = next(s for s in d["jobs"]["bygg"]["steps"] if s.get("uses", "").startswith("actions/cache/save"))
+        spara = next(s for s in d["jobs"]["bygg"]["steps"]
+                     if s.get("uses", "").startswith("actions/cache/save") and "whisper" in s.get("name", ""))
         self.assertIn("steps.bygg_cli.outcome == 'success'", spara["if"])
         nyckel = next(s for s in d["jobs"]["bygg"]["steps"] if s.get("id") == "cli")["with"]["key"]
         # bara skriptet som kompilerar ingar i nyckeln: en rattning i verktygen far inte ge ett nytt bygge
@@ -723,8 +726,9 @@ class WindowsFlodet(unittest.TestCase):
         self.assertNotIn("kontrollera_pe", nyckel)
         self.assertTrue(nyckel.endswith("-windows2025"))
         for s_ in d["jobs"]["bygg"]["steps"]:
-            if s_.get("uses", "").startswith("actions/cache/"):
-                self.assertEqual(s_["with"]["path"], "build/whisper/kompilerat")
+            if s_.get("uses", "").startswith("actions/cache/") and "whisper" in s_.get("name", ""):
+                # det kompilerade och whisper.cpp:s licens (fran samma kloning; den foljer med programmet)
+                self.assertEqual(s_["with"]["path"].split(), ["build/whisper/kompilerat", "build/whisper/licens"])
         samla = next(s_ for s_ in d["jobs"]["bygg"]["steps"] if s_.get("id") == "samla_cli")
         self.assertNotIn("cache-hit", str(samla.get("if")))  # kors efter bygge och cachetraff
         self.assertIn("samla-whisper-cli-windows.sh build/whisper/kompilerat build/whisper/ut", samla["run"])

@@ -1,0 +1,6 @@
+SPIRV-Headers (Khronos Group)
+commit: 09913f088a1197aba4aefd300a876b2ebbaa3391
+kalla: https://github.com/KhronosGroup/SPIRV-Headers
+filerna: LICENSE vid commiten
+hamtad: 2026-11-21
+galler: spirv.hpp, som ggml-vulkan.dll bygger in (windows-app.yml installerar SPIRV-Headers vid den har commiten)

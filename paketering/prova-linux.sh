@@ -33,7 +33,8 @@ grep -v -E '^(faster-whisper|av)==' "$ROT/app/requirements.txt" > "$UT/krav.txt"
 "$UT/venv/bin/python" -c "import av._core as c; print('libavcodec:', c.library_meta['libavcodec']['license'])"
 
 "$UT/venv/bin/python" "$ROT/paketering/kontrollera_ffmpeg.py" --hjul "$HJUL"
-"$UT/venv/bin/pyinstaller" --noconfirm --clean --distpath "$UT/dist" --workpath "$UT/pyi" "$ROT/paketering/akasha-protokoll.spec"
+# Licenserna (samla_licenser.py, i spec-filen) tar FFmpegs licenstexter ur det egna bygget
+AKASHA_FFMPEG_LICENSER="$FF/ut/ffmpeg" "$UT/venv/bin/pyinstaller" --noconfirm --clean --distpath "$UT/dist" --workpath "$UT/pyi" "$ROT/paketering/akasha-protokoll.spec"
 "$UT/venv/bin/python" "$ROT/paketering/kontrollera_ffmpeg.py" --katalog "$UT/dist/akasha-protokoll"
 strings -n 8 "$UT"/dist/akasha-protokoll/_internal/av.libs/libavcodec-* | grep 'license: '
 du -sh "$UT/dist/akasha-protokoll"

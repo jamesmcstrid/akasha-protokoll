@@ -39,7 +39,7 @@ case "$(uname -s)" in
     TILLAGG=(--enable-pthreads --arch=arm64 --extra-cflags=-mmacosx-version-min=14.0
              "--extra-ldflags=-mmacosx-version-min=14.0 -Wl,-headerpad_max_install_names")
     ANTAL="$(sysctl -n hw.ncpu)" ;;
-  MINGW*|MSYS*|CYGWIN*)
+  MINGW*|UCRT64*|CLANG64*|MSYS*|CYGWIN*)  # MSYS2: uname -s foljer MSYSTEM (UCRT64_NT-... i UCRT64)
     SYSTEM=windows
     # w32threads sags uttryckligen (configure raknar tradarna som autodetekterade), och libgcc lankas in statiskt:
     # annars skulle DLL-filerna behova libgcc_s_seh-1.dll
@@ -67,8 +67,11 @@ while IFS= read -r rad; do
 done < "$KOMPONENTER"
 echo "== ${#FLAGGOR[@]} flaggor ur ffmpeg-komponenter.txt, systemets tillagg: ${TILLAGG[*]}"
 
-echo "== Kompilator"
-cc --version | sed -n 1p
+# Kompilatorn som configure anvander (cc pa Linux och Mac, gcc i MSYS2 UCRT64, dar cc kan saknas)
+KOMPILATOR="$(command -v cc || command -v gcc || true)"
+[ -n "$KOMPILATOR" ] || { echo "FEL: varken cc eller gcc finns" >&2; exit 1; }
+echo "== Kompilator: $KOMPILATOR"
+"$KOMPILATOR" --version | sed -n 1p
 
 echo "== configure"
 mkdir -p "$KAT/bygg"
@@ -108,7 +111,7 @@ grep -E '^#define FFMPEG_CONFIGURATION ' "$KAT/bygg/config.h" | sed -E 's/^#defi
   echo "tagg: $TAGG"
   echo "commit: $FAKTISK"
   echo "kalla: $ADRESS"
-  echo "kompilator: $(cc --version | sed -n 1p)"
+  echo "kompilator: $("$KOMPILATOR" --version | sed -n 1p)"
   echo "system: $SYSTEM"
 } > "$UT/ffmpeg/KALLA.txt"
 if [ "$SYSTEM" = windows ]; then
@@ -117,6 +120,10 @@ if [ "$SYSTEM" = windows ]; then
     fil="$(find /ucrt64 -name "$hjalp*" -path '*gcc*' 2>/dev/null | sed -n 1p)"
     [ -n "$fil" ] && cp "$fil" "$UT/ffmpeg/$hjalp" || echo "VARNING: hittade inte $hjalp for MinGW-runtimen"
   done
+  # mingw-w64-runtimen (startkoden och delar av libmingwex lankas in i varje DLL): dess licenstext
+  fil="$(find /ucrt64/share/licenses -name 'COPYING.MinGW-w64-runtime*' 2>/dev/null | sed -n 1p)"
+  [ -n "$fil" ] && cp "$fil" "$UT/ffmpeg/COPYING.MinGW-w64-runtime.txt" || echo "VARNING: hittade inte mingw-w64-runtimens licens"
+  ls -l "$UT/ffmpeg"
 fi
 # kallkoden som arkiv: samma innehall varje gang (git archive ar deterministiskt, xz med en trad)
 git -C "$KAT/kalla" archive --format=tar --prefix=ffmpeg-$VERSION/ HEAD | xz -6 -T1 > "$UT/kallkod/ffmpeg-$VERSION-kallkod.tar.xz"

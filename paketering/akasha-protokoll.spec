@@ -16,6 +16,8 @@ WIN = sys.platform == "win32"
 WHISPER_CLI = os.environ.get("AKASHA_WHISPER_CLI")
 IKON = os.environ.get("AKASHA_IKON") or None
 WHISPER_KATALOG = os.environ.get("AKASHA_WHISPER_KATALOG")  # Windows: katalogen med whisper-cli.exe och DLL-filerna
+WHISPER_LICENS = os.environ.get("AKASHA_WHISPER_LICENS") or None  # whisper.cpp: LICENSE och KALLA.txt (bygg-whisper-cli*.sh)
+FFMPEG_LICENSER = os.environ.get("AKASHA_FFMPEG_LICENSER") or None  # FFmpeg: KATALOG/ut/ffmpeg fran bygg-ffmpeg.sh
 VERSIONSFIL = os.environ.get("AKASHA_VERSIONSFIL") or None  # Windows: skrivs av bygg_windows_verktyg.py
 VERSION = os.environ.get("AKASHA_VERSION", "0.2.0")
 BYGGNUMMER = os.environ.get("AKASHA_BYGGNUMMER", "1")
@@ -63,6 +65,20 @@ pyz = PYZ(a.pure)
 
 NAMN = "Akasha Protokoll" if (MAC or WIN) else "akasha-protokoll"
 
+# Licenserna (samla_licenser.py): en fil per komponent och forteckningen LICENSER.txt, for allt som analysen tog med.
+# Mac: Contents/Resources/licenser (dit PyInstaller flyttar datafilerna i .app). Linux: _internal/licenser.
+# Windows: licenser\ bredvid Akasha Protokoll.exe (kopieras dit efter COLLECT nedan), sa att den syns direkt i
+# programkatalogen, i zip-filen och i installationen. Saknas en licenstext byggs programmet anda, med LICENSER.txt
+# markerad OFULLSTANDIG: kontrollera_licenser.py (i bygg-skripten och kontrollera.py) stoppar da med FEL.
+sys.path.insert(0, SPECPATH)
+import samla_licenser  # noqa: E402
+
+LICENSER = os.path.join(workpath, "licenser")
+samla_licenser.samla_for_bygget(a.pure + a.scripts + a.binaries + a.datas, LICENSER,
+                                "mac" if MAC else "windows" if WIN else "linux", VERSION,
+                                whisper_licens=WHISPER_LICENS, ffmpeg_licenser=FFMPEG_LICENSER)
+LICENSER_TOC = [] if WIN or not os.path.isdir(LICENSER) else samla_licenser.toc_for_katalog(LICENSER, "licenser")
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -85,11 +101,14 @@ coll = COLLECT(
     exe,
     a.binaries,
     a.datas,
+    LICENSER_TOC,
     strip=False,
     upx=False,
     upx_exclude=[],
     name=NAMN,
 )
+if WIN and os.path.isdir(LICENSER):
+    shutil.copytree(LICENSER, os.path.join(DISTPATH, NAMN, "licenser"), dirs_exist_ok=True)
 
 if MAC:
     app = BUNDLE(

@@ -1,0 +1,6 @@
+Vulkan-Headers (Khronos Group), taggen vulkan-sdk-1.4.309.0
+commit: 952f776f6573aafbb62ea717d871cd1d6816c387
+kalla: https://github.com/KhronosGroup/Vulkan-Headers
+filerna: LICENSE.md, LICENSES/Apache-2.0.txt och LICENSES/MIT.txt vid commiten
+hamtad: 2026-11-21
+galler: vulkan.hpp och vulkan_core.h ur Vulkan SDK 1.4.309.0 (LunarG), som ggml-vulkan.dll bygger in (SPDX-License-Identifier: Apache-2.0 OR MIT)

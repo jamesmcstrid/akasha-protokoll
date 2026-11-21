@@ -11,12 +11,15 @@ trap 'echo "FEL: bygg-pyav.sh stannade pa rad $LINENO: $BASH_COMMAND" >&2' ERR
 SDIST_ADRESS=https://files.pythonhosted.org/packages/00/f8/5adeeae0c42a7130933d168b8d84a21c98a32cb9fcf9222e2541ed0d9c7b/av-12.3.0.tar.gz
 SDIST_SHA256=04b1892562aff3277efc79f32bd8f1d0cbb64ed011241cb3e96f9ad471816c22
 VERSION=12.3.0
-SKRIPT_KAT="$(cd "$(dirname "$0")" && pwd)"
-ROT="$(cd "$SKRIPT_KAT/.." && pwd)"
+# Sokvagarna gar till Windows-program (python, pip, delvewheel) i Git Bash, dar MSYS_NO_PATHCONV=1 hindrar omskrivningen
+# av /d/a/...: darfor D:/a/... (pwd -W) pa Windows, vanliga sokvagar annars.
+sokvag() { (cd "$1" && { pwd -W 2>/dev/null || pwd; }); }
+SKRIPT_KAT="$(sokvag "$(dirname "$0")")"
+ROT="$(sokvag "$SKRIPT_KAT/..")"
 
 KAT="${1:?ange katalogen som bygg-ffmpeg.sh anvande}"
 PYTHON="${2:?ange en Python 3.12}"
-KAT="$(cd "$KAT" && pwd)"
+KAT="$(sokvag "$KAT")"
 PREFIX="$KAT/prefix"
 [ -d "$PREFIX/lib" ] || { echo "FEL: $PREFIX/lib saknas: kor paketering/bygg-ffmpeg.sh $KAT forst" >&2; exit 1; }
 if [ -e "$KAT/venv" ] || [ -e "$KAT/pyav" ] || [ -e "$KAT/ut/hjul" ]; then
@@ -51,7 +54,8 @@ if [ "$FAKTISK" != "$SDIST_SHA256" ]; then
   exit 1
 fi
 echo "OK: sdist har sha256 $SDIST_SHA256"
-tar -xzf "$KAT/pyav/av-$VERSION.tar.gz" -C "$KAT/pyav"
+# (i katalogen: GNU tar i Git Bash tar D:/... for en fjarrvard)
+(cd "$KAT/pyav" && tar -xzf "av-$VERSION.tar.gz")
 cd "$KAT/pyav/av-$VERSION"
 # src/ i sdist-filen har C-kod genererad med en annan Cython: ta bort den, sa genereras den pa nytt med den lasta versionen
 rm -rf src

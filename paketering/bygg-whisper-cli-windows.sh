@@ -42,6 +42,18 @@ if [ -n "$VANTAD" ] && [ "$FAKTISK" != "$VANTAD" ]; then
 fi
 [ -n "$VANTAD" ] || echo "OBS: $VERSION ar inte last till en commit i bygg-whisper-cli-windows.sh"
 
+# whisper.cpp:s licens och kallan foljer med programmet (samla_licenser.py, via spec-filen och bygg-windows.sh):
+#   UTKATALOG/licens/LICENSE ur kallkoden och KALLA.txt. Inte i kompilerat/ (allt dar blir _internal\whisper\);
+#   flodet cachar katalogen tillsammans med det kompilerade.
+mkdir -p "$UT/licens"
+cp "$UT/src/LICENSE" "$UT/licens/LICENSE"
+printf 'whisper.cpp %s\ntagg: %s\ncommit: %s\nkalla: https://github.com/ggml-org/whisper.cpp\n' \
+  "$VERSION" "$VERSION" "$FAKTISK" > "$UT/licens/KALLA.txt"
+# ggml-vulkan.dll bygger in Khronos Vulkan-Headers (vulkan.hpp, ur Vulkan SDK) och SPIRV-Headers (spirv.hpp): versionerna,
+#   sa att samla_licenser.py tar med ratt licenstexter (paketering/licenstexter/). Flodet satter variablerna.
+printf 'vulkan-sdk: %s\nspirv-headers: %s\n' "${VULKAN_SDK_VERSION:-}" "${SPIRV_HEADERS_COMMIT:-}" >> "$UT/licens/KALLA.txt"
+echo "OK: licensen i $UT/licens ($(wc -c < "$UT/licens/LICENSE" | tr -d ' ') byte)"
+
 # Flaggorna ar whisper.cpp:s egna for Windows x64 (release.yml, jobbet windows, vid commiten):
 #   BUILD_SHARED_LIBS=ON            whisper.dll och ggml*.dll bredvid whisper-cli.exe
 #   GGML_NATIVE=OFF                 maskinen som bygger far inte avgora vilka processorer programmet gar pa

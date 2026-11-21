@@ -6,7 +6,8 @@ Kors med en vanlig Python som har requests (inte inuti programmet):
            --vantad-motor whispercpp|faster --vantat-jobbfel TEXT [--riktig-rostmodell]
 
 Varje steg skriver "OK: ..." eller "FEL: ...". Forsta FEL ger slutkod 1 (och de sista raderna av
-programmets utskrift och logg). Sist "KONTROLL: OK".
+programmets utskrift och logg). Sist "KONTROLL: OK". Forst, innan programmet startas, kontrolleras licenserna i
+programmet (kontrollera_licenser.py: forteckningen, filerna och att varje Python-paket i programmet star i den).
 
 Pa Windows (sys.platform == "win32") ar miljon USERPROFILE, LOCALAPPDATA och TEMP under --hem (ge en katalog med
 a-ring och o-prickar och mellanslag i namnet), programmet avslutas med TerminateProcess, ett steg provar den andra
@@ -21,6 +22,9 @@ import sys
 import time
 
 import requests
+
+import kontroll_hjalp
+import kontrollera_licenser
 
 ROT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROT, "app"))
@@ -210,6 +214,13 @@ def main():
     if WIN and not os.path.isfile(program):  # ett tydligt FEL i stallet for en traceback om bygget inte gav nagon exe
         print(f"FEL: programmet {program} finns inte (se bygget)", flush=True)
         sys.exit(1)
+
+    # 0. Licenserna i programmet (filerna, inget startas): forteckningen, en fil per komponent, och varje Python-paket i
+    # programmet star i forteckningen.
+    lic = kontroll_hjalp.Resultat("LICENSER")
+    kontrollera_licenser.kontrollera(program, lic)
+    kontrollera(not lic.fel_rader, f"licenserna i programmet: {len(lic.ok_rader)} kontroller OK",
+                f"licenserna i programmet stämmer inte ({len(lic.fel_rader)} FEL: {'; '.join(lic.fel_rader)[:600]})")
 
     # 1. Gamla modeller pa den gamla platsen. Tjansten kontrollerar bara storleken pa en befintlig
     # fil (steg 1, A3), sa en gles fil med ratt storlek racker: ingen hamtning av 1,5 GB (A8).

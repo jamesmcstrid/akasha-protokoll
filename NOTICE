@@ -8,11 +8,19 @@ This product includes the following fonts, licensed under the SIL Open Font Lice
 - Anton, Copyright 2020 The Anton Project Authors (https://github.com/googlefonts/AntonFont.git)
 - Instrument Sans, Copyright 2022 The Instrument Sans Project Authors (https://github.com/Instrument/instrument-sans)
 
-This product also includes the following components, each under its own license (full texts are added before
-the program is released):
+This product also includes components from others, each under its own license. The Mac and Windows programs
+contain the full license text of every component, and a list with name, version, license and source, in the
+directory licenser/ (Mac: Akasha Protokoll.app/Contents/Resources/licenser/, Windows: licenser\ next to
+Akasha Protokoll.exe); start with licenser/LICENSER.txt. paketering/samla_licenser.py writes the directory when
+the programs are built. Among the components:
 - whisper.cpp (https://github.com/ggml-org/whisper.cpp), MIT License (in the Mac and Windows programs)
 - pystray (https://github.com/moses-palmer/pystray), LGPL-3.0 (in the Windows program; its code is included
   as plain .py files so that it can be replaced)
 - Pillow (https://github.com/python-pillow/Pillow), MIT-CMU License (in the Windows program)
+- FFmpeg (https://ffmpeg.org), LGPL-2.1-or-later, built from source by paketering/bygg-ffmpeg.sh and used through
+  PyAV (https://github.com/PyAV-Org/PyAV, BSD-3-Clause); licenser/ffmpeg.txt says where the source code of the
+  exact version is
+- ONNX Runtime (https://github.com/microsoft/onnxruntime), MIT License, included in sherpa-onnx (Apache-2.0)
+- Python (https://www.python.org), PSF License
 - The Microsoft Visual C++ runtime (MSVCP140.dll, VCOMP140.DLL, VCRUNTIME140.dll, VCRUNTIME140_1.dll), under
   Microsoft's license terms for Visual Studio (in the Windows program)

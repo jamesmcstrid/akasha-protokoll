@@ -155,6 +155,26 @@ Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-2
   tokenizers, huggingface_hub och onnxruntime följer inte med, eftersom programmet använder
   whisper.cpp. Därför avkodas ljudet med `app/ljud.py` (PyAV) i stället för med faster-whisper.
   Sätts `MOTOR=faster` i programmet visar sidan "Inte redo" med en förklaring.
+- **Licenserna.** `paketering/samla_licenser.py` körs av spec-filen direkt efter PyInstallers analys och
+  skriver katalogen `licenser/`: en fil per komponent med hela licenstexten och upphovsrättsraderna, och
+  förteckningen `LICENSER.txt` (namn, version, licens, källa, fil). Python-paketen är de distributioner
+  som äger någon av filerna som analysen tog med (källsökvägarna jämförs med paketens `RECORD`), så det som
+  `excludes` utesluter kommer inte med, medan till exempel `setuptools` och `packaging` gör det (PyInstallers
+  körtidskrok `pyi_rth_setuptools`). Texterna läses ur paketens dist-info; ett paket utan licensfil är fel,
+  utom `sherpa-onnx-core` och `pyobjc-core`, som får texten från ett paket ur samma projekt med samma
+  version. Bibliotek som ett hjul bär med sig (`numpy.libs`, `sherpa_onnx/lib`, `av.libs`) ska täckas av
+  paketets licenstext, av FFmpeg, av Visual C++-runtimen eller av en text i `paketering/licenstexter/`
+  (ONNX Runtime 1.28.2 i sherpa-onnx-core 2.0.1). Dessutom Python (`LICENSE.txt` ur den Python som
+  bygger), whisper.cpp (`build/whisper/licens/`, som `bygg-whisper-cli.sh` kopierar ur källkoden och flödet
+  cachar med `whisper-cli`), FFmpeg (`AKASHA_FFMPEG_LICENSER`, katalogen `ut/ffmpeg` från `bygg-ffmpeg.sh`)
+  och typsnitten. Katalogen hamnar i `Contents/Resources/licenser/`, före signeringen. Saknas en text byggs
+  programmet ändå, med `LICENSER.txt` markerad `OFULLSTÄNDIG`, och `kontrollera_licenser.py` (i
+  `bygg-mac.sh` och först i `kontrollera.py`) stoppar: den kontrollerar förteckningen och filerna, och att
+  varje Python-paket i programmet, både filerna på disk och modulerna i PYZ-arkivet, står i förteckningen.
+  **Läget nu:** flödena installerar PyAV-hjulet från PyPI, vars FFmpeg är GPL-bygget med ett trettiotal
+  andra bibliotek (x264, x265 m.fl.) utan licenstexter. Licenskontrollen stoppar därför bygget tills det
+  egna LGPL-bygget (`bygg-ffmpeg.sh`, `bygg-pyav.sh`) används i Mac- och Windows-flödena, som i
+  `prova-linux.sh`. Källkodsarkivet `ffmpeg-6.1.6-kallkod.tar.xz` ska då delas ut bredvid programmen.
 - **Start och avslut.** `mac_app.py` är det tunna Mac-skalet: ikon i Dock, programmenyn och
   Dock-menyn. Allt annat ligger i `start.py`, som går att köra och testa på Linux: loggning, kontroll
   av inställningsfilen, om porten är ledig, tjänsten i en bakgrundstråd, att öppna webbläsaren och att
@@ -275,6 +295,16 @@ har inte körts på en vanlig Windows-dator.**
   (`bygg-windows.sh` kontrollerar det). pystray är LGPL-3.0, så dess kod ligger som vanliga `.py`-filer i
   programmet (`module_collection_mode`), inte inbakad i arkivet. `plattform.whisper_cli()` letar efter
   `_internal\whisper\whisper-cli.exe` i det paketerade programmet.
+- **Licenserna.** Som på Mac (se där), men katalogen `licenser\` ligger bredvid `Akasha Protokoll.exe`, inte
+  i `_internal`: spec-filen kopierar dit den efter `COLLECT`, så att den syns direkt i programkatalogen, i
+  zip-filen och i installationen (Inno Setup tar med hela katalogen). Förteckningen har också
+  Visual C++-runtimen, med de DLL-filer som finns i programmet och var Microsofts villkor står (ingen
+  licenstext är kopierad), och GCC-runtimen om `bygg-ffmpeg.sh` lade dess texter i `ut/ffmpeg`.
+  whisper.cpp:s licens ligger i `build/whisper/licens/` och cachas med det kompilerade. `bygg-windows.sh`
+  (steg 4b) och `kontrollera.py` (zip-filen och installationen) kör `kontrollera_licenser.py`. Provat på
+  utvecklingsdatorn (2026-11-21) med ett riktigt PyInstaller-bygge av spec-filen, med en låtsad whisper-cli:
+  analysen gav 24 Python-paket och 30 komponenter (825 kB), PYZ-arkivet 885 moduler, och kontrollen hittade
+  alla 23 paket i programmet i förteckningen. Förteckningen blev `OFULLSTÄNDIG` för PyAV-hjulets skull.
 - **Start och avslut.** `windows_app.py` är det tunna skalet; texterna ligger i `start.py` (`WIN_*`,
   `STARTAR_REDAN_*` och de gemensamma). Rutorna är `MessageBoxW` via `ctypes`, med `MB_SETFOREGROUND` och
   `MB_TOPMOST`. Knapparnas text (*Ja*, *Nej*, *OK*) kommer från Windows och följer Windows språk, så
@@ -565,7 +595,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
 ## Vad som är testat
 
-**Senast, på Windows 11 (utvecklingsdatorn, 2026-11-21):** 626 enhetstester, OK, 28 överhoppade (bland dem testet med symboliska länkar, som kräver utvecklarläge i Windows). Webbsidans ändringar samma dag (dubbelklick, inspelare som stannar, gamla svar, dold flik, tangentbord) är provade med en låtsas-DOM i Node, inte i en riktig webbläsare.
+**Senast, på Windows 11 (utvecklingsdatorn, 2026-11-21):** 661 enhetstester (35 av dem för licenserna), OK, 28 överhoppade (bland dem testet med symboliska länkar, som kräver utvecklarläge i Windows). Webbsidans ändringar samma dag (dubbelklick, inspelare som stannar, gamla svar, dold flik, tangentbord) är provade med en låtsas-DOM i Node, inte i en riktig webbläsare.
 
 **I en Linux-miljö utan grafikprocessor** (samma Python- och biblioteksversioner):
 

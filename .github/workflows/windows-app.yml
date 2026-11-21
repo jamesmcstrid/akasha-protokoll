@@ -67,24 +67,82 @@ jobs:
             echo "== Disk"; df -h . || true
             echo "== Miljo"; echo "RUNNER_TEMP=$RUNNER_TEMP"; echo "NUMBER_OF_PROCESSORS=$NUMBER_OF_PROCESSORS"; echo "PYTHONUTF8=$PYTHONUTF8"
           } 2>&1 | tee build/loggar/system.log
-      - name: Beroenden (utan faster-whisper)
+      # Utan faster-whisper och utan PyAV-hjulet fran PyPI (dess FFmpeg ar GPL-bygget med x264, x265 m.fl.): PyAV kommer
+      # fran det egna LGPL-bygget nedan. app/requirements.txt (av==12.3.0) galler som forut for terminalinstallationen.
+      - name: Beroenden (utan faster-whisper och utan PyAV fran PyPI)
         run: |
           python -m venv build/venv
-          grep -v '^faster-whisper' app/requirements.txt > build/krav.txt
+          grep -v -E '^(faster-whisper|av)==' app/requirements.txt > build/krav.txt
           build/venv/Scripts/python -m pip install -q -r build/krav.txt -r paketering/krav-bygg.txt
+      # FFmpeg 6.1.6 (bara LGPL-delar) och PyAV 12.3.0 fran kallkod, som i prova-linux.sh. Cachen: hjulet, licenstexterna
+      # (ut/ffmpeg) och kallkodsarkivet (ut/kallkod), med nyckel pa skripten, komponentlistan och verktygens versioner.
+      - name: FFmpeg och PyAV ur cachen
+        id: ffmpeg
+        uses: actions/cache/restore@v6
+        with:
+          path: build/ffmpeg/ut
+          key: ffmpeg-pyav-${{ hashFiles('paketering/bygg-ffmpeg.sh', 'paketering/ffmpeg-komponenter.txt', 'paketering/bygg-pyav.sh', 'paketering/krav-ffmpeg.txt') }}-windows2025-py312
+      # FFmpeg byggs i MSYS2 UCRT64 (finns pa byggmaskinen i C:\msys64, inga atgarder fran tredje part) med gcc, nasm och
+      # make ur pacman. Skalet ar MSYS2:s bash, inte Git Bash: MSYSTEM valjer UCRT64 och CHERE_INVOKING stannar i repot.
+      - name: Bygg FFmpeg (MSYS2 UCRT64)
+        id: bygg_ffmpeg
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        continue-on-error: true
+        shell: C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}
+        env:
+          MSYSTEM: UCRT64
+          CHERE_INVOKING: "1"
+        run: |
+          uname -a
+          pacman -Sy --noconfirm --needed make diffutils git xz mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm
+          mkdir -p build/loggar
+          bash paketering/bygg-ffmpeg.sh build/ffmpeg 2>&1 | tee build/loggar/bygg-ffmpeg.log
+      - name: Bygg PyAV (MSVC) mot det egna FFmpeg
+        id: bygg_pyav
+        if: steps.ffmpeg.outputs.cache-hit != 'true' && steps.bygg_ffmpeg.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          bash paketering/bygg-pyav.sh build/ffmpeg python 2>&1 | tee build/loggar/bygg-pyav.log
+      - name: Spara FFmpeg och PyAV i cachen
+        if: steps.ffmpeg.outputs.cache-hit != 'true' && steps.bygg_pyav.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: build/ffmpeg/ut
+          key: ${{ steps.ffmpeg.outputs.cache-primary-key }}
+      - name: Det egna PyAV-hjulet i byggets venv (aldrig PyPI-hjulet)
+        id: pyav
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          build/venv/Scripts/python -m pip install --no-deps --no-index --force-reinstall build/ffmpeg/ut/av-12.3.0-*.whl
           build/venv/Scripts/python -m pip list
+          build/venv/Scripts/python paketering/kontrollera_ffmpeg.py --hjul "build/ffmpeg/ut/av-12.3.0-*.whl" 2>&1 | tee build/loggar/kontrollera-ffmpeg-hjul.log
+      # Kallkoden till FFmpeg (LGPL): arkivet med bygg-ffmpeg.sh och ffmpeg-komponenter.txt, for releasen bredvid programmet.
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: ffmpeg-6.1.6-kallkod
+          path: build/ffmpeg/ut/kallkod
+          retention-days: 7
       - name: Enhetstester
         id: tester
         continue-on-error: true
+        env:
+          AKASHA_FFMPEG_LGPL: "1"
         run: build/venv/Scripts/python -m unittest discover -s tester --durations 15
       # Bara det kompilerade cachas (nyckel: version + hash av bygg-whisper-cli-windows.sh + Vulkan SDK-versionen + SPIRV-Headers-incheckningen). C-runtime-filerna, fillistan och
       # beroendekontrollen gors av steget Samla whisper-cli efter varje bygge och varje cachetraff, sa att en rattning i
-      # verktygen inte tvingar fram ett nytt bygge av whisper.cpp.
+      # verktygen inte tvingar fram ett nytt bygge av whisper.cpp. Med det cachas whisper.cpp:s licens (build/whisper/licens,
+      # fran samma kloning), som foljer med programmet.
       - name: whisper-cli ur cachen (det kompilerade)
         id: cli
         uses: actions/cache/restore@v6
         with:
-          path: build/whisper/kompilerat
+          path: |
+            build/whisper/kompilerat
+            build/whisper/licens
           key: whisper-cli-win-${{ inputs.whisper_version }}-${{ hashFiles('paketering/bygg-whisper-cli-windows.sh') }}-vulkan${{ env.VULKAN_SDK_VERSION }}-spirv${{ env.SPIRV_HEADERS_COMMIT }}-windows2025
       - name: Vulkan SDK (for bygget av whisper-cli)
         id: vulkan_sdk
@@ -152,7 +210,9 @@ jobs:
         if: steps.cli.outputs.cache-hit != 'true' && steps.bygg_cli.outcome == 'success'
         uses: actions/cache/save@v6
         with:
-          path: build/whisper/kompilerat
+          path: |
+            build/whisper/kompilerat
+            build/whisper/licens
           key: ${{ steps.cli.outputs.cache-primary-key }}
       - name: Samla whisper-cli (C-runtime, fillista, beroenden)
         id: samla_cli
@@ -174,6 +234,8 @@ jobs:
         id: bygg
         if: ${{ !cancelled() }}
         continue-on-error: true
+        env:
+          AKASHA_FFMPEG_LICENSER: build/ffmpeg/ut/ffmpeg
         run: |
           set -o pipefail
           bash paketering/bygg-windows.sh build/whisper/ut 2>&1 | tee build/loggar/bygg-windows.log
@@ -245,6 +307,9 @@ jobs:
       - name: Sammanfattning
         if: ${{ always() }}
         env:
+          BYGG_FFMPEG: ${{ steps.bygg_ffmpeg.outcome }}
+          BYGG_PYAV: ${{ steps.bygg_pyav.outcome }}
+          PYAV: ${{ steps.pyav.outcome }}
           TESTER: ${{ steps.tester.outcome }}
           BYGG_CLI: ${{ steps.bygg_cli.outcome }}
           SAMLA_CLI: ${{ steps.samla_cli.outcome }}
@@ -257,7 +322,8 @@ jobs:
           SUMMOR: ${{ steps.summor.outcome }}
         run: |
           fel=0
-          for rad in "Enhetstester=$TESTER" "Bygg whisper-cli (skipped betyder ur cachen)=$BYGG_CLI" "Samla whisper-cli=$SAMLA_CLI" "Kontroll av whisper-cli=$KONTROLL_CLI" \
+          for rad in "Bygg FFmpeg (skipped betyder ur cachen)=$BYGG_FFMPEG" "Bygg PyAV (skipped betyder ur cachen)=$BYGG_PYAV" \
+                     "Det egna PyAV-hjulet=$PYAV" "Enhetstester=$TESTER" "Bygg whisper-cli (skipped betyder ur cachen)=$BYGG_CLI" "Samla whisper-cli=$SAMLA_CLI" "Kontroll av whisper-cli=$KONTROLL_CLI" \
                      "Bygg av programmet=$BYGG" "Kontroll av programmet=$KONTROLL_PROGRAM" "Sökvägar och talare=$KONTROLL_WINDOWS" \
                      "Bygg av installationsfilen=$INSTALLATION" "Kontroll av installationen=$KONTROLL_INSTALLATION" "Kontrollsummor=$SUMMOR"; do
             namn="${rad%=*}"
@@ -283,7 +349,10 @@ jobs:
           cp "$HEM/program-utskrift.log" "$HEM/program-utskrift-andra.log" build/loggar/ 2>/dev/null || true
           cp build/app/pyinstaller.log build/app/*.txt build/loggar/ 2>/dev/null || true
           cp build/app/pyi/*/warn-*.txt build/loggar/ 2>/dev/null || true
+          cp -R build/app/pyi/akasha-protokoll/licenser build/loggar/ 2>/dev/null || true
           cp build/whisper/*.log build/loggar/ 2>/dev/null || true
+          cp build/ffmpeg/bygg/configure.log build/loggar/ffmpeg-configure.log 2>/dev/null || true
+          ls -lR build/ffmpeg/ut build/ffmpeg/prefix/bin > build/loggar/ffmpeg-filer.txt 2>&1 || true
           cp build/whisper/src/CMakeLists.txt build/loggar/whisper-CMakeLists.txt 2>/dev/null || true
           cp build/whisper/bygg/CMakeCache.txt build/loggar/whisper-CMakeCache.txt 2>/dev/null || true
           ls -lR build/whisper/kompilerat > build/loggar/whisper-kompilerat-filer.txt 2>&1 || true
