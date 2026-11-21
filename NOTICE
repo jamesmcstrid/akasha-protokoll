@@ -18,8 +18,10 @@ the programs are built. Among the components:
   as plain .py files so that it can be replaced)
 - Pillow (https://github.com/python-pillow/Pillow), MIT-CMU License (in the Windows program)
 - FFmpeg (https://ffmpeg.org), LGPL-2.1-or-later, built from source by paketering/bygg-ffmpeg.sh and used through
-  PyAV (https://github.com/PyAV-Org/PyAV, BSD-3-Clause); licenser/ffmpeg.txt says where the source code of the
-  exact version is
+  PyAV (https://github.com/PyAV-Org/PyAV, BSD-3-Clause); the source code of the exact version
+  (ffmpeg-6.1.6-kallkod.tar.xz) is in the same GitHub Release as the programs, see licenser/ffmpeg.txt
+- On Windows, the GCC runtime and the mingw-w64 runtime (statically linked into the FFmpeg DLLs), and Khronos
+  Vulkan-Headers (Apache-2.0 OR MIT) and SPIRV-Headers (MIT-style) compiled into ggml-vulkan.dll
 - ONNX Runtime (https://github.com/microsoft/onnxruntime), MIT License, included in sherpa-onnx (Apache-2.0)
 - Python (https://www.python.org), PSF License
 - The Microsoft Visual C++ runtime (MSVCP140.dll, VCOMP140.DLL, VCRUNTIME140.dll, VCRUNTIME140_1.dll), under

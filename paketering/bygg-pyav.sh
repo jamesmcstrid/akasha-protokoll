@@ -33,7 +33,11 @@ case "$(uname -s)" in
     SYSTEM=mac; ANTAL="$(sysctl -n hw.ncpu)"
     # samma minos som FFmpeg-bygget och som bygg-mac.sh kontrollerar, och plats i install names for delocate
     export MACOSX_DEPLOYMENT_TARGET=14.0
-    export LDFLAGS="-headerpad_max_install_names ${LDFLAGS:-}" ;;
+    export LDFLAGS="-headerpad_max_install_names ${LDFLAGS:-}"
+    # Pythons fran python.org (och setup-python) ar universal2: utan detta byggs PyAV aven for x86_64, som FFmpeg-bygget
+    # (bara arm64) saknar, och delocate stoppar. Hjulet far da ocksa ratt plattform (macosx_14_0_arm64).
+    export ARCHFLAGS="-arch arm64"
+    export _PYTHON_HOST_PLATFORM="macosx-14.0-arm64" ;;
   MINGW*|MSYS*|CYGWIN*) SYSTEM=windows; ANTAL="${NUMBER_OF_PROCESSORS:-2}" ;;
   *) echo "FEL: okant system $(uname -s)" >&2; exit 1 ;;
 esac
