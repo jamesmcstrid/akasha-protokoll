@@ -171,10 +171,17 @@ Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-2
   programmet ändå, med `LICENSER.txt` markerad `OFULLSTÄNDIG`, och `kontrollera_licenser.py` (i
   `bygg-mac.sh` och först i `kontrollera.py`) stoppar: den kontrollerar förteckningen och filerna, och att
   varje Python-paket i programmet, både filerna på disk och modulerna i PYZ-arkivet, står i förteckningen.
-  **Läget nu:** flödena installerar PyAV-hjulet från PyPI, vars FFmpeg är GPL-bygget med ett trettiotal
-  andra bibliotek (x264, x265 m.fl.) utan licenstexter. Licenskontrollen stoppar därför bygget tills det
-  egna LGPL-bygget (`bygg-ffmpeg.sh`, `bygg-pyav.sh`) används i Mac- och Windows-flödena, som i
-  `prova-linux.sh`. Källkodsarkivet `ffmpeg-6.1.6-kallkod.tar.xz` ska då delas ut bredvid programmen.
+- **FFmpeg (bara LGPL).** Flödena bygger FFmpeg 6.1.6 och PyAV 12.3.0 från källkod, som `prova-linux.sh`
+  (`bygg-ffmpeg.sh`, `bygg-pyav.sh`; på Mac bara för arm64), cachar hjulet, licenstexterna och
+  källkodsarkivet (nyckel: skripten, komponentlistan och verktygens versioner) och installerar det egna
+  hjulet i byggets venv. PyAV-hjulet från PyPI, vars FFmpeg är GPL-bygget med x264, x265 och ett trettiotal
+  andra bibliotek, installeras aldrig där; `app/requirements.txt` (`av==12.3.0`) gäller som förut för
+  terminalinstallationen och testerna. `kontrollera_ffmpeg.py` körs mot hjulet och mot det byggda programmet
+  (`bygg-mac.sh`), enhetstesterna körs med `AKASHA_FFMPEG_LGPL=1`, och `kontrollera.py` avkodar alla tolv
+  testljud i `testljud/format/` i programmet. Källkodsarkivet laddas upp som artefakten `ffmpeg-6.1.6-kallkod`
+  (med `bygg-ffmpeg.sh` och `ffmpeg-komponenter.txt`) och ska läggas i releasen, där förteckningen säger att
+  det finns. Uppmätt i körning 44912059276 (2026-11-21): programmet är 90 MB (förut 128 MB), zip-filen
+  32,9 MB (förut 49 MB) och 138 Mach-O-filer (förut 164); förteckningen har 29 komponenter.
 - **Start och avslut.** `mac_app.py` är det tunna Mac-skalet: ikon i Dock, programmenyn och
   Dock-menyn. Allt annat ligger i `start.py`, som går att köra och testa på Linux: loggning, kontroll
   av inställningsfilen, om porten är ledig, tjänsten i en bakgrundstråd, att öppna webbläsaren och att
@@ -305,6 +312,18 @@ har inte körts på en vanlig Windows-dator.**
   utvecklingsdatorn (2026-11-21) med ett riktigt PyInstaller-bygge av spec-filen, med en låtsad whisper-cli:
   analysen gav 24 Python-paket och 30 komponenter (825 kB), PYZ-arkivet 885 moduler, och kontrollen hittade
   alla 23 paket i programmet i förteckningen. Förteckningen blev `OFULLSTÄNDIG` för PyAV-hjulets skull.
+  Med det egna FFmpeg-bygget har förteckningen 33 komponenter, bland dem GCC- och mingw-w64-runtimen
+  (libgcc, startkoden och winpthreads är statiskt inlänkade i FFmpeg-DLL:erna) och Vulkan-Headers och
+  SPIRV-Headers från Khronos (inbyggda i `ggml-vulkan.dll`; texterna i `paketering/licenstexter/`, versionerna
+  ur whisper.cpp:s `KALLA.txt`). PyInstaller tar med Universal C Runtime (`ucrtbase.dll`, `api-ms-win-*.dll`)
+  från en JDK i byggmaskinens PATH; de står under Visual C++-runtimen.
+- **FFmpeg (bara LGPL).** Som på Mac, men FFmpeg byggs i MSYS2 UCRT64 (finns i `C:\msys64` på byggmaskinen;
+  gcc, nasm och make ur pacman, inga åtgärder från tredje part) och PyAV med MSVC mot FFmpegs
+  importbibliotek. I MSYS2-steget slås `MSYS_NO_PATHCONV` av (annars får gcc `/tmp/...`), och FFmpeg länkas
+  med `-static` så att DLL-filerna inte behöver `libgcc_s_seh-1.dll` eller `libwinpthread-1.dll`.
+  `bygg-windows.sh` (steg 4c) kör `kontrollera_ffmpeg.py` mot programmet, även importerna. Uppmätt i körning
+  44912056987 (2026-11-21): `av.libs` är 3,4 MB (förut 70,1 MB), programmet 158,3 MB (292 filer), zip-filen
+  61,6 MB (förut 70,6 MB), installationsfilen 37,2 MB (förut 48,5 MB) och installationen 162,7 MB.
 - **Start och avslut.** `windows_app.py` är det tunna skalet; texterna ligger i `start.py` (`WIN_*`,
   `STARTAR_REDAN_*` och de gemensamma). Rutorna är `MessageBoxW` via `ctypes`, med `MB_SETFOREGROUND` och
   `MB_TOPMOST`. Knapparnas text (*Ja*, *Nej*, *OK*) kommer från Windows och följer Windows språk, så
