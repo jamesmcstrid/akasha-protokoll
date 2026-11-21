@@ -93,6 +93,8 @@ jobs:
           MSYSTEM: UCRT64
           CHERE_INVOKING: "1"
         run: |
+          # MSYS_NO_PATHCONV (for Git Bash, satt for hela jobbet) galler ocksa MSYS2: utan omskrivningen far gcc /tmp/...
+          unset MSYS_NO_PATHCONV
           uname -a
           pacman -Sy --noconfirm --needed make diffutils git xz mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm
           echo "== gcc: ett litet program kompileras, lankas och kors"

@@ -44,6 +44,9 @@ case "$(uname -s)" in
     # w32threads sags uttryckligen (configure raknar tradarna som autodetekterade), och libgcc lankas in statiskt:
     # annars skulle DLL-filerna behova libgcc_s_seh-1.dll
     TILLAGG=(--enable-w32threads --extra-ldflags=-static-libgcc)
+    # gcc ar ett Windows-program: MSYS2 maste skriva om /d/a/... och /tmp/... till Windows-form (som MSYS_NO_PATHCONV,
+    # satt for Git Bash, stanger av)
+    unset MSYS_NO_PATHCONV MSYS2_ARG_CONV_EXCL
     ANTAL="${NUMBER_OF_PROCESSORS:-2}" ;;
   *) echo "FEL: okant system $(uname -s)" >&2; exit 1 ;;
 esac
