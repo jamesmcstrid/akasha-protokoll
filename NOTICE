@@ -23,6 +23,7 @@ the programs are built. Among the components:
 - On Windows, the GCC runtime and the mingw-w64 runtime (statically linked into the FFmpeg DLLs), and Khronos
   Vulkan-Headers (Apache-2.0 OR MIT) and SPIRV-Headers (MIT-style) compiled into ggml-vulkan.dll
 - ONNX Runtime (https://github.com/microsoft/onnxruntime), MIT License, included in sherpa-onnx (Apache-2.0)
-- Python (https://www.python.org), PSF License
+- Python (https://www.python.org), PSF License, with the software it incorporates (CPython's Doc/license.rst:
+  expat, libmpdec, libffi, zlib, HACL* and others), OpenSSL 3 (Apache-2.0) and XZ Utils (liblzma, public domain)
 - The Microsoft Visual C++ runtime (MSVCP140.dll, VCOMP140.DLL, VCRUNTIME140.dll, VCRUNTIME140_1.dll), under
   Microsoft's license terms for Visual Studio (in the Windows program)

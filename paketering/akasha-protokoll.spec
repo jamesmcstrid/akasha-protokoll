@@ -6,6 +6,7 @@
 # Miljovariablerna nedan satts bara av byggskripten; de ror inte app/.
 import glob
 import os
+import re
 import shutil
 import sys
 
@@ -61,6 +62,11 @@ a = Analysis(
     # pystray ar LGPLv3: dess kod ligger som vanliga .py-filer i programmet, inte inbakad i arkivet, sa att den gar att byta ut.
     **({"module_collection_mode": {"pystray": "py"}} if WIN else {}),
 )
+# Windows: Universal C Runtime (ucrtbase.dll och api-ms-win-*.dll) finns i Windows 10 och 11. PyInstaller tar annars med
+# kopior fran byggmaskinens PATH (en JDK pa Actions-maskinen), som programmet inte behover.
+if WIN:
+    a.binaries = [b for b in a.binaries
+                  if not re.match(r"(?i)^(ucrtbase|api-ms-win-[a-z0-9-]+)\.dll$", os.path.basename(str(b[0])))]
 pyz = PYZ(a.pure)
 
 NAMN = "Akasha Protokoll" if (MAC or WIN) else "akasha-protokoll"

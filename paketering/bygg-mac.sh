@@ -66,6 +66,13 @@ if [ ! -x "$APP/Contents/Frameworks/whisper-cli" ]; then
 fi
 echo "OK: Contents/Frameworks/whisper-cli finns och ar korbar"
 
+# 3b. Pythons bibliotek utanfor macOS (information): det som lib-dynload-modulerna lankar mot och som inte ar macOS
+# egna (/usr/lib, /System). Licenserna star i licenser/ (openssl.txt, xz.txt och python.txt).
+echo "== 3b. Pythons bibliotek utanfor macOS"
+build/venv/bin/python -c "import ssl, sys; print(sys.version.split()[0], ssl.OPENSSL_VERSION)"
+find "$APP/Contents/Frameworks" -name '*.so' -path '*lib-dynload*' -print0 | xargs -0 otool -L \
+  | awk '/:$/ {fil = $0; next} $1 !~ /^\/(usr\/lib|System)\// {print fil, $1}' | sed 's|.*/lib-dynload/||' | sort -u || true
+
 # 4. Alla Mach-O-filer: arm64 och minos hogst 14.0.
 echo "== 4. Mach-O: arkitektur och minos"
 find "$APP" -type f -print0 | xargs -0 file | grep -F 'Mach-O' | grep -vF '(for architecture ' | sed -E 's/: +Mach-O .*$//' > build/app/macho-filer.txt

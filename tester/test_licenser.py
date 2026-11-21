@@ -1,5 +1,6 @@
 """Licenserna i programmen: paketering/samla_licenser.py (med pahittade dist-info-kataloger i en tillfallig katalog) och
 paketering/kontrollera_licenser.py (med ett pahittat program). Kraver varken PyInstaller eller ett riktigt bygge."""
+import importlib
 import io
 import os
 import re
@@ -59,6 +60,9 @@ class FalskaPaket:
         return self
 
     def dists(self):
+        # importlib.metadata minns katalogens innehall efter dess mtime: ett paket som lagts till inom samma tick syns
+        # annars inte
+        importlib.invalidate_caches()
         return sl.distributioner([self.rot])
 
     def filer(self, namn):
@@ -337,6 +341,40 @@ class SamlaLicenser(unittest.TestCase):
         self.assertEqual(len(res.fel), 1)
         self.assertIn("vulkan-headers-9.9.9.9 saknas", res.fel[0])
 
+    def test_python_har_cpythons_licenser_for_det_som_ingar(self):
+        self.lagg_mittpaket()
+        res = self.samla({"mittpaket": self.p.filer("mittpaket")})
+        self.assertEqual(res.fel, [])
+        text = las_fil(os.path.join(self.ut, "python.txt"))
+        for stycke in ("Licenses and Acknowledgements for Incorporated Software", "\nexpat\n", "\nlibmpdec\n",
+                       "\nlibffi\n", "\nzlib\n", "HACL* Contributors", "paketering/licenstexter/cpython-3.12/license.rst"):
+            self.assertIn(stycke, text)
+
+    def test_openssl_och_xz_i_python(self):
+        binarer = ["Python.framework/Versions/3.12/Python", "libssl.3.dylib", "libcrypto.3.dylib",
+                   "python3.12/lib-dynload/_ssl.cpython-312-darwin.so", "python3.12/lib-dynload/_lzma.cpython-312-darwin.so"]
+        for plattform, xz in (("mac", "5.2.3"), ("windows", "5.2.5")):
+            res = sl.Resultat()
+            with mock.patch("ssl.OPENSSL_VERSION_INFO", (3, 0, 16, 0, 0)), \
+                    mock.patch("ssl.OPENSSL_VERSION", "OpenSSL 3.0.16 11 Feb 2025"), \
+                    mock.patch.object(sl.platform, "python_version", return_value="3.12.10"):
+                komp = sl.python_tredjepart(res, binarer, plattform)
+            self.assertEqual(res.fel, [])
+            self.assertEqual([(k.namn, k.version, k.fil) for k in komp],
+                             [("OpenSSL", "3.0.16", "openssl.txt"), ("XZ Utils (liblzma)", xz, "xz.txt")])
+            self.assertIn("Apache License", komp[0].text)
+            self.assertIn("libssl.3.dylib", komp[0].text)
+            self.assertIn("liblzma is in the public domain", komp[1].text)
+        # en annan OpenSSL eller Python ar FEL (texterna galler en version)
+        res = sl.Resultat()
+        with mock.patch("ssl.OPENSSL_VERSION_INFO", (3, 5, 1, 0, 0)), \
+                mock.patch.object(sl.platform, "python_version", return_value="3.12.11"):
+            self.assertEqual(sl.python_tredjepart(res, binarer, "mac"), [])
+        self.assertEqual(len(res.fel), 2, res.fel)
+        self.assertIn("openssl-3.5.1 saknas", res.fel[0])
+        self.assertIn("XZ_I_PYTHON", res.fel[1])
+        self.assertEqual(sl.python_tredjepart(sl.Resultat(), ["python312.dll", "_socket.pyd"], "windows"), [])
+
     def test_mac_och_windows_kraver_whisper_cpp(self):
         self.lagg_mittpaket()
         for plattform in ("mac", "windows"):
@@ -424,10 +462,11 @@ class SamlaLicenser(unittest.TestCase):
             self.assertFalse(sl.ar_delat_bibliotek(n), n)
         for n in ("x.dll", "libx.1.dylib", "libx.so.60", "libx.so"):
             self.assertTrue(sl.ar_delat_bibliotek(n), n)
-        for n in ("MSVCP140.dll", "VCRUNTIME140_1.dll", "VCOMP140.DLL", "msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
-                  "ucrtbase.dll", "api-ms-win-crt-runtime-l1-1-0.dll", "api-ms-win-core-file-l1-2-0.dll"):
+        for n in ("MSVCP140.dll", "VCRUNTIME140_1.dll", "VCOMP140.DLL", "msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll"):
             self.assertTrue(sl.MSVC.match(n), n)
-        self.assertFalse(sl.MSVC.match("msvcrt.dll"))
+        # Universal C Runtime tas inte med (spec-filen): sadana filer ar FEL om de anda kommer med
+        for n in ("msvcrt.dll", "ucrtbase.dll", "api-ms-win-crt-runtime-l1-1-0.dll"):
+            self.assertFalse(sl.MSVC.match(n), n)
         # filnamnen far inte se ut som det som bygget forbjuder (bygg_windows_verktyg.ar_forbjudet, find i bygg-mac.sh)
         import bygg_windows_verktyg
         for namn in ("sherpa-onnx-core.txt", "microsoft-visual-c-runtime.txt", "ffmpeg.txt", "gcc-mingw-runtime.txt",
@@ -500,6 +539,31 @@ class KontrolleraLicenser(unittest.TestCase):
         self.assertIn("modulen nagot_helt_okant.sub", fel)
         self.assertEqual(len(res.fel_rader), 2)
 
+    def test_tredjepartskod_i_python_kraver_sin_licens(self):
+        for n in ("libssl-3-x64.dll", "_lzma.pyd", "_decimal.pyd", "pyexpat.pyd", "_sha2.pyd"):
+            skriv(os.path.join(self.prog, "_internal", n), "x")
+        res = self.kor()
+        self.assertEqual(len(res.fel_rader), 2, res.fel_rader)
+        self.assertIn("OpenSSL finns i programmet (libssl-3-x64.dll)", res.fel_rader[0])
+        self.assertIn("XZ Utils (liblzma) finns i programmet (_lzma.pyd)", res.fel_rader[1])
+        for del_ in ("libmpdec", "expat", "HACL*"):  # ur CPythons license.rst i python.txt
+            self.assertTrue(any(r.startswith(f"{del_} finns i programmet") for r in res.ok_rader), (del_, res.ok_rader))
+        licenser = os.path.join(self.prog, "licenser")
+        skriv(os.path.join(licenser, "openssl.txt"), "OpenSSL 3.0.16\nApache License\n")
+        skriv(os.path.join(licenser, "xz.txt"), "XZ Utils\nliblzma is in the public domain.\n")
+        fil = os.path.join(licenser, sl.FORTECKNING)
+        text = las_fil(fil).replace(sl.STRECK + "\n", sl.STRECK + "\nOpenSSL | 3.0.16 | Apache-2.0 | x | openssl.txt\n"
+                                    "XZ Utils (liblzma) | 5.2.5 | public domain | x | xz.txt\n", 1)
+        skriv(fil, text)
+        res = self.kor()
+        self.assertEqual(res.fel_rader, [])
+        # Pythons licensfil utan libmpdec ger FEL
+        python = os.path.join(licenser, "python.txt")
+        skriv(python, las_fil(python).replace("\nlibmpdec\n", "\n"))
+        res = self.kor()
+        self.assertEqual(len(res.fel_rader), 1, res.fel_rader)
+        self.assertIn("libmpdec finns i programmet (_decimal.pyd) men Pythons licensfil saknar", res.fel_rader[0])
+
     def test_markerad_ofullstandig_eller_prov(self):
         fil = os.path.join(self.prog, "licenser", sl.FORTECKNING)
         original = las_fil(fil)
@@ -553,13 +617,13 @@ class KontrolleraLicenser(unittest.TestCase):
 class LicensernaISpecen(unittest.TestCase):
     """Spec-filen med falska PyInstaller-klasser: licenser/ i COLLECT (Mac, Linux) eller bredvid exe-filen (Windows)."""
 
-    def kor_spec(self, plattform, miljo):
+    def kor_spec(self, plattform, miljo, binarer=()):
         anrop = {}
 
         def falsk(namn):
             def f(*a, **kw):
                 anrop[namn] = (a, kw)
-                return mock.MagicMock(pure=[], scripts=[], binaries=[], datas=[])
+                return mock.MagicMock(pure=[], scripts=[], binaries=list(binarer) if namn == "Analysis" else [], datas=[])
             return f
 
         mapp = tempfile.mkdtemp(prefix="akasha-spec-licens-")
@@ -582,6 +646,18 @@ class LicensernaISpecen(unittest.TestCase):
             self.assertIn("licenser/akasha-protokoll.txt", mal)
             self.assertTrue(all(typ == "DATA" for _m, _k, typ in toc))
             self.assertTrue(all(os.path.isfile(k) for _m, k, _t in toc))
+
+    def test_windows_utesluter_universal_c_runtime(self):
+        kat = tempfile.mkdtemp(prefix="akasha-whisper-")
+        self.addCleanup(shutil.rmtree, kat, True)
+        skriv(os.path.join(kat, "whisper-cli.exe"), "x")
+        binarer = [("ucrtbase.dll", "C:/jdk/bin/ucrtbase.dll", "BINARY"),
+                   ("api-ms-win-crt-runtime-l1-1-0.dll", "C:/jdk/bin/api-ms-win-crt-runtime-l1-1-0.dll", "BINARY"),
+                   ("python312.dll", "C:/py/python312.dll", "BINARY"), ("VCRUNTIME140.dll", "C:/py/VCRUNTIME140.dll", "BINARY")]
+        anrop, _ = self.kor_spec("win32", {"AKASHA_WHISPER_KATALOG": kat}, binarer=binarer)
+        self.assertEqual([b[0] for b in anrop["COLLECT"][0][1]], ["python312.dll", "VCRUNTIME140.dll"])
+        anrop, _ = self.kor_spec("linux", {}, binarer=binarer)  # bara Windows filtrerar
+        self.assertEqual(len(anrop["COLLECT"][0][1]), 4)
 
     def test_windows_far_licenser_bredvid_exe_filen(self):
         kat = tempfile.mkdtemp(prefix="akasha-whisper-")

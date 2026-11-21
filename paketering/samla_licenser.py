@@ -78,10 +78,7 @@ NOTER = {
     "pyinstaller": "PyInstaller bygger programmet. Det som följer med är startprogrammet (bootloader) och körtidskrokarna; "
                    "undantagen i texten nedan gör att programmet inte behöver vara under GPL.",
 }
-# Microsofts runtime: Visual C++ (msvcp140 ...) och Universal C Runtime (ucrtbase.dll och vidarebefordrarna
-# api-ms-win-crt-*.dll, som PyInstaller kan ta med fran PATH)
-MSVC = re.compile(r"^((msvcp|vcruntime|vcomp|concrt|vccorlib)140(_[a-z0-9_]+)?(-[0-9a-f]{8,})?|ucrtbase|api-ms-win-[a-z0-9-]+)\.dll$",
-                  re.I)
+MSVC = re.compile(r"^(msvcp|vcruntime|vcomp|concrt|vccorlib)140(_[a-z0-9_]+)?(-[0-9a-f]{8,})?\.dll$", re.I)
 FFMPEG_BIBLIOTEK = ("avutil", "avcodec", "avformat", "avfilter", "avdevice", "swresample", "swscale")
 FFMPEG_NAMN = re.compile(r"^(?:lib)?(" + "|".join(FFMPEG_BIBLIOTEK) + r")(?=[-._])", re.I)
 WHISPER_NAMN = re.compile(r"^(whisper|ggml)", re.I)
@@ -441,8 +438,72 @@ def python_komponent(res, python_binarer):
     if python_binarer:
         rader.append("Filer ur Python-installationen i programmet:")
         rader += [f"  {mal}" for mal in sorted(python_binarer)]
+    texter = [(os.path.basename(fil), fil)]
+    minor = f"cpython-{sys.version_info.major}.{sys.version_info.minor}"
+    katalog = os.path.join(TILLAGGSKATALOG, minor)
+    if os.path.isdir(katalog) and os.listdir(katalog):
+        texter += [(f"paketering/licenstexter/{minor}/{f}", os.path.join(katalog, f)) for f in sorted(os.listdir(katalog))]
+        rader.append("Licenserna för det som ingår i Python (expat i pyexpat, libmpdec i _decimal, libffi, zlib, HACL* i "
+                     "_md5, _sha1, _sha2 och _sha3 m.fl.) står efter Pythons LICENSE.txt, ur CPythons Doc/license.rst. "
+                     "OpenSSL och XZ Utils har egna filer.")
+    else:
+        res.fel.append(f"Python {v}: paketering/licenstexter/{minor} saknas (Doc/license.rst ur CPython, med licenserna för "
+                       f"expat, libmpdec, libffi, zlib, HACL* m.fl., som ingår i Python)")
     return Komponent("Python", v, "PSF-2.0", f"https://www.python.org/ (källkoden: https://github.com/python/cpython/tree/v{v})",
-                     "python.txt", huvud(rader) + text_ur_filer([(os.path.basename(fil), fil)]))
+                     "python.txt", huvud(rader) + text_ur_filer(texter))
+
+
+# XZ Utils (liblzma) ar statiskt inlankad i _lzma i Python fran python.org, i den version som byggskripten anger (Mac:
+# Mac/BuildScript/build-installer.py, Windows: PCbuild/get_externals.bat). Versionen gar inte att lasa ur _lzma.
+XZ_I_PYTHON = {("mac", "3.12.10"): "5.2.3", ("windows", "3.12.10"): "5.2.5"}
+
+
+def tillaggskomponent(namn, version, licens, kalla, fil, katalog, rader, res):
+    sokvag = os.path.join(TILLAGGSKATALOG, katalog)
+    if not os.path.isdir(sokvag) or not os.listdir(sokvag):
+        res.fel.append(f"{namn} {version}: paketering/licenstexter/{katalog} saknas (licenstexten för den versionen)")
+        return None
+    texter = [(f"paketering/licenstexter/{katalog}/{f}", os.path.join(sokvag, f)) for f in sorted(os.listdir(sokvag))]
+    rader = [f"{namn} {version}", f"Licens: {licens}", f"Källa: {kalla}"] + rader
+    return Komponent(namn, version, licens, kalla, fil, huvud(rader) + text_ur_filer(texter))
+
+
+def python_tredjepart(res, python_binarer, plattform):
+    """OpenSSL (libssl, libcrypto, _ssl, _hashlib) och XZ Utils (_lzma) i Python-installationens filer i programmet."""
+    ut = []
+    namn = [os.path.basename(m).lower() for m in python_binarer]
+    openssl = [m for m, n in zip(python_binarer, namn) if re.match(r"^(lib)?(ssl|crypto)[-.]|^_(ssl|hashlib)\.", n)]
+    if openssl:
+        try:
+            import ssl
+            version = ".".join(str(x) for x in ssl.OPENSSL_VERSION_INFO[:3])
+            text = ssl.OPENSSL_VERSION
+        except ImportError:
+            version, text = "", "(ssl gick inte att importera)"
+        if not version:
+            res.fel.append("OpenSSL följer med Python i programmet, men versionen gick inte att läsa (ssl.OPENSSL_VERSION)")
+        else:
+            k = tillaggskomponent("OpenSSL", version, "Apache-2.0", f"https://github.com/openssl/openssl (taggen openssl-{version})",
+                                  "openssl.txt", f"openssl-{version}",
+                                  [f"Python i programmet är byggt med {text}.", "Filer i programmet:"]
+                                  + [f"  {m}" for m in sorted(openssl)], res)
+            if k:
+                ut.append(k)
+    lzma = [m for m, n in zip(python_binarer, namn) if n.startswith("_lzma.")]
+    if lzma:
+        v = platform.python_version()
+        version = XZ_I_PYTHON.get((plattform, v))
+        if version is None:
+            res.fel.append(f"XZ Utils (liblzma) är inlänkad i {lzma[0]}, men vilken version som Python {v} på {plattform} har "
+                           f"är inte känd: kontrollera CPythons byggskript och lägg till den i XZ_I_PYTHON i samla_licenser.py")
+        else:
+            k = tillaggskomponent("XZ Utils (liblzma)", version, "public domain (liblzma)",
+                                  f"https://github.com/tukaani-project/xz (taggen v{version})", "xz.txt", f"xz-{version}",
+                                  [f"liblzma är statiskt inlänkad i {lzma[0]} (Python {v} från python.org).",
+                                   "Den delen är public domain, enligt texten nedan."], res)
+            if k:
+                ut.append(k)
+    return ut
 
 
 def las_kalla(sokvag):
@@ -583,13 +644,11 @@ def msvc_komponent(dllar):
              "distribuerbar kod (Distributable Code)",
              f"Källa: {url}",
              "",
-             "De här filerna i programmet är Microsofts Visual C++-runtime och Universal C Runtime (ucrtbase.dll och "
-             "api-ms-win-*.dll):"]
+             "De här filerna i programmet är Microsofts Visual C++-runtime:"]
     rader += [f"  {d}" for d in sorted(set(dllar))]
     rader += ["",
               "Filerna bredvid whisper-cli.exe är tagna ur Visual Studios Redist-katalog. De andra följer med Python och "
-              "Python-paketen, eller är Universal C Runtime, som Windows 10 och senare redan har (PyInstaller tar med "
-              "kopior som finns på byggmaskinen). Alla är filer som Microsoft tillåter att andra program delar ut tillsammans med sig "
+              "Python-paketen. Alla är filer som Microsoft tillåter att andra program delar ut tillsammans med sig "
               "(distribuerbar kod), på de villkor som står i licensvillkoren för Visual Studio. Villkoren följer med "
               "Visual Studio och finns på https://visualstudio.microsoft.com/license-terms/. Ingen licenstext från "
               "Microsoft är kopierad hit."]
@@ -722,6 +781,11 @@ def samla(paket, ovriga, ut, plattform, version="0.2.0", whisper_licens=None, ff
     k = python_komponent(res, python_binarer)
     if k:
         komponenter.append(k)
+    fore = len(res.fel)
+    komponenter += python_tredjepart(res, python_binarer, plattform)
+    if plattform == "linux":  # provbygget: systemets OpenSSL och liblzma, vars texter inte finns har
+        res.varningar += res.fel[fore:]
+        del res.fel[fore:]
     if plattform in ("mac", "windows") and not prov:
         k = whisper_komponent(whisper_licens, res, whisper_binarer)
         if k:

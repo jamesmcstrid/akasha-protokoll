@@ -1,0 +1,7 @@
+XZ Utils 5.2.5 (liblzma)
+commit: 2327a461e1afce862c22269b80d3517801103c1b
+kalla: https://github.com/tukaani-project/xz (taggen v5.2.5)
+filerna: COPYING vid commiten
+sha256: bcb02973ef6e87ea73d331b3a80df7748407f17efdb784b61b47e0e610d3bb5c
+hamtad: 2026-11-21
+galler: liblzma, statiskt inlankad i _lzma i Python 3.12.10 for Windows fran python.org (PCbuild/get_externals.bat: xz-5.2.5)

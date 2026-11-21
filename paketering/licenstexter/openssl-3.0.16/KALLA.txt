@@ -1,0 +1,7 @@
+OpenSSL 3.0.16
+commit: fa1e5dfb142bb1c26c3c38a10aafa7a095df52e5
+kalla: https://github.com/openssl/openssl (taggen openssl-3.0.16)
+filerna: LICENSE.txt vid commiten (Apache License 2.0)
+sha256: 7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a
+hamtad: 2026-11-21
+galler: libssl och libcrypto i Python 3.12.10 fran python.org (Mac: Mac/BuildScript/build-installer.py, Windows: PCbuild/get_externals.bat, bada OpenSSL 3.0.16)

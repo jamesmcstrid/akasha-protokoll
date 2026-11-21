@@ -182,6 +182,13 @@ Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-2
   (med `bygg-ffmpeg.sh` och `ffmpeg-komponenter.txt`) och ska läggas i releasen, där förteckningen säger att
   det finns. Uppmätt i körning 44912059276 (2026-11-21): programmet är 90 MB (förut 128 MB), zip-filen
   32,9 MB (förut 49 MB) och 138 Mach-O-filer (förut 164); förteckningen har 29 komponenter.
+- **Det som följer med Python.** Python 3.12.10 från python.org har med sig OpenSSL 3.0.16 (`libssl.3.dylib`,
+  `libcrypto.3.dylib`), XZ Utils 5.2.3 (statiskt i `_lzma`), expat (`pyexpat`), libmpdec (`_decimal`) och
+  HACL* (`_md5`, `_sha1`, `_sha2`, `_sha3`); libffi, zlib och bzip2 kommer från macOS (`bygg-mac.sh` steg 3b
+  visar vad lib-dynload-modulerna länkar mot). Förteckningen har därför OpenSSL och XZ Utils som egna
+  komponenter (versionen av OpenSSL ur `ssl.OPENSSL_VERSION`, av XZ ur CPythons byggskript, `XZ_I_PYTHON`), och
+  `python.txt` har CPythons `Doc/license.rst` och HACL*-texten (`paketering/licenstexter/cpython-3.12`).
+  `kontrollera_licenser.py` faller om något av det finns i programmet men inte i förteckningen.
 - **Start och avslut.** `mac_app.py` är det tunna Mac-skalet: ikon i Dock, programmenyn och
   Dock-menyn. Allt annat ligger i `start.py`, som går att köra och testa på Linux: loggning, kontroll
   av inställningsfilen, om porten är ledig, tjänsten i en bakgrundstråd, att öppna webbläsaren och att
@@ -315,12 +322,15 @@ har inte körts på en vanlig Windows-dator.**
   Med det egna FFmpeg-bygget har förteckningen 33 komponenter, bland dem GCC- och mingw-w64-runtimen
   (libgcc, startkoden och winpthreads är statiskt inlänkade i FFmpeg-DLL:erna) och Vulkan-Headers och
   SPIRV-Headers från Khronos (inbyggda i `ggml-vulkan.dll`; texterna i `paketering/licenstexter/`, versionerna
-  ur whisper.cpp:s `KALLA.txt`). PyInstaller tar med Universal C Runtime (`ucrtbase.dll`, `api-ms-win-*.dll`)
-  från en JDK i byggmaskinens PATH; de står under Visual C++-runtimen.
+  ur whisper.cpp:s `KALLA.txt`). Universal C Runtime (`ucrtbase.dll`, `api-ms-win-*.dll`), som PyInstaller
+  annars tar med från en JDK i byggmaskinens PATH, utesluts i spec-filen: den finns i Windows 10 och 11.
+  Python 3.12.10 för Windows har OpenSSL 3.0.16 och XZ Utils 5.2.5, som också är egna komponenter.
 - **FFmpeg (bara LGPL).** Som på Mac, men FFmpeg byggs i MSYS2 UCRT64 (finns i `C:\msys64` på byggmaskinen;
   gcc, nasm och make ur pacman, inga åtgärder från tredje part) och PyAV med MSVC mot FFmpegs
   importbibliotek. I MSYS2-steget slås `MSYS_NO_PATHCONV` av (annars får gcc `/tmp/...`), och FFmpeg länkas
   med `-static` så att DLL-filerna inte behöver `libgcc_s_seh-1.dll` eller `libwinpthread-1.dll`.
+  Paketen i MSYS2 (gcc, binutils, nasm, make m.fl.) är inte låsta: `pacman -Sy` tar de senaste, och versionerna
+  står i stegets logg och i `KALLA.txt` (kompilatorn).
   `bygg-windows.sh` (steg 4c) kör `kontrollera_ffmpeg.py` mot programmet, även importerna. Uppmätt i körning
   44912056987 (2026-11-21): `av.libs` är 3,4 MB (förut 70,1 MB), programmet 158,3 MB (292 filer), zip-filen
   61,6 MB (förut 70,6 MB), installationsfilen 37,2 MB (förut 48,5 MB) och installationen 162,7 MB.

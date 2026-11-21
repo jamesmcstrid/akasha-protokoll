@@ -1,0 +1,8 @@
+CPython 3.12, licenserna for det som ingar i Python
+commit: 0cc81280367df838c4b199f8f0378837165071c2
+kalla: https://github.com/python/cpython (taggen v3.12.10)
+filerna: license.rst ar Doc/license.rst vid commiten (avsnittet Licenses and Acknowledgements for Incorporated Software: OpenSSL, expat, libffi, zlib, libmpdec, cfuhash m.fl.); HACL-LICENSE.txt ar MIT-texten i huvudet pa Modules/_hacl/Hacl_Hash_SHA2.c vid commiten (HACL* i _md5, _sha1, _sha2 och _sha3)
+sha256 license.rst: 341832873fd316a37927e79385093fbbfd40a467428480835fe435a80cadf4e5
+sha256 Hacl_Hash_SHA2.c: 30638efb75c8b185bb09c3df6977e3f3c5d21a1e696218cf7ade6bc4d5201b31
+hamtad: 2026-11-21
+galler: Python 3.12 fran python.org (Mac och Windows), som byggen anvander via setup-python

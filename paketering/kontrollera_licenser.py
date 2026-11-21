@@ -29,6 +29,18 @@ SEP = " | "
 STRECK = "---"
 MARKERINGAR = ("OFULLSTÄNDIG", "PROV")
 PYINSTALLERS_EGNA = ("pyimod", "pyi_", "_pyi_")
+# Tredjepartskod som foljer med Python i programmet: filnamnet -> det som forteckningen maste ha. ("rad", X): en komponent
+# vars namn borjar med X och vars fil har texten; ("python", X): Python-komponentens fil har texten X.
+INBYGGDA = [
+    (r"^(lib)?(ssl|crypto)[-.].*\.(dylib|dll|so)|^_(ssl|hashlib)\.", ("rad", "OpenSSL", "Apache License"), "OpenSSL"),
+    (r"^_lzma\.", ("rad", "XZ Utils", "liblzma"), "XZ Utils (liblzma)"),
+    (r"^(pyexpat|_elementtree)\.", ("python", "\nexpat\n"), "expat"),
+    (r"^_decimal\.", ("python", "\nlibmpdec\n"), "libmpdec"),
+    (r"^_ctypes\.|^libffi", ("python", "\nlibffi\n"), "libffi"),
+    (r"^zlib\.", ("python", "\nzlib\n"), "zlib"),
+    (r"^_(md5|sha1|sha2|sha3)\.", ("python", "HACL* Contributors"), "HACL*"),
+    (r"^_bz2\.pyd$", ("python", "bzip2"), "bzip2"),
+]
 
 
 def normnamn(namn):
@@ -88,6 +100,47 @@ def recordkartor(dists):
                     mod = mod[: -len(".__init__")] if mod.endswith(".__init__") else mod
                     moduler.setdefault(mod, set()).add(namn)
     return filer, moduler
+
+
+def filnamn_i_programmet(rotter, licenskatalog):
+    """Namnen pa alla filer i programmets kataloger (utom licenser/ och lankar)."""
+    ut = set()
+    for rot in rotter:
+        for mapp, kataloger, filer in os.walk(rot):
+            if os.path.abspath(mapp) == os.path.abspath(licenskatalog):
+                kataloger[:] = []
+                continue
+            ut.update(f for f in filer if not os.path.islink(os.path.join(mapp, f)))
+    return ut
+
+
+def kontrollera_inbyggda(namn, rader, licenser, res):
+    """FEL nar tredjepartskod i Python (OpenSSL, XZ, expat, libmpdec ...) finns i programmet men inte i forteckningen."""
+    def las(fil):
+        try:
+            with open(os.path.join(licenser, fil), encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            return ""
+    python = next((r for r in rader if r["namn"] == "Python"), None)
+    python_text = las(python["fil"]) if python else ""
+    hittade = 0
+    for monster, krav, del_ in INBYGGDA:
+        filer = sorted(n for n in namn if re.search(monster, n, re.I))
+        if not filer:
+            continue
+        hittade += 1
+        if krav[0] == "rad":
+            rad = next((r for r in rader if r["namn"].startswith(krav[1])), None)
+            if rad is None or krav[2] not in las(rad["fil"]):
+                res.fel(f"{del_} finns i programmet ({', '.join(filer[:3])}) men förteckningen saknar {krav[1]} med "
+                        f"licenstexten")
+                continue
+        elif krav[1] not in python_text:
+            res.fel(f"{del_} finns i programmet ({', '.join(filer[:3])}) men Pythons licensfil saknar dess licens")
+            continue
+        res.ok(f"{del_} finns i programmet ({', '.join(filer[:3])}) och har sin licens i förteckningen")
+    return hittade
 
 
 def paket_i_filer(rotter, filkarta, licenskatalog):
@@ -178,7 +231,10 @@ def kontrollera(program, res, dists=None, las_pyz=None, toppkarta=None):
     if not saknade:
         res.ok(f"{len(rader)} komponenter i {FORTECKNING}, och var och en har sin fil i {licenser}")
 
-    # 3. Paketen i programmet
+    # 3. Tredjepartskoden i Python (OpenSSL, XZ, expat ...)
+    kontrollera_inbyggda(filnamn_i_programmet(rotter, licenser), rader, licenser, res)
+
+    # 4. Paketen i programmet
     dists = list(importlib.metadata.distributions()) if dists is None else list(dists)
     filkarta, modulkarta = recordkartor(dists)
     i_forteckningen = {normnamn(r["namn"]) for r in rader}

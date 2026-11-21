@@ -1,0 +1,7 @@
+XZ Utils 5.2.3 (liblzma)
+commit: 3d566cd519017eee1a400e7961ff14058dfaf33c
+kalla: https://github.com/tukaani-project/xz (taggen v5.2.3)
+filerna: COPYING vid commiten
+sha256: c4f8e14fafe458d84808a4cd8b69f94673ebe2bf8fc992291629a69ac12218f8
+hamtad: 2026-11-21
+galler: liblzma, statiskt inlankad i _lzma i Python 3.12.10 for Mac fran python.org (Mac/BuildScript/build-installer.py: XZ 5.2.3)
