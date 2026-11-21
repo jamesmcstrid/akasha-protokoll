@@ -580,7 +580,7 @@ facktermer. Men där de skiljer sig har minst en av dem hört fel.
   fortsatt med `Range`, med omdirigering till en CDN-värd och rätt sha256. Körs för hand med
   `AKASHA_RIKTIG_HAMTNING=1 venv/bin/python -m unittest discover -s tester -p test_riktig_hamtning.py`.
   Taligenkänningen (1,5 GB) har aldrig hämtats på riktigt i provet.
-- **GitHub Actions:** enhetstesterna gröna på ubuntu-latest och windows-latest vid push till main, och på macOS i Mac-app-flödet (251 tester, 4 överhoppade). faster-whisper installeras inte där (testerna behöver den inte).
+- **GitHub Actions:** enhetstesterna körs på ubuntu-latest, windows-latest och macos-latest vid varje push till main och i pull requests. macOS är med sedan 2026-11-21, när repot blev publikt och Actions gratis; före dess bara i Mac-app-flödet (251 tester, 4 överhoppade). faster-whisper installeras inte där (testerna behöver den inte).
 - **Programmet:** provbygge på Linux med kontrollskriptet (start, standardplatser, flytt av gamla modeller, riktig hämtning av röstmodellen, avkodning, avslut).
 - **`installera.sh` från början:** med en ersättare för launchd, även en ominstallation när
   tjänsten redan finns. Modellnedladdningen med sha256-kontroll gick igenom.
