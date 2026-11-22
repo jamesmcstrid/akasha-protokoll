@@ -520,9 +520,11 @@ hos Talare 1. Nu används en annan metod som klarar samma inspelning:
    är osäker, och det är oftast en kort avvikelse hos någon som redan finns.
 4. Varje ord får den grupp som fönstren närmast ordet liknar mest.
 5. Talaren byter sällan mitt i en mening. Inom en mening (som slutar vid punkt, frågetecken,
-   utropstecken eller en paus på 0,4 s) får korta avvikande sjok, högst 4 ord i rad, samma talare
+   utropstecken eller en paus på 0,4 s, men en paus efter ett kommatecken avslutar inte meningen) får korta avvikande sjok, högst 4 ord i rad, samma talare
    som resten av meningen, om en talare har mer än hälften av meningens ord. Egna meningar som
-   "Ja, ja." och längre avvikelser rörs inte. Det behövs eftersom ordtiderna är ungefärliga:
+   "Ja, ja." och längre avvikelser rörs inte. (Utan kommaregeln blev ett "Ja," före en paus en egen mening som
+   regeln lämnade ifred: "…det också. Ja, som vi gör." gav A, B, A i ett möte med Pianissimo. Priset: ett "Ja," av
+   en talare, med komma och paus före en annan talares mening, går till den andra.) Det behövs eftersom ordtiderna är ungefärliga:
    whisper.cpp:s ordtider låg i ett riktigt möte i snitt 0,17 s före faster-whispers och ibland en
    sekund fel. Svagheten: om whisper inte sätter något skiljetecken vid ett talarbyte kan ett kort
    svar som "Nej, precis." hamna hos den andra.
@@ -643,13 +645,27 @@ sidan eller med `python app/modeller.py pianissimo`, som de andra modellerna (ma
   delades i 348 bitar (1648 av 4635 noder) som skickas fram och tillbaka, och det blev 6 gånger långsammare.
   `pianissimo.ladda()` anger därför `CPUExecutionProvider`.
 - **Kvalitet:** i ett riktigt möte minst lika bra som KB-Whisper, bättre på engelska lånord och utan påhittade
-  upprepningar. Men den hoppar över korta inpass som "Ja.", och den har ingen prompt: `ORDLISTA` och svårstavade
-  ord ignoreras (loggas en gång) och Klangs ordförstärkning används inte.
+  upprepningar. Men den hoppar över korta inpass som "Ja.".
+- **Ordlista:** samma prompt som de andra motorerna får (`ORDLISTA` och svårstavade ord, kommaseparerade) förstärker
+  orden. `app/pianissimo_boost.py` är en bearbetad kopia av Klangs kod i modellrepot (`phrase_boost.py` och
+  `pianissimo_onnx.py`, samma revision som modellen, CC-BY-4.0), i sin tur en portning av NeMos frasförstärkning:
+  fraserna blir ett träd över SentencePiece-token (`tokenizer.model`, med i manifestet), och varje token som modellen
+  väljer får en bonus om den fortsätter en fras. Klangs kod körs alltså inte; kopian är kort nog att läsa rad för
+  rad, och ändringarna står i dess huvud. Avkodningsslingan är onnx-asr 0.12.0:s med bonusen tillagd, därför är
+  versionen fastlåst. Förstärkningen sätts in på modellen för en transkribering och tas bort efteråt (också vid fel),
+  så en inspelnings ord följer aldrig med till nästa; en tom prompt kostar ingenting. Går något fel (t.ex. att
+  `sentencepiece` saknas) loggas det utan orden och transkriberingen fortsätter utan ordlista. Uppmätt med
+  `halsokoll/jamfor_motorer.sh --motor pianissimo --ord "Carter, Afghanistan, boulevarderna, Turkiet"`: "Carter"
+  blev "karter" utan hjälp och rätt med, och ordfelen sjönk från 7,4 till 6,2 % (`tva-talare.m4a`) och från 7,6 till
+  6,7 % (`digitalt-mote.webm`); `en-talare.m4a` har inga av orden och är oförändrad (2,8 %).
 - **Så arbetar den (`app/pianissimo.py`):** ljudet delas vid tystaste stället i bitar om högst 30 s, och ordtiderna
   kommer från onnx-asr:s tid per token. Med ordtider (talaruppdelning) får orden samma form som whisper.cpp:s
   DTW-ord, och segmenten delas efter meningsslut; utan blir det ett segment per bit. Talaruppdelningen
   fungerar som med de andra motorerna: sherpa-onnx och onnxruntime från onnx-asr kördes i samma process på
-  `tva-talare.m4a` med rätt två talare.
+  `tva-talare.m4a` med rätt två talare. Ett ord slutar där nästa börjar, högst 1 s efter starten (annars räknas
+  pauser som tal), men ett längre ord slutar 0,3 s efter sin sista bit: annars klipptes ett ord på 1,5 s
+  vid 1 s, och luckan räknades som en paus som delade meningen i talaruppdelningen (i `tva-talare.m4a` gav det
+  5 pauser på 0,4 s eller mer efter ord utan skiljetecken, nu 2).
 - **Minne och trådar:** modellen laddas vid första transkriberingen och ligger kvar i minnet (som
   faster-whisper). En egen lås gör att bara en tråd i taget använder den, utöver transkriberingslåset i `motor.py`.
 - **Stopp:** `motor.stoppa()` sätter `_avslutas`, som kontrolleras före varje bit, så en timmes möte stannar inom

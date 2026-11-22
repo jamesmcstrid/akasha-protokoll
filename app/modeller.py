@@ -97,6 +97,8 @@ PAKET = {
             "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"),
         Fil(*_PIANISSIMO, "config.json", "pianissimo-sv-onnx", 116,
             "f19eee59d2ba995f6d5cdb164e30dd64d2a8b7ed0ce9f2198ab68a5467445694"),
+        Fil(*_PIANISSIMO, "tokenizer.model", "pianissimo-sv-onnx", 360916,
+            "eacec2b0a77f336d4a2ca4a25a7047575d3c2b74de47e997f4c205126ed3135e"),
     ),
 }
 

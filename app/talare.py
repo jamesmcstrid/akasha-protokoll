@@ -256,11 +256,14 @@ _MENINGSSLUT = re.compile(r"[.?!…][\"'”»)]*$")
 
 
 def meningar(ord_lista):
-    """[(a, b)]: ordindex for meningar. En mening slutar vid . ? ! eller en paus (MENING_PAUS_S)."""
+    """[(a, b)]: ordindex for meningar. En mening slutar vid . ? ! eller en paus (MENING_PAUS_S), men inte
+    vid en paus efter ett komma: da fortsatter meningen, och ett kort "Ja," mitt i den far inte vara
+    en egen mening som meningsregeln (jamna_ut) lamnar orord."""
     ut, a = [], 0
     for k in range(1, len(ord_lista) + 1):
         if (k == len(ord_lista) or _MENINGSSLUT.search(ord_lista[k - 1][2].strip())
-                or ord_lista[k][0] - ord_lista[k - 1][1] >= MENING_PAUS_S):
+                or (ord_lista[k][0] - ord_lista[k - 1][1] >= MENING_PAUS_S
+                    and not ord_lista[k - 1][2].rstrip().endswith(","))):
             ut.append((a, k))
             a = k
     return ut
@@ -275,6 +278,7 @@ def jamna_ut(ord_lista, etiketter):
     "mm" fran nagon annan kan ta over ett ord. Da hamnade enstaka ord mitt i en mening hos fel
     person, och en tredjedel av replikerna i ett riktigt mote blev 1-3 ord. Svagheten: saknar
     whisper skiljetecken vid ett talarbyte kan ett kort svar ("Nej, precis.") hamna hos den andra.
+    Samma sak med ett kort "Ja," som foljs av en paus och sedan den andras mening.
     """
     et = list(etiketter)
     for a, b in meningar(ord_lista):
