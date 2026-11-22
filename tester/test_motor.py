@@ -96,11 +96,27 @@ class TestHarOnnxAsr(unittest.TestCase):
 
 
 class TestMalMotor(UtanOnnxAsr):
-    def test_med_onnx_asr_blir_det_pianissimo_aven_utan_modellen(self):
+    def test_med_onnx_asr_och_utan_modeller_blir_det_pianissimo(self):
         for system, cli in (("Darwin", True), ("Windows", True), ("Linux", False)):
-            self.assertEqual(motor.mal_motor("auto", system, cli, har_onnx=True), "pianissimo")
-        self.assertEqual(motor.mal_motor("whispercpp", "Darwin", True, har_onnx=True), "whispercpp")
-        with mock.patch.object(motor, "har_onnx_asr", lambda: True):
+            self.assertEqual(motor.mal_motor("auto", system, cli, True, False, False), "pianissimo")
+        self.assertEqual(motor.mal_motor("auto", "Darwin", True, True, True, True), "pianissimo")
+
+    def test_den_som_redan_har_kb_whisper_behaller_det(self):
+        self.assertEqual(motor.mal_motor("auto", "Darwin", True, True, False, True), "whispercpp")
+        self.assertEqual(motor.mal_motor("auto", "Linux", False, True, False, True), "faster")
+
+    def test_tvingat_val_med_onnx_asr(self):
+        self.assertEqual(motor.mal_motor("whispercpp", "Darwin", True, True, False, False), "whispercpp")
+
+    def test_modellerna_kontrolleras_med_saknade(self):
+        def bara_kb(nyckel, storlek=None):
+            return ["x"] if nyckel == "pianissimo" else []
+        with mock.patch.object(motor, "har_onnx_asr", lambda: True), \
+             mock.patch.object(modeller, "saknade", bara_kb):
+            self.assertEqual(motor.mal_motor("auto", "Darwin", True), "whispercpp")
+            self.assertEqual(motor.valj_motor("auto", "Darwin", True), "whispercpp")
+        with mock.patch.object(motor, "har_onnx_asr", lambda: True), \
+             mock.patch.object(modeller, "saknade", lambda *a, **k: ["x"]):
             self.assertEqual(motor.mal_motor("auto", "Darwin", True), "pianissimo")
 
     def test_mac_med_cli_ger_whispercpp_aven_utan_ggml(self):

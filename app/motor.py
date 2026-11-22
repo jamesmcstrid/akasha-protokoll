@@ -72,13 +72,19 @@ def har_onnx_asr():
         return "onnx_asr" in sys.modules
 
 
+def _modellen_finns(nyckel):
+    try:
+        return not modeller.saknade(nyckel, MODELL)
+    except KeyError:  # okand MODELL: hinder() sager ifran
+        return False
+
+
 def valj_motor(onskad=MOTOR, system=None, har_cli=None, har_ggml=None, har_onnx=None, har_pianissimo=None):
     """auto -> pianissimo om onnx-asr och Pianissimo-modellen finns, annars whispercpp pa Mac och Windows om
     whisper-cli och GGML-modellen finns, annars faster.
 
     Pianissimo var 6-13 ganger snabbare an KB-Whisper i matningarna (docs/TEKNIK.md, Pianissimo) och har
-    ORDLISTA, sa den gar fore nar den kan koras. Saknas modellen transkriberar KB-Whisper tills den har
-    hamtats: mal_motor() ger pianissimo, sa det ar den modellen sidan erbjuder.
+    ORDLISTA, sa den gar fore nar den kan koras. Vilken modell som hamtas nar ingen finns bestammer mal_motor().
 
     mac/installera.sh installerar whisper-cpp och GGML-modellen bara pa Apple Silicon, dar Metal
     gjorde transkriberingen ungefar tre ganger snabbare an CPU (MacBook Air). Valet gors pa vad som
@@ -87,38 +93,35 @@ def valj_motor(onskad=MOTOR, system=None, har_cli=None, har_ggml=None, har_onnx=
     """
     if onskad != "auto":
         return onskad
-    har_onnx = har_onnx_asr() if har_onnx is None else har_onnx
-    if har_onnx:
-        if har_pianissimo is None:
-            try:
-                har_pianissimo = not modeller.saknade("pianissimo", MODELL)
-            except KeyError:  # okand MODELL: hinder() sager ifran
-                har_pianissimo = False
-        if har_pianissimo:
+    if har_onnx_asr() if har_onnx is None else har_onnx:
+        if _modellen_finns("pianissimo") if har_pianissimo is None else har_pianissimo:
             return "pianissimo"
     system = system or plattform.system()
     har_cli = plattform.whisper_cli() is not None if har_cli is None else har_cli
-    if har_ggml is None:
-        try:
-            har_ggml = not modeller.saknade("whispercpp", MODELL)
-        except KeyError:  # okand MODELL: hinder() sager ifran
-            har_ggml = False
+    har_ggml = _modellen_finns("whispercpp") if har_ggml is None else har_ggml
     if system in ("Darwin", "Windows") and har_cli and har_ggml:
         return "whispercpp"
     return "faster"
 
 
-def mal_motor(onskad=MOTOR, system=None, har_cli=None, har_onnx=None):
-    """Vilken motor modellerna ska hamtas for. Med onnx-asr blir det pianissimo, aven nar modellen saknas.
-    Annars, pa en Mac eller Windows med whisper-cli, whisper.cpp aven nar GGML-filen saknas
-    (valj_motor() ger da KB-Whisper respektive faster tills modellen har hamtats)."""
+def mal_motor(onskad=MOTOR, system=None, har_cli=None, har_onnx=None, har_pianissimo=None, har_kb=None):
+    """Vilken motor modellerna ska hamtas for. Utan onnx-asr: pa en Mac eller Windows med whisper-cli
+    whisper.cpp aven nar GGML-filen saknas (valj_motor() ger da faster tills den har hamtats), annars faster.
+
+    Med onnx-asr blir det pianissimo, utom nar KB-Whisper-modellen redan finns och Pianissimo-modellen inte gor
+    det: den som har transkriberat med KB-Whisper fortsatter med det, utan en ny hamtning pa 660 MB, tills
+    MOTOR=pianissimo. Da stammer malet med valj_motor() nar modellerna ar pa plats, och sidan erbjuder
+    det som faktiskt anvands."""
     if onskad != "auto":
         return onskad
-    if har_onnx_asr() if har_onnx is None else har_onnx:
-        return "pianissimo"
     system = system or plattform.system()
     har_cli = plattform.whisper_cli() is not None if har_cli is None else har_cli
-    return "whispercpp" if system in ("Darwin", "Windows") and har_cli else "faster"
+    kb = "whispercpp" if system in ("Darwin", "Windows") and har_cli else "faster"
+    if not (har_onnx_asr() if har_onnx is None else har_onnx):
+        return kb
+    if _modellen_finns("pianissimo") if har_pianissimo is None else har_pianissimo:
+        return "pianissimo"
+    return kb if (_modellen_finns(kb) if har_kb is None else har_kb) else "pianissimo"
 
 
 def motor_text():
