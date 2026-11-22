@@ -128,9 +128,13 @@ echo "== 5. DLL-beroenden och arkitektur"
 "$PY" paketering/kontrollera_pe.py "$DIST" --system-katalog "${SYSTEMROOT:-C:\\Windows}\\System32" --ut build/app/pe-importer.txt \
   || fel "DLL-beroendena stammer inte (se raderna ovan, hela tabellen i build/app/pe-importer.txt)"
 
-# 6. faster-whisper-stacken och tkinter ska inte finnas i paketet (A6).
+# 6. faster-whisper-stacken och tkinter ska inte finnas i paketet (A6). onnxruntime hor till Pianissimo och ska finnas (6b).
 echo "== 6. ingen faster-whisper-stack i paketet"
 "$PY" "$VERKTYG" forbjudet "$DIST" || fel "det som inte ska vara med finns i paketet (se raderna ovan)"
+
+# 6b. Pianissimo (MOTOR=pianissimo): onnx-asr med sin dist-info och sina data, onnxruntime och sentencepiece ska finnas.
+echo "== 6b. Pianissimo i paketet"
+"$PY" "$VERKTYG" pianissimo "$DIST" || fel "Pianissimo (onnx-asr, onnxruntime, sentencepiece) saknas i paketet (se raderna ovan)"
 
 # 7. Storlek.
 echo "== 7. storlek"

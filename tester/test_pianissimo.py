@@ -415,11 +415,9 @@ class Val(FalskMiljo):
         with mock.patch.object(motor.importlib.util, "find_spec", lambda namn: None), \
              mock.patch.object(plattform, "ar_paketerad", lambda: True), \
              mock.patch.object(plattform, "system", lambda: "Windows"):
-            # Windows-programmet: systemet satts uttryckligen, annars beror testet pa datorn det kors pa
-            # (Mac-programmet har onnx-asr och ger en annan text).
+            # Windows och Mac: samma text (systemet satts uttryckligen, annars beror testet pa datorn det kors pa)
             text = motor.hinder()
-        self.assertIn("går inte i programmet", text)
-        self.assertIn("MOTOR", text)
+        self.assertEqual(text, "onnx-asr saknas i programmet. Ladda ned Akasha Protokoll på nytt.")
         self.assertNotIn("pip", text)
 
     def test_modellen_saknas(self):

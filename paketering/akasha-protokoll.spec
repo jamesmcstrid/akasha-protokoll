@@ -35,13 +35,16 @@ WHISPER_FILER = sorted(f for f in glob.glob(os.path.join(WHISPER_KATALOG, "*")) 
 if WIN and not any(os.path.basename(f).lower() == "whisper-cli.exe" for f in WHISPER_FILER):
     print("VARNING: whisper-cli.exe saknas i " + WHISPER_KATALOG)
 
-# Mac: Pianissimo (MOTOR=pianissimo, app/pianissimo.py) kor onnx-asr, onnxruntime och sentencepiece, som installeras ur
-# app/krav-pianissimo.txt i byggets venv (mac-app.yml). onnx_asr laser sin egen version ur dist-info nar den importeras
-# (copy_metadata, som stoppar bygget om onnx-asr saknas) och sina forbehandlare ur preprocessors/data nar modellen
-# laddas (collect_data_files, 6,7 MB): PyInstaller tar inte med nagon av delarna av sig sjalv. onnxruntimes bibliotek
-# tar PyInstallers egen krok (hook-onnxruntime). Windows och Linux: oforandrat, utan dem.
+# Mac och Windows: Pianissimo (MOTOR=pianissimo, app/pianissimo.py) kor onnx-asr, onnxruntime och sentencepiece, som
+# installeras ur app/krav-pianissimo.txt i byggets venv (mac-app.yml, windows-app.yml). onnx_asr laser sin egen version ur
+# dist-info nar den importeras (copy_metadata, som stoppar bygget om onnx-asr saknas) och sina forbehandlare ur
+# preprocessors/data nar modellen laddas (collect_data_files, 6,7 MB): PyInstaller tar inte med nagon av delarna av sig
+# sjalv. onnxruntimes bibliotek tar PyInstallers egen krok (hook-onnxruntime): pa Windows onnxruntime.dll,
+# onnxruntime_providers_shared.dll och onnxruntime_pybind11_state.pyd i onnxruntime/capi/, bredvid sherpa-onnx egen
+# onnxruntime.dll i sherpa_onnx/lib/. Linux (provbygget): oforandrat, utan dem.
+PIANISSIMO = MAC or WIN
 PIANISSIMO_DATA = []
-if MAC:
+if PIANISSIMO:
     from PyInstaller.utils.hooks import collect_data_files, copy_metadata
 
     PIANISSIMO_DATA = collect_data_files("onnx_asr") + copy_metadata("onnx-asr")
@@ -62,15 +65,15 @@ a = Analysis(
     datas=[(os.path.join(ROT, "app", "static"), "static")] + ([(IKON_PNG, ".")] if WIN else []) + PIANISSIMO_DATA,
     hiddenimports=["app", "start", "ljud", "av", "sherpa_onnx", "truststore", "waitress"]
     + (["AppKit", "Foundation", "objc", "PyObjCTools.AppHelper"] if MAC else [])
-    + (["pianissimo", "pianissimo_boost", "onnx_asr", "onnxruntime", "sentencepiece"] if MAC else [])
+    + (["pianissimo", "pianissimo_boost", "onnx_asr", "onnxruntime", "sentencepiece"] if PIANISSIMO else [])
     + (["pystray", "pystray._win32", "PIL.Image"] if WIN else []),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     # faster-whisper-stacken foljer inte med (A6): motorn ar whisper.cpp och ljud.py avkodar med PyAV. onnxruntime
-    # (sherpa-onnx har sin egen) foljer bara med i Mac-programmet, for Pianissimo.
+    # (sherpa-onnx har sin egen) foljer bara med i Mac- och Windows-programmen, for Pianissimo.
     excludes=["faster_whisper", "ctranslate2", "tokenizers", "huggingface_hub", "hf_xet", "tkinter"]
-    + ([] if MAC else ["onnxruntime"]),
+    + ([] if PIANISSIMO else ["onnxruntime"]),
     noarchive=False,
     optimize=0,
     # pystray ar LGPLv3: dess kod ligger som vanliga .py-filer i programmet, inte inbakad i arkivet, sa att den gar att byta ut.

@@ -29,7 +29,7 @@ the programs are built. Among the components:
 - onnx-asr (MIT License), the ONNX Runtime wheel from PyPI (MIT License, with its ThirdPartyNotices.txt),
   SentencePiece (https://github.com/google/sentencepiece, Apache-2.0, with darts_clone BSD-3-Clause,
   libsais Apache-2.0 and rapidhash BSD-2-Clause) and protobuf (BSD-3-Clause), which onnx-asr, ONNX Runtime and
-  SentencePiece need: in the Mac program, for Pianissimo (the Windows program does not have them yet)
+  SentencePiece need: in the Mac and Windows programs, for Pianissimo
 - app/pianissimo_boost.py is adapted from phrase_boost.py and pianissimo_onnx.py in that model repository (revision
   63730c6021234f26b9bbae9a07a04fec39e7a52e), CC-BY-4.0, by Klang, which port NVIDIA NeMo's phrase boosting
   (Apache-2.0). Changes: merged into one file, Swedish names, tokenizer passed in as a function, own log_softmax,

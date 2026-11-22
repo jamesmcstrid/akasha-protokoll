@@ -244,21 +244,26 @@ class SamlaLicenser(unittest.TestCase):
         self.assertEqual(len(res.fel), 1)
         self.assertIn("bibl2.libs/libokandsak-0123456789abcdef.dll", res.fel[0])
 
-    def lagg_pianissimo(self, med_onnx_asr_licens=True):
-        """Paketen som Pianissimo tar med sig i Mac-programmet, som i hjulen: onnxruntime har LICENSE och
+    def lagg_pianissimo(self, med_onnx_asr_licens=True, windows=False):
+        """Paketen som Pianissimo tar med sig i Mac- och Windows-programmen, som i hjulen: onnxruntime har LICENSE och
         ThirdPartyNotices.txt i paketkatalogen, sentencepiece har ingen licensfil alls, protobuf har den i dist-info."""
         self.p.paket("onnx-asr", "0.12.0", {"onnx_asr/__init__.py": "", "onnx_asr/preprocessors/data/fbanks.npz": "x"},
                      licensfiler={"licenses/LICENSE": MIT} if med_onnx_asr_licens else None,
                      metadata={"License-Expression": "MIT"})
         self.p.paket("onnxruntime", "1.32.0",
-                     {"onnxruntime/__init__.py": "", "onnxruntime/capi/libonnxruntime.1.32.0.dylib": "x",
-                      "onnxruntime/capi/onnxruntime_pybind11_state.so": "x", "onnxruntime/LICENSE": MIT,
+                     {"onnxruntime/__init__.py": "",
+                      **({"onnxruntime/capi/onnxruntime.dll": "x", "onnxruntime/capi/onnxruntime_pybind11_state.pyd": "x"}
+                         if windows else {"onnxruntime/capi/libonnxruntime.1.32.0.dylib": "x",
+                                          "onnxruntime/capi/onnxruntime_pybind11_state.so": "x"}),
+                      "onnxruntime/LICENSE": MIT,
                       "onnxruntime/ThirdPartyNotices.txt": "THIRD PARTY SOFTWARE NOTICES AND INFORMATION\nEigen, protobuf ...\n"},
                      metadata={"License": "MIT License"}, top_level=["onnxruntime"])
         self.p.paket("sentencepiece", "0.2.3", {"sentencepiece/__init__.py": "",
-                                                "sentencepiece/_sentencepiece.cpython-312-darwin.so": "x"},
+                                                "sentencepiece/_sentencepiece.cp312-win_amd64.pyd" if windows
+                                                else "sentencepiece/_sentencepiece.cpython-312-darwin.so": "x"},
                      metadata={"License-Expression": "Apache-2.0"})
-        self.p.paket("protobuf", "7.36.2", {"google/protobuf/__init__.py": "", "google/_upb/_message.abi3.so": "x"},
+        self.p.paket("protobuf", "7.36.2", {"google/protobuf/__init__.py": "",
+                                            "google/_upb/_message.abi3.pyd" if windows else "google/_upb/_message.abi3.so": "x"},
                      licensfiler={"LICENSE": "Copyright 2008 Google Inc.  All rights reserved.\n"},
                      metadata={"License": "3-Clause BSD License"})
 
@@ -286,6 +291,20 @@ class SamlaLicenser(unittest.TestCase):
         self.assertIn("Copyright (c) 2008-2011, Susumu Yata", sp)  # darts_clone
         self.assertIn("rapidhash - Very fast", sp)
         self.assertEqual(sp.count("===== paketering/licenstexter/sentencepiece-0.2.3/LICENSE ====="), 1)
+
+    def test_pianissimo_i_windows_programmet_har_licens_for_varje_del(self):
+        self.lagg_pianissimo(windows=True)
+        res = self.samla(self.pianissimo_paket(), plattform="windows", whisper_licens=whisper_katalog(self))
+        self.assertEqual(res.fel, [])
+        _text, rader = rader_i_forteckningen(self.ut)
+        namn = {r[0]: r for r in rader}
+        for del_ in ("onnx-asr", "onnxruntime", "sentencepiece", "protobuf"):
+            self.assertIn(del_, namn)
+            self.assertTrue(os.path.getsize(os.path.join(self.ut, namn[del_][4])) > 0, del_)
+        ort = las_fil(os.path.join(self.ut, "onnxruntime.txt"))
+        self.assertIn("THIRD PARTY SOFTWARE NOTICES AND INFORMATION", ort)
+        self.assertIn("onnxruntime/capi/onnxruntime.dll (paketets eget bibliotek)", ort)
+        self.assertIn("Hjulet sentencepiece har ingen licensfil", las_fil(os.path.join(self.ut, "sentencepiece.txt")))
 
     def test_pianissimo_utan_licens_ar_fel(self):
         self.lagg_pianissimo(med_onnx_asr_licens=False)
