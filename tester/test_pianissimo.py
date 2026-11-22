@@ -45,6 +45,18 @@ class OrdFranTokens(unittest.TestCase):
         self.assertEqual(ut[0][1], pianissimo.MAX_ORD_S)
         self.assertEqual(ut[1][1], 8.0 + pianissimo.MAX_ORD_S)
 
+    def test_langt_ord_slutar_efter_sin_sista_bit_inte_efter_en_sekund(self):
+        # "Davidöverenskommelserna" sags pa 1,5 s: biten "na" kommer vid 1,5 och nasta ord vid 1,7
+        ut = pianissimo.ord_fran_tokens([" Dav", "id", "ser", "na", " och"], [0.0, 0.4, 1.0, 1.5, 1.7], 3.0)
+        self.assertEqual(ut[0][:2], (0.0, 1.7))
+        ut = pianissimo.ord_fran_tokens([" Dav", "na", " och"], [0.0, 1.5, 2.9], 4.0)  # sedan en riktig paus
+        self.assertEqual(ut[0][:2], (0.0, 1.5 + pianissimo.SLUT_BIT_S))
+
+    def test_langt_ord_ger_ingen_paus_som_delar_meningen(self):
+        import talare
+        ord_lista = pianissimo.ord_fran_tokens([" Dav", "id", "ser", "na", " och", " fler"], [0.0, 0.4, 1.0, 1.5, 1.7, 2.0], 3.0)
+        self.assertEqual(talare.meningar(ord_lista), [(0, 3)])
+
     def test_kort_ord_far_minsta_langd(self):
         ut = pianissimo.ord_fran_tokens([" a", " b"], [0.0, 0.02], 0.03)
         self.assertEqual(ut[0][1], pianissimo.MIN_ORD_S)

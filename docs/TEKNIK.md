@@ -520,9 +520,11 @@ hos Talare 1. Nu används en annan metod som klarar samma inspelning:
    är osäker, och det är oftast en kort avvikelse hos någon som redan finns.
 4. Varje ord får den grupp som fönstren närmast ordet liknar mest.
 5. Talaren byter sällan mitt i en mening. Inom en mening (som slutar vid punkt, frågetecken,
-   utropstecken eller en paus på 0,4 s) får korta avvikande sjok, högst 4 ord i rad, samma talare
+   utropstecken eller en paus på 0,4 s, men en paus efter ett kommatecken avslutar inte meningen) får korta avvikande sjok, högst 4 ord i rad, samma talare
    som resten av meningen, om en talare har mer än hälften av meningens ord. Egna meningar som
-   "Ja, ja." och längre avvikelser rörs inte. Det behövs eftersom ordtiderna är ungefärliga:
+   "Ja, ja." och längre avvikelser rörs inte. (Utan kommaregeln blev ett "Ja," före en paus en egen mening som
+   regeln lämnade ifred: "…det också. Ja, som vi gör." gav A, B, A i ett möte med Pianissimo. Priset: ett "Ja," av
+   en talare, med komma och paus före en annan talares mening, går till den andra.) Det behövs eftersom ordtiderna är ungefärliga:
    whisper.cpp:s ordtider låg i ett riktigt möte i snitt 0,17 s före faster-whispers och ibland en
    sekund fel. Svagheten: om whisper inte sätter något skiljetecken vid ett talarbyte kan ett kort
    svar som "Nej, precis." hamna hos den andra.
@@ -660,7 +662,10 @@ sidan eller med `python app/modeller.py pianissimo`, som de andra modellerna (ma
   kommer från onnx-asr:s tid per token. Med ordtider (talaruppdelning) får orden samma form som whisper.cpp:s
   DTW-ord, och segmenten delas efter meningsslut; utan blir det ett segment per bit. Talaruppdelningen
   fungerar som med de andra motorerna: sherpa-onnx och onnxruntime från onnx-asr kördes i samma process på
-  `tva-talare.m4a` med rätt två talare.
+  `tva-talare.m4a` med rätt två talare. Ett ord slutar där nästa börjar, högst 1 s efter starten (annars räknas
+  pauser som tal), men ett längre ord slutar 0,3 s efter sin sista bit: annars klipptes ett ord på 1,5 s
+  vid 1 s, och luckan räknades som en paus som delade meningen i talaruppdelningen (i `tva-talare.m4a` gav det
+  5 pauser på 0,4 s eller mer efter ord utan skiljetecken, nu 2).
 - **Minne och trådar:** modellen laddas vid första transkriberingen och ligger kvar i minnet (som
   faster-whisper). En egen lås gör att bara en tråd i taget använder den, utöver transkriberingslåset i `motor.py`.
 - **Stopp:** `motor.stoppa()` sätter `_avslutas`, som kontrolleras före varje bit, så en timmes möte stannar inom

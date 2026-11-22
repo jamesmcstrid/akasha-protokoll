@@ -214,6 +214,32 @@ class TestDelar(unittest.TestCase):
         ord_lista = [(0, 1, " Hej"), (1, 2, " du."), (2, 3, " Ja"), (3.6, 4, " visst"), (4, 5, " du?")]
         self.assertEqual(talare.meningar(ord_lista), [(0, 2), (2, 3), (3, 5)])
 
+    def test_komma_foljd_av_paus_avslutar_ingen_mening(self):
+        """Ett kommatecken sager att meningen fortsatter: pausen efter det ar andetag eller tankepaus."""
+        ord_lista = [(0, 1, " Det"), (1, 2, " gar"), (2, 3, " bra."), (3, 3.3, " Ja,"), (3.9, 4.2, " som"),
+                     (4.2, 4.5, " vi"), (4.5, 4.8, " gor.")]
+        self.assertEqual(talare.meningar(ord_lista), [(0, 3), (3, 7)])
+
+    def test_inpass_med_komma_mitt_i_den_andras_mening_far_den_andras_talare(self):
+        # A: "... det ocksa. Ja, som vi gor." och talaruppdelningen gav "Ja," till B
+        ord_lista = [(0, 0.3, " Vi"), (0.3, 0.6, " sparar"), (0.6, 0.9, " det"), (0.9, 1.2, " ocksa."),
+                     (1.5, 1.8, " Ja,"), (2.4, 2.7, " som"), (2.7, 3.0, " vi"), (3.0, 3.3, " gor.")]
+        etiketter = [1, 1, 1, 1, 2, 1, 1, 1]
+        self.assertEqual(talare.jamna_ut(ord_lista, etiketter), [1] * 8)
+
+    def test_kort_svar_med_punkt_ar_en_egen_mening_och_stannar_hos_sin_talare(self):
+        ord_lista = [(0, 0.3, " Vi"), (0.3, 0.6, " sparar"), (0.6, 0.9, " det"), (0.9, 1.2, " ocksa."),
+                     (1.5, 1.8, " Ja."), (2.4, 2.7, " Sedan"), (2.7, 3.0, " vi"), (3.0, 3.3, " gor.")]
+        etiketter = [1, 1, 1, 1, 2, 1, 1, 1]
+        self.assertEqual(talare.jamna_ut(ord_lista, etiketter), etiketter)
+
+    def test_lang_avvikelse_efter_komma_stannar(self):
+        ord_lista = [(0, 0.3, " Vi"), (0.3, 0.6, " ses"), (0.6, 0.9, " nasta"), (0.9, 1.2, " vecka,"),
+                     (1.8, 2.1, " och"), (2.1, 2.4, " da"), (2.4, 2.7, " tar"), (2.7, 3.0, " jag"), (3.0, 3.3, " med"),
+                     (3.3, 3.6, " kaffe"), (3.6, 3.9, " och"), (3.9, 4.2, " kakor.")]
+        etiketter = [1] * 4 + [2] * 5 + [1] * 3  # fem ord hos en annan ar mer an KORT_SJOK
+        self.assertEqual(talare.jamna_ut(ord_lista, etiketter), etiketter)
+
     def test_kort_avvikelse_mitt_i_en_mening_far_meningens_talare(self):
         ord_ = " Jag har tyvarr ingen som jag kan sno stil och pride av.".split(" ")[1:]
         ord_lista = [(k * 0.3, k * 0.3 + 0.3, " " + o) for k, o in enumerate(ord_)]

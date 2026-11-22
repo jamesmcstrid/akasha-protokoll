@@ -32,7 +32,8 @@ BIT_S = 30  # langsta bit som modellen far
 BIT_SOK_S = 10  # tystaste stallet soks i bitens sista sa manga sekunder
 RAM_S = 0.05  # nivan mats i ramar om 50 ms
 MIN_ORD_S = 0.1  # kortaste ordet i ordlistan
-MAX_ORD_S = 1.0  # langsta ordet: en paus efter ordet raknas inte som tal i talaruppdelningen
+MAX_ORD_S = 1.0  # ett ord raknas som tal hogst sa lange efter sin start: en paus efter det raknas inte som tal
+SLUT_BIT_S = 0.3  # men ett langre ord slutar tidigast sa har lange efter sin sista bit
 
 _las = threading.Lock()  # modellen laddas en gang och anvands av en transkribering at gangen
 _modell = None
@@ -45,18 +46,22 @@ def ord_fran_tokens(tokens, tider, slut_s):
 
     Ett ord borjar vid en bit som inleds med mellanslag eller ▁ (onnx-asr gor om ▁ till mellanslag) och
     far texten med inledande mellanslag, som whisper ger. Ordet slutar dar nasta borjar, men inte
-    senare an MAX_ORD_S (annars raknas pauser som tal) och inte fore MIN_ORD_S. Sista ordet slutar
-    vid slut_s, ljudets slut."""
+    senare an MAX_ORD_S efter starten (annars raknas pauser som tal), utom for ett langt ord: det
+    slutar tidigast SLUT_BIT_S efter sin sista bit. Annars klipptes ett ord pa 1,5 s vid 1 s, och luckan efter
+    det raknades som en paus som delade meningen i talaruppdelningen. Ordet slutar inte fore MIN_ORD_S.
+    Sista ordet slutar vid slut_s, ljudets slut."""
     ord_ = []
     for bit, start in zip(tokens, tider):
         if not ord_ or bit[:1] in (" ", "▁"):
-            ord_.append([start, " "])
+            ord_.append([start, " ", start])
         ord_[-1][1] += bit.lstrip(" ▁")
-    ord_ = [(start, text) for start, text in ord_ if text.strip()]
+        ord_[-1][2] = start
+    ord_ = [(start, text, sista) for start, text, sista in ord_ if text.strip()]
     ut = []
-    for i, (start, text) in enumerate(ord_):
+    for i, (start, text, sista) in enumerate(ord_):
         nasta = ord_[i + 1][0] if i + 1 < len(ord_) else slut_s
-        ut.append((start, max(start + MIN_ORD_S, min(nasta, start + MAX_ORD_S)), text))
+        langst = max(start + MAX_ORD_S, sista + SLUT_BIT_S)
+        ut.append((start, max(start + MIN_ORD_S, min(nasta, langst)), text))
     return ut
 
 
