@@ -770,7 +770,7 @@ def skriv(ut, komponenter, text):
 
 # --- hela kedjan ------------------------------------------------------------------------------------------------
 
-def samla(paket, ovriga, ut, plattform, version="0.2.0", whisper_licens=None, ffmpeg_licenser=None, prov=False,
+def samla(paket, ovriga, ut, plattform, version="0.3.0", whisper_licens=None, ffmpeg_licenser=None, prov=False,
           dists=None):
     """paket = {normnamn: [(namn i programmet, kalla)]}, ovriga = filer som inget paket ager.
     Skriver katalogen ut och ger ett Resultat (fel ar tom om allt finns)."""
@@ -867,7 +867,7 @@ def main(argv=None):
     ap.add_argument("--plattform", required=True, choices=["mac", "windows", "linux"])
     ap.add_argument("--alla-installerade", action="store_true", required=True,
                     help="alla installerade paket utom byggverktygen (bygget anvander PyInstallers analys via spec-filen)")
-    ap.add_argument("--version", default=os.environ.get("AKASHA_VERSION", "0.2.0"))
+    ap.add_argument("--version", default=os.environ.get("AKASHA_VERSION", "0.3.0"))
     ap.add_argument("--whisper-licens", default=os.environ.get("AKASHA_WHISPER_LICENS") or None)
     ap.add_argument("--ffmpeg-licenser", default=os.environ.get("AKASHA_FFMPEG_LICENSER") or None)
     ap.add_argument("--prov", action="store_true", help="hoppa over whisper.cpp, FFmpeg och GCC-runtimen (markerat PROV)")

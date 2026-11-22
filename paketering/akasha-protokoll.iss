@@ -3,7 +3,7 @@
 ; /D-vardena satts av paketering/bygg_installation.py. Standardvardena nedan ar relativa till den har filen.
 ; Filen sparas som UTF-8 med BOM, sa att Inno Setup laser a-ring, a-prickar och o-prickar ratt.
 #ifndef Version
-  #define Version "0.2.0.0"
+  #define Version "0.3.0.0"
 #endif
 #ifndef Kalla
   #define Kalla "..\dist\Akasha Protokoll"

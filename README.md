@@ -20,7 +20,7 @@ texten uppdelad per talare med riktiga namn.
 
 Ladda ned från [den senaste releasen](https://github.com/jamesmcstrid/akasha-protokoll/releases/latest),
 under **Assets**. Du behöver inget GitHub-konto. Programmen är ännu inte signerade, så datorn varnar
-första gången. Vid första start erbjuder sidan att hämta modellerna (cirka 1,6 GB, en gång).
+första gången. Vid första start erbjuder sidan att hämta modellerna (cirka 700 MB, en gång).
 
 ### Mac (Apple Silicon, macOS 14 eller senare)
 
