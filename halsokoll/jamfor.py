@@ -49,7 +49,7 @@ def ord_med_tider(meta):
         for i, o in enumerate(orden):
             normerat = re.sub(r"[^\w]", "", o.lower())
             if normerat:
-                ut.append((normerat, o, s["start"] + (i + 0.5) * steg, s["speaker"]))
+                ut.append((normerat, o, s["start"] + (i + 0.5) * steg, s.get("speaker")))
     return ut
 
 
