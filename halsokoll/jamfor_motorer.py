@@ -137,8 +137,11 @@ def _framsteg():
     return skriv
 
 
-def ladda_pianissimo():
-    """Hämtar filerna vid behov och laddar modellen. -> (modell, laddningstid i s)."""
+def ladda_pianissimo(bara_cpu=False):
+    """Hämtar filerna vid behov och laddar modellen. -> (modell, laddningstid i s).
+
+    bara_cpu: bara processorn. Pa Mac valjer onnxruntime annars CoreML, som bara klarar en del av grafen
+    (uppmatt: 348 bitar och 1648 av 4635 noder): bitarna skickas fram och tillbaka och det blir langsammare."""
     modeller.hamta([(f.namn, f) for f in PIANISSIMO], framsteg=_framsteg())
     import onnx_asr
     import onnxruntime
@@ -147,7 +150,8 @@ def ladda_pianissimo():
     val = onnxruntime.SessionOptions()
     val.intra_op_num_threads = CPU_TRADAR  # 0 = onnxruntime väljer, som i appen
     kat = os.path.dirname(PIANISSIMO[0].sokvag())
-    modell = onnx_asr.load_model("nemo-conformer-tdt", kat, quantization="int8", sess_options=val)
+    modell = onnx_asr.load_model("nemo-conformer-tdt", kat, quantization="int8", sess_options=val,
+                                 providers=["CPUExecutionProvider"] if bara_cpu else None)
     return modell.with_timestamps(), time.perf_counter() - t0
 
 
@@ -161,9 +165,12 @@ def transkribera_pianissimo(modell, samples):
     return " ".join("".join(o[2] for o in ord_lista).split()), ord_lista
 
 
+BARA_CPU = False  # --cpu
+
+
 def laddad_pianissimo():
-    print("Laddar Pianissimo (int8) ...", flush=True)
-    modell, sek = ladda_pianissimo()
+    print("Laddar Pianissimo (int8%s) ..." % (", bara processorn" if BARA_CPU else ""), flush=True)
+    modell, sek = ladda_pianissimo(BARA_CPU)
     print(f"Pianissimo: modellen laddades på {sek:.1f} s")
     return modell
 
@@ -244,10 +251,13 @@ def main(argv=None):
     p.add_argument("--fil", nargs="+", choices=PROVFILER, default=list(PROVFILER), help="testljud att köra")
     p.add_argument("--mote", metavar="ID", help="en inspelning i datakatalogen: bara Pianissimo, bara siffror")
     p.add_argument("--ut", metavar="FIL", help="med --mote: spara Pianissimos text här")
+    p.add_argument("--cpu", action="store_true", help="Pianissimo bara på processorn (på Mac: utan CoreML)")
     args = p.parse_args(argv)
     if args.ut and not args.mote:
         p.error("--ut hör ihop med --mote")
 
+    global BARA_CPU
+    BARA_CPU = args.cpu
     if args.mote:
         mata_mote(args.mote, args.ut)
         return 0
