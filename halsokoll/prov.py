@@ -65,12 +65,18 @@ def talare_for(segment, fras):
     return {s["speaker"] for s in segment if fras.lower() in s["text"].lower()}
 
 
+def tva_stammer(segment, antal):
+    """-> (stammer, man, kvinna): sant om det blev 2 talare, mannen (Carter, Afghanistan) hos en
+    och kvinnan (struktur, Forskarna) hos en annan. Facit for testljud/tva-talare.m4a."""
+    man = talare_for(segment, "Carter") | talare_for(segment, "Afghanistan")
+    kvinna = talare_for(segment, "struktur") | talare_for(segment, "Forskarna")
+    return antal == 2 and len(man) == 1 and len(kvinna) == 1 and man != kvinna, man, kvinna
+
+
 def kolla_tva(segment, antal, etikett, tid=""):
     for s in segment:
         print(f"       [{s['start']:5.1f}] Talare {s['speaker']}: {s['text'][:70]}")
-    man = talare_for(segment, "Carter") | talare_for(segment, "Afghanistan")
-    kvinna = talare_for(segment, "struktur") | talare_for(segment, "Forskarna")
-    ok = antal == 2 and len(man) == 1 and len(kvinna) == 1 and man != kvinna
+    ok, man, kvinna = tva_stammer(segment, antal)
     resultat(ok, f"{etikett}: {antal} talare, mannen={man}, kvinnan={kvinna} (facit: 2, olika){tid}")
 
 

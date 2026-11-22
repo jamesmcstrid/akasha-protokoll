@@ -14,6 +14,17 @@ Eftersom varje röst är ett och samma klipp vet vi säkert hur många personer 
 `en-talare.m4a` och `tva-talare.m4a` är omkodade till AAC, 64 kbit/s, mono, 16 kHz. `digitalt-mote.webm`
 är Opus, 96 kbit/s, stereo, 48 kHz. Ingenting annat är ändrat.
 
+## testljud/facit.json
+
+Den förväntade texten per testfil, för `halsokoll/jamfor_motorer.py`. Texterna är FLEURS egna avskrifter
+(kolumnen `raw_transcription` i
+[`data/sv_se/dev.tsv`](https://huggingface.co/datasets/google/fleurs/blob/70bb2e84b976b7e960aa89f1c648e09c59f894dd/data/sv_se/dev.tsv),
+revision `70bb2e84`) för klippen 1546, 1604 och 1525, ordrätt. I de delade filerna ligger
+klippens delar i den ordning ljudet har (till exempel man del 1, kvinna del 1, man del 2, kvinna del 2).
+Var varje klipp delades står inte i FLEURS: delningsordet hittades genom att para ihop klippets text med
+vad Pianissimo hörde i varje del, så att summan av ordfel blev minst. Facit är alltså FLEURS text, men
+delningsstället är uppskattat (på meningsgränsen i alla tre klippen).
+
 ## testljud/format/
 
 Tolv filer om 5 s (672 kB), ett exempel av varje ljudformat som avkodningen ska klara (de testas i

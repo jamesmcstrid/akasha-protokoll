@@ -29,7 +29,7 @@ app/app.py (Flask, bara 127.0.0.1) ── sparar i ~/AkashaProtokoll ── köa
 | `paketering/` | PyInstaller-spec, kontrollskript och byggskript för programmet. `prova-linux.sh` bygger samma Python-delar på Linux och kör kontrollen. |
 | `mac/` | `installera.sh`, `hamta-modeller.sh`, `kor.sh`, `avinstallera.sh` och launchd-mallen. Skripten som hämtar modeller anropar `app/modeller.py` |
 | `halsokoll/` | `prov.sh`: provet efter installation. `sammanfatta.sh` och `talardiagnos.sh`: hur en transkribering gick, utan att visa texten (se nedan) |
-| `tester/` | Enhetstester. De behöver inga modeller. Här finns också `falsk_hf.py` (en låtsaskälla som spelar Hugging Face), `forsta_start.py` (startar sidan som vid första start, med låtsaskällan) och `test_riktig_hamtning.py` (hämtar röstmodellen på riktigt, bara för hand) |
+| `tester/` | Enhetstester. De behöver inga modeller. Här finns också `falsk_hf.py` (en låtsaskälla som spelar Hugging Face), `falsk_onnx_asr.py` (låtsas-`onnx_asr` för Pianissimo), `forsta_start.py` (startar sidan som vid första start, med låtsaskällan) och `test_riktig_hamtning.py` (hämtar röstmodellen på riktigt, bara för hand) |
 | `.github/workflows/` | Testerna i GitHub Actions och byggflödena för Mac- och Windows-programmet |
 | `testljud/` | Tre testljud ur FLEURS, se [KALLOR.md](../testljud/KALLOR.md) |
 | `docs/` | Den här filen och bilderna till README |
@@ -628,6 +628,35 @@ upp:
 Det som avgör är ett riktigt möte: transkribera samma ljud med båda och jämför med
 `halsokoll/jamfor.sh` (nedan).
 
+## Pianissimo (valfri motor)
+
+`MOTOR=pianissimo` kör Klangs svenska Parakeet-modell (`KlangAI/pianissimo-sv-onnx`, CC-BY-4.0, int8,
+660 MB) i stället för KB-Whisper. Den är aldrig `auto`: onnx-asr, som kör modellen, ingår inte i
+`app/requirements.txt` och inte i programmen för Mac och Windows (`motor.hinder()` säger det). I
+terminalinstallationen installeras det med `pip install -r app/krav-pianissimo.txt`, och modellen hämtas på
+sidan eller med `python app/modeller.py pianissimo`, som de andra modellerna (manifestet är `PAKET["pianissimo"]`).
+
+- **Hastighet (uppmätt):** 6–8 gånger snabbare än KB-Whisper medium på en Windows-laptop (bara processorn) och
+  ungefär 6 gånger snabbare än KB-Whisper med Metal på en MacBook Air (49 gånger realtid). På utvecklingsdatorn
+  tar testljudet på 57 s drygt 3,5 s när modellen redan är laddad.
+- **Bara processorn, alltid.** På Mac väljer onnxruntime annars CoreML, som bara klarar en del av grafen: den
+  delades i 348 bitar (1648 av 4635 noder) som skickas fram och tillbaka, och det blev 6 gånger långsammare.
+  `pianissimo.ladda()` anger därför `CPUExecutionProvider`.
+- **Kvalitet:** i ett riktigt möte minst lika bra som KB-Whisper, bättre på engelska lånord och utan påhittade
+  upprepningar. Men den hoppar över korta inpass som "Ja.", och den har ingen prompt: `ORDLISTA` och svårstavade
+  ord ignoreras (loggas en gång) och Klangs ordförstärkning används inte.
+- **Så arbetar den (`app/pianissimo.py`):** ljudet delas vid tystaste stället i bitar om högst 30 s, och ordtiderna
+  kommer från onnx-asr:s tid per token. Med ordtider (talaruppdelning) får orden samma form som whisper.cpp:s
+  DTW-ord, och segmenten delas efter meningsslut; utan blir det ett segment per bit. Talaruppdelningen
+  fungerar som med de andra motorerna: sherpa-onnx och onnxruntime från onnx-asr kördes i samma process på
+  `tva-talare.m4a` med rätt två talare.
+- **Minne och trådar:** modellen laddas vid första transkriberingen och ligger kvar i minnet (som
+  faster-whisper). En egen lås gör att bara en tråd i taget använder den, utöver transkriberingslåset i `motor.py`.
+- **Stopp:** `motor.stoppa()` sätter `_avslutas`, som kontrolleras före varje bit, så en timmes möte stannar inom
+  en bit (högst 30 s ljud) och ger `Avbruten`.
+- **Testerna** använder `tester/falsk_onnx_asr.py` (en falsk `onnx_asr` och `onnxruntime`) och kräver inte
+  paketen. Bara `RiktigaPaketet` i `test_pianissimo.py` gör det, och hoppas annars över.
+
 ## Se hur det gick, utan att visa texten
 
 Tre verktyg skriver bara ut siffror och tider, inga ord ur mötet och inga namn. Utskriften går
@@ -659,6 +688,40 @@ och per tiominutersblock, om talarna stämmer överens och hur mycket inspelning
 tid. Skillnaderna med text sparas i `jamforelser/` i inspelningsmappen. Att två transkriberingar
 stämmer överens betyder inte att de är rätt, eftersom samma modell gör samma fel på namn och
 facktermer. Men där de skiljer sig har minst en av dem hört fel.
+
+```bash
+bash halsokoll/jamfor_motorer.sh
+```
+
+Jämför KB-Whisper (appens motor) med Klang Pianissimo, en svensk Parakeet-modell
+(`KlangAI/pianissimo-sv-onnx`, CC-BY-4.0, int8, 660 MB), på de tre testljuden: tid, gånger realtid, antal
+ord, ordfel mot facit (`testljud/facit.json`) och om ordtiderna räcker för talaruppdelningen
+(`tva-talare.m4a`, samma facit som `halsokoll/prov.sh`). Pianissimo körs med onnx-asr, som inte ingår i
+appen. Installera det en gång i appens venv (på Windows heter `bin` `Scripts`):
+
+```bash
+venv/bin/pip install -r app/krav-pianissimo.txt            # Windows: venv\Scripts\pip
+bash mac/hamta-modeller.sh talare                          # röstmodellen, om den saknas
+bash halsokoll/jamfor_motorer.sh                             # Windows: venv\Scripts\python halsokoll\jamfor_motorer.py
+```
+
+Första körningen hämtar Pianissimo till `pianissimo-sv-onnx/` i modellkatalogen, med samma hämtning som
+appens modeller (fastlåst revision, bara Hugging Face, sha256). `--motor pianissimo` eller `--motor kbwhisper`
+kör en av dem, `--fil` väljer testljud. KB-Whisper hoppas över om dess modell saknas. Långt ljud delas vid
+tystaste stället i bitar om högst 30 s, så en timmes möte går att köra. Ingen ordlista (Klangs
+ordförstärkning) används, och Klangs egen kod i modellrepot körs inte.
+
+Tiderna gäller den här datorn och är inte jämförbara med Klangs siffror på andra processorer. Ordfelen mäts på
+bara tre korta klipp och säger därför lite: avgörande är ett riktigt möte.
+
+```bash
+bash halsokoll/jamfor_motorer.sh --mote <id> [--ut pianissimo.txt]
+```
+
+Kör Pianissimo på ljudet i en inspelning och jämför med den sparade KB-Whisper-texten. Utskriften är bara
+siffror (tid, gånger realtid, antal ord, andel ord som skiljer) och innehåller inga ord ur mötet. Ingenting skrivs i
+datakatalogen. Vill du läsa Pianissimos text anger du `--ut` med en sökväg utanför datakatalogen. För att se var
+texterna skiljer: transkribera mötet med båda motorerna i appen och kör `jamfor.sh`.
 
 ## Vad som är testat
 
