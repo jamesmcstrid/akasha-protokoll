@@ -76,6 +76,12 @@ def basta_parning(par):
     return basta
 
 
+def skillnad(opkoder):
+    """Antal ordfel i difflib-opkoderna, med A som facit."""
+    return sum((i2 - i1) if tag in ("replace", "delete") else (j2 - j1) if tag == "insert" else 0
+               for tag, i1, i2, j1, j2 in opkoder)
+
+
 def main():
     if len(sys.argv) != 3:
         sys.exit("Ange två inspelningar: bash halsokoll/jamfor.sh <id A> <id B>")
@@ -106,9 +112,6 @@ def main():
           f"{forskjutning + (lutning - 1) * slut:+.1f} s i slutet (ungefärligt, utifrån orden)")
 
     # Andel ord som skiljer, räknat som ordfel med A som facit.
-    def skillnad(op):
-        return sum((i2 - i1) if tag in ("replace", "delete") else (j2 - j1) if tag == "insert" else 0
-                   for tag, i1, i2, j1, j2 in op)
     print(f"\nOrd som skiljer: {skillnad(opkoder) / len(a):.1%} (räknat som ordfel med A som facit)")
     print(f"  bara i A: {sum(i2 - i1 for t, i1, i2, _, _ in opkoder if t in ('delete', 'replace'))} ord, "
           f"bara i B: {sum(j2 - j1 for t, _, _, j1, j2 in opkoder if t in ('insert', 'replace'))} ord")

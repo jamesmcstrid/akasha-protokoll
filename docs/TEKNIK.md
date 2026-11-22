@@ -660,6 +660,40 @@ tid. Skillnaderna med text sparas i `jamforelser/` i inspelningsmappen. Att två
 stämmer överens betyder inte att de är rätt, eftersom samma modell gör samma fel på namn och
 facktermer. Men där de skiljer sig har minst en av dem hört fel.
 
+```bash
+bash halsokoll/jamfor_motorer.sh
+```
+
+Jämför KB-Whisper (appens motor) med Klang Pianissimo, en svensk Parakeet-modell
+(`KlangAI/pianissimo-sv-onnx`, CC-BY-4.0, int8, 660 MB), på de tre testljuden: tid, gånger realtid, antal
+ord, ordfel mot facit (`testljud/facit.json`) och om ordtiderna räcker för talaruppdelningen
+(`tva-talare.m4a`, samma facit som `halsokoll/prov.sh`). Pianissimo körs med onnx-asr, som inte ingår i
+appen. Installera det en gång i appens venv (på Windows heter `bin` `Scripts`):
+
+```bash
+venv/bin/pip install -r halsokoll/krav-pianissimo.txt       # Windows: venv\Scripts\pip
+bash mac/hamta-modeller.sh talare                          # röstmodellen, om den saknas
+bash halsokoll/jamfor_motorer.sh                             # Windows: venv\Scripts\python halsokoll\jamfor_motorer.py
+```
+
+Första körningen hämtar Pianissimo till `pianissimo-sv-onnx/` i modellkatalogen, med samma hämtning som
+appens modeller (fastlåst revision, bara Hugging Face, sha256). `--motor pianissimo` eller `--motor kbwhisper`
+kör en av dem, `--fil` väljer testljud. KB-Whisper hoppas över om dess modell saknas. Långt ljud delas vid
+tystaste stället i bitar om högst 30 s, så en timmes möte går att köra. Ingen ordlista (Klangs
+ordförstärkning) används, och Klangs egen kod i modellrepot körs inte.
+
+Tiderna gäller den här datorn och är inte jämförbara med Klangs siffror på andra processorer. Ordfelen mäts på
+bara tre korta klipp och säger därför lite: avgörande är ett riktigt möte.
+
+```bash
+bash halsokoll/jamfor_motorer.sh --mote <id> [--ut pianissimo.txt]
+```
+
+Kör Pianissimo på ljudet i en inspelning och jämför med den sparade KB-Whisper-texten. Utskriften är bara
+siffror (tid, gånger realtid, antal ord, andel ord som skiljer) och innehåller inga ord ur mötet. Ingenting skrivs i
+datakatalogen. Vill du läsa Pianissimos text anger du `--ut` med en sökväg utanför datakatalogen. För att se var
+texterna skiljer: transkribera mötet med båda motorerna i appen och kör `jamfor.sh`.
+
 ## Vad som är testat
 
 **Senast, på Windows 11 (utvecklingsdatorn, 2026-11-21):** 661 enhetstester (35 av dem för licenserna), OK, 28 överhoppade (bland dem testet med symboliska länkar, som kräver utvecklarläge i Windows). Webbsidans ändringar samma dag (dubbelklick, inspelare som stannar, gamla svar, dold flik, tangentbord) är provade med en låtsas-DOM i Node, inte i en riktig webbläsare.
