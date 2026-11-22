@@ -4,6 +4,15 @@ from datetime import datetime
 VARNING_KONTROLL = "Transkriberat lokalt med KB-Whisper. Kontrollera mot ljudet innan texten används."
 
 
+def varning_kontroll(meta):
+    """Raden overst i texten, med den motor som faktiskt anvandes (resultat.motor). Aldre inspelningar
+    saknar den uppgiften: da galler KB-Whisper, som var den enda motorn."""
+    motor = ((meta.get("resultat") or {}).get("motor") or "").split(" (")[0].strip()
+    if not motor or motor.startswith("KB-Whisper"):
+        return VARNING_KONTROLL
+    return f"Transkriberat lokalt med {motor}. Kontrollera mot ljudet innan texten används."
+
+
 def tid(sekunder):
     s = int(round(sekunder or 0))
     h, s = divmod(s, 3600)
@@ -56,7 +65,7 @@ def _rader(meta):
 
 def som_markdown(meta):
     res = meta.get("resultat") or {}
-    delar = [f"# {rubrik(meta)}", "", info(meta), "", f"_{VARNING_KONTROLL}_", ""]
+    delar = [f"# {rubrik(meta)}", "", info(meta), "", f"_{varning_kontroll(meta)}_", ""]
     if res.get("varning"):
         delar += [f"**Obs:** {res['varning']}", ""]
     for start, namn, text in _rader(meta):
@@ -69,7 +78,7 @@ def som_markdown(meta):
 
 def som_text(meta):
     res = meta.get("resultat") or {}
-    delar = [rubrik(meta), info(meta), VARNING_KONTROLL, ""]
+    delar = [rubrik(meta), info(meta), varning_kontroll(meta), ""]
     if res.get("varning"):
         delar += [f"Obs: {res['varning']}", ""]
     for start, namn, text in _rader(meta):

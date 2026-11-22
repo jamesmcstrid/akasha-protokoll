@@ -53,3 +53,13 @@ class TestExport(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestVarningMedMotor(unittest.TestCase):
+    def test_motorn_som_anvandes(self):
+        self.assertEqual(export.varning_kontroll({}), export.VARNING_KONTROLL)
+        self.assertEqual(export.varning_kontroll({"resultat": {"motor": "KB-Whisper medium (whisper.cpp, Metal)"}}),
+                         export.VARNING_KONTROLL)
+        text = export.varning_kontroll({"resultat": {"motor": "Pianissimo (Klang)"}})
+        self.assertTrue(text.startswith("Transkriberat lokalt med Pianissimo."), text)
+        self.assertNotIn("KB-Whisper", export.som_text({"resultat": {"motor": "Pianissimo (Klang)", "segment": []}}))
