@@ -20,7 +20,7 @@ WHISPER_KATALOG = os.environ.get("AKASHA_WHISPER_KATALOG")  # Windows: katalogen
 WHISPER_LICENS = os.environ.get("AKASHA_WHISPER_LICENS") or None  # whisper.cpp: LICENSE och KALLA.txt (bygg-whisper-cli*.sh)
 FFMPEG_LICENSER = os.environ.get("AKASHA_FFMPEG_LICENSER") or None  # FFmpeg: KATALOG/ut/ffmpeg fran bygg-ffmpeg.sh
 VERSIONSFIL = os.environ.get("AKASHA_VERSIONSFIL") or None  # Windows: skrivs av bygg_windows_verktyg.py
-VERSION = os.environ.get("AKASHA_VERSION", "0.2.0")
+VERSION = os.environ.get("AKASHA_VERSION", "0.3.0")
 BYGGNUMMER = os.environ.get("AKASHA_BYGGNUMMER", "1")
 
 if MAC and not WHISPER_CLI:

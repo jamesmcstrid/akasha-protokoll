@@ -21,7 +21,7 @@ jobs:
       run:
         shell: bash
     env:
-      AKASHA_VERSION: "0.2.0"
+      AKASHA_VERSION: "0.3.0"
       AKASHA_BYGGNUMMER: ${{ github.run_number }}
       WHISPER_VERSION: ${{ inputs.whisper_version }}
     steps:
