@@ -7,7 +7,7 @@ om whisper-cli och modellen finns, annars faster-whisper):
   whispercpp  whisper.cpp:s whisper-cli (brew install whisper-cpp pa Mac), som anvander Metal (GPU) pa
               Apple Silicon. Startas en gang per transkribering och laddar modellen varje gang.
   pianissimo  Klang Pianissimo (pianissimo.py), en svensk Parakeet-modell via onnx-asr. Valfri och aldrig
-              auto: onnx-asr ingar inte i appens krav, men i Mac-programmet. Mycket snabbare, men ingen prompt (ORDLISTA).
+              auto: onnx-asr ingar inte i appens krav, men i Mac-programmet. Mycket snabbare; ORDLISTA via boostning.
 
 Ingen sprakmodell rattar eller sammanfattar texten. Det som whisper hor ar det som skrivs.
 """

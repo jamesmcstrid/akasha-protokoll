@@ -408,7 +408,10 @@ class Val(FalskMiljo):
 
     def test_onnx_asr_saknas_i_programmet(self):
         with mock.patch.object(motor.importlib.util, "find_spec", lambda namn: None), \
-             mock.patch.object(plattform, "ar_paketerad", lambda: True):
+             mock.patch.object(plattform, "ar_paketerad", lambda: True), \
+             mock.patch.object(plattform, "system", lambda: "Windows"):
+            # Windows-programmet: systemet satts uttryckligen, annars beror testet pa datorn det kors pa
+            # (Mac-programmet har onnx-asr och ger en annan text).
             text = motor.hinder()
         self.assertIn("går inte i programmet", text)
         self.assertIn("MOTOR", text)
