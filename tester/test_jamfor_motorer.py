@@ -141,3 +141,10 @@ class Mote(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTraffar(unittest.TestCase):
+    def test_hela_ord_och_skiftlage(self):
+        self.assertEqual(jm.traffar("Carter och carter, men inte Carterson.", "Carter"), 2)
+        self.assertEqual(jm.traffar("API endpoints och API", "API endpoints, Ahlsell"), 1)
+        self.assertEqual(jm.traffar("text", ""), 0)

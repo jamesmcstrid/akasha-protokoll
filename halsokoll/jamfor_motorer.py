@@ -148,7 +148,14 @@ def kolla_talare(motorer, ordlistor):
             print(f"    [{r['start']:5.1f}] talare {r['speaker']}: {r['text'][:60]}")
 
 
-def mata_mote(id_, ut):
+def traffar(text, prompt):
+    """Hur manga ganger ordlistans ord forekommer i texten (skiftlagesokansligt, hela ord). Bara ett tal,
+    sa att --mote aldrig skriver ord ur motet."""
+    ord_ = [o.strip() for o in prompt.split(",") if o.strip()]
+    return sum(len(re.findall(rf"(?<!\w){re.escape(o)}(?!\w)", text, re.I)) for o in ord_)
+
+
+def mata_mote(id_, ut, prompt=""):
     """Pianissimo mot den sparade texten. Skriver bara siffror, aldrig ord ur mötet."""
     meta = jamfor.las(id_)
     sokvag = lagring.ljudfil(meta)
@@ -159,7 +166,7 @@ def mata_mote(id_, ut):
         sys.exit("--ut får inte peka i datakatalogen.")
     modell = laddad_pianissimo()
     samples = motor.avkoda(sokvag)
-    text, ord_lista, sek = tid_och_ord("pianissimo", modell, samples)
+    text, ord_lista, sek = tid_och_ord("pianissimo", modell, samples, prompt)
     langd = len(samples) / SR
     ny = {"resultat": {"segment": [{**s, "speaker": 1} for s in motor._ord_till_segment(ord_lista)]}}
     a, b = jamfor.ord_med_tider(meta), jamfor.ord_med_tider(ny)
@@ -168,6 +175,9 @@ def mata_mote(id_, ut):
     print(f"  Pianissimo: {sek:.0f} s, {langd / sek:.1f} x realtid, {len(b)} ord")
     print(f"  Sparad text ({meta['resultat'].get('motor')}): {len(a)} ord")
     print(f"  Ord som skiljer: {jamfor.skillnad(opkoder) / max(1, len(a)):.1%} (den sparade texten som facit)")
+    if prompt:
+        sparad = " ".join(w[1] for w in a)
+        print(f"  Ordlistans ord i texten: sparad {traffar(sparad, prompt)}, Pianissimo {traffar(text, prompt)}")
     if ut:
         with open(ut, "w", encoding="utf-8") as f:
             f.write(text + "\n")
@@ -183,15 +193,13 @@ def main(argv=None):
     p.add_argument("--ord", metavar="ORD", default="", help='ordlista, kommaseparerad: "Carter, Afghanistan"')
     p.add_argument("--cpu", action="store_true", help="Pianissimo bara på processorn (på Mac: utan CoreML)")
     args = p.parse_args(argv)
-    if args.ord and args.mote:
-        p.error("--ord hör inte ihop med --mote")
     if args.ut and not args.mote:
         p.error("--ut hör ihop med --mote")
 
     global BARA_CPU
     BARA_CPU = args.cpu
     if args.mote:
-        mata_mote(args.mote, args.ut)
+        mata_mote(args.mote, args.ut, args.ord)
         return 0
     modeller_ = {"pianissimo": laddad_pianissimo()} if "pianissimo" in args.motor else {}
 
