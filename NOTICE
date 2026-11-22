@@ -26,6 +26,10 @@ the programs are built. Among the components:
   (https://creativecommons.org/licenses/by/4.0/), built on NVIDIA Parakeet, also CC-BY-4.0. Used with MOTOR=pianissimo
   through onnx-asr (https://github.com/istupakov/onnx-asr, MIT License). The model is downloaded on request and
   is not part of the source code or the Mac and Windows programs. Changes: none; the int8 files are used as published.
+- app/pianissimo_boost.py is adapted from phrase_boost.py and pianissimo_onnx.py in that model repository (revision
+  63730c6021234f26b9bbae9a07a04fec39e7a52e), CC-BY-4.0, by Klang, which port NVIDIA NeMo's phrase boosting
+  (Apache-2.0). Changes: merged into one file, Swedish names, tokenizer passed in as a function, own log_softmax,
+  decoding loop of onnx-asr 0.12.0 without its TensorRT branch; listed in the file header.
 - ONNX Runtime (https://github.com/microsoft/onnxruntime), MIT License, included in sherpa-onnx (Apache-2.0)
 - Python (https://www.python.org), PSF License, with the software it incorporates (CPython's Doc/license.rst:
   expat, libmpdec, libffi, zlib, HACL* and others), OpenSSL 3 (Apache-2.0) and XZ Utils (liblzma, public domain)

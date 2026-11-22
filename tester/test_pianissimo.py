@@ -3,9 +3,11 @@
 och ingen hamtning. Inget kraver att onnx-asr ar installerat utom RiktigaPaketet, som annars hoppas over."""
 import importlib.util
 import inspect
+import math
 import os
 import sys
 import threading
+import types
 import unittest
 from unittest import mock
 
@@ -17,6 +19,7 @@ import installningar
 import modeller
 import motor
 import pianissimo
+import pianissimo_boost
 import plattform
 
 HAR_ONNX_ASR = importlib.util.find_spec("onnx_asr") is not None  # fore sys.modules-byten
@@ -96,7 +99,7 @@ class Bitar(unittest.TestCase):
 class Manifest(unittest.TestCase):
     def test_pinnad_revision_och_kontrollsummor(self):
         filer = modeller.paket("pianissimo")
-        self.assertEqual(len(filer), 4)
+        self.assertEqual(len(filer), 5)
         for f in filer:
             self.assertEqual(f.repo, "KlangAI/pianissimo-sv-onnx")
             self.assertRegex(f.revision, r"^[0-9a-f]{40}$")
@@ -109,7 +112,8 @@ class Manifest(unittest.TestCase):
 
     def test_filerna_onnx_asr_letar_efter(self):
         namn = {f.namn for f in modeller.paket("pianissimo")}
-        self.assertEqual(namn, {"encoder-model.int8.onnx", "decoder_joint-model.int8.onnx", "vocab.txt", "config.json"})
+        self.assertEqual(namn, {"encoder-model.int8.onnx", "decoder_joint-model.int8.onnx", "vocab.txt", "config.json",
+                        "tokenizer.model"})
 
     def test_inte_knutet_till_modellstorleken(self):
         self.assertIs(modeller.paket("pianissimo", "large"), modeller.paket("pianissimo", "medium"))
@@ -134,9 +138,8 @@ class FalskMiljo(unittest.TestCase):
             self.addCleanup(p.stop)
         self.addCleanup(setattr, motor, "_avslutas", False)  # stoppa() lamnar flaggan satt
         self.addCleanup(setattr, motor, "_process", None)
-        for namn, varde in (("_modell", None), ("_prompt_loggad", False)):
-            self.addCleanup(setattr, pianissimo, namn, varde)
-            setattr(pianissimo, namn, varde)
+        self.addCleanup(setattr, pianissimo, "_modell", None)
+        pianissimo._modell = None
 
     def ljud(self, sekunder, tysta=()):
         x = np.random.default_rng(0).normal(0, 0.1, int(sekunder * SR)).astype(np.float32)
@@ -217,14 +220,6 @@ class Motorn(FalskMiljo):
         self.assertEqual(len(self.anrop), 1)
         self.assertEqual(len(self.modell.langder), 2)
 
-    def test_prompten_ignoreras_och_loggas_en_gang(self):
-        with self.assertLogs("akasha-protokoll", "INFO") as logg:
-            motor.transkribera(self.ljud(2), prompt="Fredskvist")
-        self.assertEqual(sum("ignoreras" in r for r in logg.output), 1)
-        self.assertNotIn("Fredskvist", "".join(logg.output))
-        with self.assertNoLogs("akasha-protokoll", "INFO"):
-            motor.transkribera(self.ljud(2), prompt="Fredskvist")
-
     def test_bara_en_tradd_i_taget_i_modellen(self):
         nu = mest = 0
         recognize = self.modell.recognize
@@ -249,6 +244,124 @@ class Motorn(FalskMiljo):
         self.assertEqual(len(self.modell.langder), 4)
         self.assertEqual(mest, 1)
         self.assertEqual(len(self.anrop), 1)  # och modellen laddades bara en gang
+
+
+class Ordlista(FalskMiljo):
+    """Prompten (ORDLISTA och svarstavade ord) forstarker orden under en transkribering. Sjalva forstarkningen
+    ar mockad har; Forstarkning och avkodningen provas i Forstarkningen."""
+
+    def setUp(self):
+        super().setUp()
+        self.handelser = []
+        self.modell.asr = types.SimpleNamespace()
+        for namn in ("forstark", "stang_av"):
+            p = mock.patch.object(pianissimo_boost, namn, lambda *a, _n=namn: self.handelser.append((_n, a)))
+            p.start()
+            self.addCleanup(p.stop)
+        recognize = self.modell.recognize
+        self.modell.recognize = lambda x: (self.handelser.append(("recognize", ())), recognize(x))[1]
+
+    def test_prompten_blir_en_ordlista(self):
+        self.assertEqual(pianissimo.ordlista_ur_prompt("Carter, Klang AI ;Fredskvist,,\n"),
+                         ["Carter", "Klang AI", "Fredskvist"])
+        self.assertEqual(pianissimo.ordlista_ur_prompt(""), [])
+        self.assertEqual(pianissimo.ordlista_ur_prompt(" , "), [])
+
+    def test_ordlistan_galler_just_den_transkriberingen(self):
+        motor.transkribera(self.ljud(2), prompt="Carter, Klang AI")
+        forstark, recognize, stang_av = self.handelser
+        self.assertEqual(forstark[0], "forstark")
+        self.assertIs(forstark[1][0], self.modell)
+        self.assertEqual(forstark[1][1], ["Carter", "Klang AI"])
+        self.assertEqual(os.path.basename(forstark[1][2]), "tokenizer.model")
+        self.assertEqual((recognize[0], stang_av[0]), ("recognize", "stang_av"))
+
+    def test_nasta_inspelning_far_inte_forra_ordlistan(self):
+        motor.transkribera(self.ljud(2), prompt="Carter")
+        self.handelser.clear()
+        motor.transkribera(self.ljud(2), prompt="")
+        self.assertEqual([h[0] for h in self.handelser], ["recognize"])
+
+    def test_tom_prompt_kostar_ingenting(self):
+        for prompt in ("", "  ", ", ,"):
+            motor.transkribera(self.ljud(2), prompt=prompt)
+        self.assertEqual({h[0] for h in self.handelser}, {"recognize"})
+
+    def test_ordlistan_tas_bort_ocksa_nar_transkriberingen_misslyckas(self):
+        self.modell.recognize = mock.Mock(side_effect=RuntimeError("x"))
+        with self.assertRaises(RuntimeError):
+            motor.transkribera(self.ljud(2), prompt="Carter")
+        self.assertEqual([h[0] for h in self.handelser], ["forstark", "stang_av"])
+
+    def test_misslyckad_forstarkning_stoppar_inte_transkriberingen_och_orden_loggas_inte(self):
+        def fel(*a):
+            raise ImportError("No module named sentencepiece, Carter")
+
+        with mock.patch.object(pianissimo_boost, "forstark", fel), self.assertLogs("akasha-protokoll", "WARNING") as logg:
+            text, _, _ = motor.transkribera(self.ljud(2), prompt="Carter")
+        self.assertEqual(text, "Hej du. Ja")
+        self.assertIn("utan den", "".join(logg.output))
+        self.assertNotIn("Carter", "".join(logg.output))
+        self.assertEqual(self.handelser[-1][0], "stang_av")
+
+
+class Forstarkningen(unittest.TestCase):
+    """app/pianissimo_boost.py utan modell och utan sentencepiece. Token-id: a=0, b=1, c=2, blank=3."""
+    KODA = {"ab": [0, 1], "c": [2]}
+
+    def trad(self):
+        return pianissimo_boost.Forstarkning(["ab", "c", "ab"], self.KODA.get, vocab_storlek=3)
+
+    def test_bonus_for_fraser_och_tillbaka_nar_en_fras_inte_blir_klar(self):
+        trad = self.trad()
+        bonus, nasta = trad.poang(0)
+        self.assertEqual(bonus.tolist(), [1.0, 0.0, 1.0])  # forsta token av "ab" och hela "c"
+        i_ab = int(nasta[0])
+        bonus, nasta = trad.poang(i_ab)
+        self.assertAlmostEqual(float(bonus[1]), 2.0 + math.log(2), places=5)  # andra token, djupare = mer
+        self.assertAlmostEqual(float(bonus[2]), 1.0 - 1.0, places=5)  # "c" efter "a": a:s bonus tas tillbaka
+        self.assertEqual(int(nasta[2]), int(trad.poang(0)[1][2]))
+
+    def test_samma_fras_tva_ganger_ger_samma_trad(self):
+        self.assertEqual(len(self.trad().noder), 4)  # rot, a, ab, c
+
+    def asr(self):
+        """Ett i-token-steg: ett icke-blank forslag (1 vinner mot 0 med 0,2), sedan blank."""
+        def avkoda(tokens, tillstand, kodning):
+            return np.array([1.0, 1.2, -5.0, 0.0] if not tokens else [0, 0, 0, 5.0]), 0, "s"
+
+        return types.SimpleNamespace(_blank_idx=3, _vocab_size=4, _max_tokens_per_step=10, _decode=avkoda,
+                                     _create_state=lambda: None)
+
+    def test_bonusen_kan_valja_en_annan_token(self):
+        asr, kodning = self.asr(), [np.zeros((1, 4))]
+        utan = list(pianissimo_boost._avkodning(asr, kodning, [1], trad=self.trad(), need_logprobs=False))
+        med = list(pianissimo_boost._avkodning(asr, kodning, [1], trad=self.trad(), need_logprobs=True))
+        self.assertEqual(utan[0][0], [0])  # a (1,0 + bonus 1,0) slar b (1,2)
+        self.assertEqual(utan[0][1], [0])
+        self.assertIsNone(utan[0][2])
+        self.assertEqual(len(med[0][2]), 1)
+        self.assertLess(med[0][2][0], 0)
+
+    def test_forstark_och_stang_av_pa_modellen(self):
+        asr = self.asr()
+        modell = types.SimpleNamespace(asr=asr)
+        sp = types.ModuleType("sentencepiece")
+        sp.SentencePieceProcessor = lambda model_file: types.SimpleNamespace(encode=self.KODA.get)
+        with mock.patch.dict(sys.modules, {"sentencepiece": sp}):
+            pianissimo_boost.forstark(modell, ["ab"], "tokenizer.model")
+            self.assertIn("_decoding", asr.__dict__)
+            pianissimo_boost.stang_av(modell)
+            self.assertNotIn("_decoding", asr.__dict__)
+            pianissimo_boost.stang_av(modell)  # redan avstangd
+
+    def test_orord_modell_om_blank_inte_ar_sist(self):
+        asr = self.asr()
+        asr._blank_idx = 0
+        sp = types.ModuleType("sentencepiece")
+        with mock.patch.dict(sys.modules, {"sentencepiece": sp}), self.assertRaises(ValueError):
+            pianissimo_boost.forstark(types.SimpleNamespace(asr=asr), ["ab"], "t")
+        self.assertNotIn("_decoding", asr.__dict__)
 
 
 class Val(FalskMiljo):
@@ -331,6 +444,12 @@ class RiktigaPaketet(unittest.TestCase):
         for namn in ("quantization", "sess_options", "providers"):
             self.assertIn(namn, param)
         self.assertTrue(hasattr(onnxruntime.SessionOptions(), "intra_op_num_threads"))
+
+    def test_ordforstarkningen_hittar_det_den_byter_ut(self):
+        """pianissimo_boost.py ersatter _decoding och laser onnx-asr:s privata falt: en ny version kan ta bort dem."""
+        from onnx_asr.models.nemo import NemoConformerTdt
+        for namn in ("_decoding", "_decode", "_create_state", "_max_tokens_per_step"):
+            self.assertTrue(hasattr(NemoConformerTdt, namn), namn)
 
 
 if __name__ == "__main__":

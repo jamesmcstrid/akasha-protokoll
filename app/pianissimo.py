@@ -6,10 +6,13 @@ laptop) och ungefar 6 ganger snabbare an KB-Whisper med Metal (MacBook Air, 49 g
 
 Ljudet delas vid tystaste stallet i bitar om hogst 30 s, sa att en timmes mote gar att kora utan att modellen
 far hela ljudet pa en gang (och utan en andra modell for tal och tystnad). Ordtider kommer fran onnx-asr:s tid
-per token (80 ms steg). Ingen prompt och ingen ordforstarkning: ORDLISTA och svarstavade ord ignoreras.
+per token (80 ms steg). Prompten (ORDLISTA och svarstavade ord, kommaseparerade) forstarker orden under en
+transkribering, se pianissimo_boost.py.
 """
+import contextlib
 import logging
 import os
+import re
 import threading
 import time
 from collections import namedtuple
@@ -18,10 +21,12 @@ import numpy as np
 
 import modeller
 import motor
+import pianissimo_boost
 from installningar import CPU_TRADAR
 
 log = logging.getLogger("akasha-protokoll")
 SR = 16000
+TOKENISERARE = "tokenizer.model"  # SentencePiece-modellen, for ordforstarkningen
 
 BIT_S = 30  # langsta bit som modellen far
 BIT_SOK_S = 10  # tystaste stallet soks i bitens sista sa manga sekunder
@@ -31,7 +36,6 @@ MAX_ORD_S = 1.0  # langsta ordet: en paus efter ordet raknas inte som tal i tala
 
 _las = threading.Lock()  # modellen laddas en gang och anvands av en transkribering at gangen
 _modell = None
-_prompt_loggad = False
 
 Bit = namedtuple("Bit", "fran till ord")  # fran och till i sampel; ord som motor.transkribera ger med per_ord
 
@@ -72,6 +76,10 @@ def dela_i_bitar(samples, bit_s=BIT_S, sok_s=BIT_SOK_S):
     return bitar
 
 
+def _modellkatalog():
+    return os.path.dirname(modeller.paket("pianissimo")[0].sokvag())
+
+
 def ladda(bara_cpu=True):
     """Laddar modellen (filerna ska redan vara hamtade). -> (modell, laddningstid i s).
 
@@ -84,8 +92,7 @@ def ladda(bara_cpu=True):
     t0 = time.perf_counter()
     val = onnxruntime.SessionOptions()
     val.intra_op_num_threads = CPU_TRADAR  # 0 = onnxruntime valjer, som i appen
-    kat = os.path.dirname(modeller.paket("pianissimo")[0].sokvag())
-    modell = onnx_asr.load_model("nemo-conformer-tdt", kat, quantization="int8", sess_options=val,
+    modell = onnx_asr.load_model("nemo-conformer-tdt", _modellkatalog(), quantization="int8", sess_options=val,
                                  providers=["CPUExecutionProvider"] if bara_cpu else None)
     return modell.with_timestamps(), time.perf_counter() - t0
 
@@ -105,27 +112,49 @@ def ord_till_text(ord_):
     return " ".join("".join(o[2] for o in ord_).split())
 
 
+def ordlista_ur_prompt(prompt):
+    """Prompten ("Carter, Fredskvist") -> ["Carter", "Fredskvist"]. Ord med mellanslag ar en fras."""
+    return [o.strip() for o in re.split(r"[,;\n]", prompt or "") if o.strip()]
+
+
+@contextlib.contextmanager
+def med_ordlista(modell, prompt):
+    """Forstarker orden i prompten under en transkribering och tar bort forstarkningen efter, ocksa vid fel,
+    sa att en inspelnings ord aldrig foljer med till nasta (modellen ligger kvar i minnet). Gar forstarkningen
+    inte att satta in fortsatter transkriberingen utan den. Orden loggas aldrig, se motor._kansliga_ord."""
+    ord_ = ordlista_ur_prompt(prompt)
+    if not ord_:
+        yield
+        return
+    try:
+        pianissimo_boost.forstark(modell, ord_, os.path.join(_modellkatalog(), TOKENISERARE))
+    except Exception as e:  # ett saknat paket eller en ny onnx-asr far aldrig stoppa transkriberingen
+        log.warning("Pianissimo: ordlistan gick inte att anvanda, transkriberar utan den (%s)", type(e).__name__)
+    try:
+        yield
+    finally:
+        pianissimo_boost.stang_av(modell)
+
+
 def transkribera(samples, per_ord, prompt, framsteg):
     """-> (text, segment, ord), samma form som de andra motorerna ger i motor.transkribera.
 
     Med per_ord ger orden talaruppdelningen sina ordtider, som whisper.cpp:s DTW-ord, och segmenten delas
-    efter meningsslut. Utan per_ord blir det ett segment per bit och ingen ordlista. Modellen laddas vid
-    forsta anropet och ligger sedan kvar i minnet; laset gor att bara en tradd i taget anvander den."""
-    global _modell, _prompt_loggad
-    if prompt and not _prompt_loggad:
-        _prompt_loggad = True
-        log.info("Pianissimo anvander inte ORDLISTA eller svarstavade ord: prompten ignoreras")
+    efter meningsslut. Utan per_ord blir det ett segment per bit. Modellen laddas vid forsta anropet och
+    ligger sedan kvar i minnet; laset gor att bara en tradd i taget anvander den (och dess ordlista)."""
+    global _modell
     ord_lista, segs = [], []
     with _las:
         if _modell is None:
             _modell, sek = ladda()
             log.info("Pianissimo: modellen laddades pa %.1f s", sek)
-        for bit in bitar_med_ord(_modell, samples):
-            ord_lista += bit.ord
-            if text := ord_till_text(bit.ord):
-                segs.append({"start": round(bit.ord[0][0], 2), "end": round(bit.ord[-1][1], 2), "text": text})
-            if framsteg:
-                framsteg(bit.till / len(samples))
+        with med_ordlista(_modell, prompt):
+            for bit in bitar_med_ord(_modell, samples):
+                ord_lista += bit.ord
+                if text := ord_till_text(bit.ord):
+                    segs.append({"start": round(bit.ord[0][0], 2), "end": round(bit.ord[-1][1], 2), "text": text})
+                if framsteg:
+                    framsteg(bit.till / len(samples))
     if per_ord:
         return ord_till_text(ord_lista), motor._ord_till_segment(ord_lista), ord_lista
     return " ".join(s["text"] for s in segs), segs, []

@@ -9,7 +9,8 @@ Pianissimo (KlangAI/pianissimo-sv-onnx, CC-BY-4.0) hämtas första gången till 
 hämtning som appens modeller (modeller.hamta: fortsätter en avbruten fil, bara Hugging Face, sha256).
 Modellen körs med onnx-asr (krav i app/krav-pianissimo.txt, inte i appens krav) av app/pianissimo.py, som
 också är motorn MOTOR=pianissimo i appen: manifestet, delningen i bitar och ordtiderna finns bara där.
-Klangs egen kod i modellrepot (pianissimo_onnx.py, phrase_boost.py) körs inte, och ingen ordlista används.
+--ord "a, b" ger båda motorerna en ordlista, som ORDLISTA och svårstavade ord i appen. Klangs egen kod i
+modellrepot körs inte: ordförstärkningen är app/pianissimo_boost.py, en granskad kopia.
 
 --mote skriver bara siffror: tid, hastighet och andel ord som skiljer från den sparade texten.
 Inget skrivs i datakatalogen. Texten från Pianissimo sparas bara om du anger --ut.
@@ -86,9 +87,10 @@ def ladda_pianissimo(bara_cpu=False):
     return pianissimo.ladda(bara_cpu)
 
 
-def transkribera_pianissimo(modell, samples):
+def transkribera_pianissimo(modell, samples, prompt=""):
     """-> (text, ordlista). Ordlistan har samma form som motor.transkribera ger med per_ord."""
-    ord_lista = [o for bit in pianissimo.bitar_med_ord(modell, samples) for o in bit.ord]
+    with pianissimo.med_ordlista(modell, prompt):
+        ord_lista = [o for bit in pianissimo.bitar_med_ord(modell, samples) for o in bit.ord]
     return pianissimo.ord_till_text(ord_lista), ord_lista
 
 
@@ -104,24 +106,24 @@ def laddad_pianissimo():
 
 # --- mätningarna ---------------------------------------------------------------------------
 
-def tid_och_ord(motornamn, modell, samples):
+def tid_och_ord(motornamn, modell, samples, prompt=""):
     """Kör en motor. -> (text, ordlista, sekunder)."""
     t0 = time.perf_counter()
     if motornamn == "pianissimo":
-        text, ord_lista = transkribera_pianissimo(modell, samples)
+        text, ord_lista = transkribera_pianissimo(modell, samples, prompt)
     else:
-        text, _, ord_lista = motor.transkribera(samples, per_ord=True)
+        text, _, ord_lista = motor.transkribera(samples, per_ord=True, prompt=prompt)
     return text, ord_lista, time.perf_counter() - t0
 
 
-def mata_filer(motorer, modeller_, filer, facit):
+def mata_filer(motorer, modeller_, filer, facit, prompt=""):
     """Skriver en rad per motor och fil. -> {(motor, fil): ordlista}, för talarkontrollen."""
     print(f"\n{'Motor':<22}{'Fil':<20}{'Ljud':>7}{'Tid':>8}{'x realtid':>11}{'Ord':>6}{'Ordfel':>9}")
     ordlistor = {}
     for namn in motorer:
         for fil in filer:
             samples = motor.avkoda(os.path.join(TESTLJUD, fil))
-            text, ord_lista, sek = tid_och_ord(namn, modeller_.get(namn), samples)
+            text, ord_lista, sek = tid_och_ord(namn, modeller_.get(namn), samples, prompt)
             ordlistor[(namn, fil)] = ord_lista
             langd = len(samples) / SR
             fel = wer(facit[fil], text)
@@ -178,8 +180,11 @@ def main(argv=None):
     p.add_argument("--fil", nargs="+", choices=PROVFILER, default=list(PROVFILER), help="testljud att köra")
     p.add_argument("--mote", metavar="ID", help="en inspelning i datakatalogen: bara Pianissimo, bara siffror")
     p.add_argument("--ut", metavar="FIL", help="med --mote: spara Pianissimos text här")
+    p.add_argument("--ord", metavar="ORD", default="", help='ordlista, kommaseparerad: "Carter, Afghanistan"')
     p.add_argument("--cpu", action="store_true", help="Pianissimo bara på processorn (på Mac: utan CoreML)")
     args = p.parse_args(argv)
+    if args.ord and args.mote:
+        p.error("--ord hör inte ihop med --mote")
     if args.ut and not args.mote:
         p.error("--ut hör ihop med --mote")
 
@@ -203,7 +208,7 @@ def main(argv=None):
             print(f"KB-Whisper: {motor.modellnamn()}, första anropet (laddar modellen) tog {time.perf_counter() - t0:.1f} s")
     with open(FACIT, encoding="utf-8") as f:
         facit = json.load(f)
-    ordlistor = mata_filer(motorer, modeller_, args.fil, facit)
+    ordlistor = mata_filer(motorer, modeller_, args.fil, facit, args.ord)
     if "tva-talare.m4a" in args.fil:
         kolla_talare(motorer, ordlistor)
     return 0

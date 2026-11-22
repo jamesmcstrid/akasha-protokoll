@@ -643,8 +643,19 @@ sidan eller med `python app/modeller.py pianissimo`, som de andra modellerna (ma
   delades i 348 bitar (1648 av 4635 noder) som skickas fram och tillbaka, och det blev 6 gånger långsammare.
   `pianissimo.ladda()` anger därför `CPUExecutionProvider`.
 - **Kvalitet:** i ett riktigt möte minst lika bra som KB-Whisper, bättre på engelska lånord och utan påhittade
-  upprepningar. Men den hoppar över korta inpass som "Ja.", och den har ingen prompt: `ORDLISTA` och svårstavade
-  ord ignoreras (loggas en gång) och Klangs ordförstärkning används inte.
+  upprepningar. Men den hoppar över korta inpass som "Ja.".
+- **Ordlista:** samma prompt som de andra motorerna får (`ORDLISTA` och svårstavade ord, kommaseparerade) förstärker
+  orden. `app/pianissimo_boost.py` är en bearbetad kopia av Klangs kod i modellrepot (`phrase_boost.py` och
+  `pianissimo_onnx.py`, samma revision som modellen, CC-BY-4.0), i sin tur en portning av NeMos frasförstärkning:
+  fraserna blir ett träd över SentencePiece-token (`tokenizer.model`, med i manifestet), och varje token som modellen
+  väljer får en bonus om den fortsätter en fras. Klangs kod körs alltså inte; kopian är kort nog att läsa rad för
+  rad, och ändringarna står i dess huvud. Avkodningsslingan är onnx-asr 0.12.0:s med bonusen tillagd, därför är
+  versionen fastlåst. Förstärkningen sätts in på modellen för en transkribering och tas bort efteråt (också vid fel),
+  så en inspelnings ord följer aldrig med till nästa; en tom prompt kostar ingenting. Går något fel (t.ex. att
+  `sentencepiece` saknas) loggas det utan orden och transkriberingen fortsätter utan ordlista. Uppmätt med
+  `halsokoll/jamfor_motorer.sh --motor pianissimo --ord "Carter, Afghanistan, boulevarderna, Turkiet"`: "Carter"
+  blev "karter" utan hjälp och rätt med, och ordfelen sjönk från 7,4 till 6,2 % (`tva-talare.m4a`) och från 7,6 till
+  6,7 % (`digitalt-mote.webm`); `en-talare.m4a` har inga av orden och är oförändrad (2,8 %).
 - **Så arbetar den (`app/pianissimo.py`):** ljudet delas vid tystaste stället i bitar om högst 30 s, och ordtiderna
   kommer från onnx-asr:s tid per token. Med ordtider (talaruppdelning) får orden samma form som whisper.cpp:s
   DTW-ord, och segmenten delas efter meningsslut; utan blir det ett segment per bit. Talaruppdelningen
