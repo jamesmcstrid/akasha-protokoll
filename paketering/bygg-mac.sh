@@ -126,16 +126,25 @@ if [ -n "$FELMINOS" ]; then
 fi
 echo "OK: alla Mach-O-filer har arm64 och minos hogst 14.0 (hela listan i build/app/macho-minos.txt)"
 
-# 5. faster-whisper-stacken ska inte finnas i paketet (A6).
+# 5. faster-whisper-stacken ska inte finnas i paketet (A6). onnxruntime hor till Pianissimo och ska finnas (steg 5b).
 echo "== 5. ingen faster-whisper-stack i paketet"
-find "$APP" \( -iname 'faster_whisper*' -o -iname 'ctranslate2*' -o -iname 'onnxruntime*' -o -iname 'tokenizers*' \
+find "$APP" \( -iname 'faster_whisper*' -o -iname 'ctranslate2*' -o -iname 'tokenizers*' \
   -o -iname 'huggingface_hub*' -o -iname 'hf_xet*' \) > build/app/forbjudet.txt
 if [ -s build/app/forbjudet.txt ]; then
   echo "FEL: det som inte ska vara med finns i paketet:" >&2
   cat build/app/forbjudet.txt >&2
   exit 1
 fi
-echo "OK: ingen av faster_whisper, ctranslate2, onnxruntime, tokenizers, huggingface_hub, hf_xet finns i paketet"
+echo "OK: ingen av faster_whisper, ctranslate2, tokenizers, huggingface_hub, hf_xet finns i paketet"
+
+# 5b. Pianissimo (MOTOR=pianissimo): onnx-asr med sin dist-info och sina data, onnxruntime och sentencepiece ska finnas.
+echo "== 5b. Pianissimo i paketet"
+for monster in 'onnx_asr/preprocessors/data/fbanks.npz' 'onnx_asr-*.dist-info/METADATA' 'onnxruntime/capi/libonnxruntime.*.dylib' \
+               'onnxruntime/capi/onnxruntime_pybind11_state*.so' 'sentencepiece/_sentencepiece*.so'; do
+  [ -n "$(find "$APP" -path "*/$monster" | head -n 1)" ] \
+    || { echo "FEL: $APP har ingen fil som motsvarar $monster (Pianissimo)" >&2; exit 1; }
+done
+echo "OK: onnx-asr (data och dist-info), onnxruntime och sentencepiece finns i paketet"
 
 # 6. Storlek.
 echo "== 6. storlek"

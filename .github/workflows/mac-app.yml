@@ -16,7 +16,7 @@ jobs:
     # Kostar som tio Linux-jobb medan repot ar privat: bara for hand. Fast etikett, sa att
     # maskinens macOS inte byts under steget.
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 45  # med Pianissimo-modellen (660 MB), som kontrollen hamtar
     defaults:
       run:
         shell: bash
@@ -32,6 +32,7 @@ jobs:
           cache: pip
           cache-dependency-path: |
             app/requirements.txt
+            app/krav-pianissimo.txt
             paketering/krav-bygg.txt
       - name: Visa system
         run: |
@@ -43,11 +44,12 @@ jobs:
           python -c "import platform, sys; print(platform.platform(), sys.version)"
       # Utan faster-whisper och utan PyAV-hjulet fran PyPI (dess FFmpeg ar GPL-bygget med x264, x265 m.fl.): PyAV kommer
       # fran det egna LGPL-bygget nedan. app/requirements.txt (av==12.3.0) galler som forut for terminalinstallationen.
-      - name: Beroenden (utan faster-whisper och utan PyAV fran PyPI)
+      # Med app/krav-pianissimo.txt (onnx-asr, onnxruntime, sentencepiece): Mac-programmet har Pianissimo (MOTOR=pianissimo).
+      - name: Beroenden (utan faster-whisper och utan PyAV fran PyPI, med Pianissimo)
         run: |
           python -m venv build/venv
           grep -v -E '^(faster-whisper|av)==' app/requirements.txt > build/krav.txt
-          build/venv/bin/pip install -q -r build/krav.txt -r paketering/krav-bygg.txt
+          build/venv/bin/pip install -q -r build/krav.txt -r app/krav-pianissimo.txt -r paketering/krav-bygg.txt
       # FFmpeg 6.1.6 (bara LGPL-delar) och PyAV 12.3.0 fran kallkod, som i prova-linux.sh. Cachen: hjulet, licenstexterna
       # (ut/ffmpeg) och kallkodsarkivet (ut/kallkod), med nyckel pa skripten, komponentlistan och verktygens versioner.
       - name: FFmpeg och PyAV ur cachen
@@ -103,12 +105,13 @@ jobs:
         env:
           AKASHA_FFMPEG_LICENSER: build/ffmpeg/ut/ffmpeg
         run: bash paketering/bygg-mac.sh build/whisper/whisper-cli
+      # --pianissimo: sist startas programmet om med MOTOR=pianissimo, hamtar modellen (660 MB) pa sidan och transkriberar.
       - name: Kontrollera programmet (uppackat ur zip-filen)
         run: |
           build/venv/bin/python paketering/kontrollera.py \
             --program "build/uppackad/Akasha Protokoll.app/Contents/MacOS/Akasha Protokoll" \
             --hem "$RUNNER_TEMP/hem" --port 8611 \
-            --vantad-motor whispercpp --vantat-jobbfel whisper-cli --riktig-rostmodell
+            --vantad-motor whispercpp --vantat-jobbfel whisper-cli --riktig-rostmodell --pianissimo
       - uses: actions/upload-artifact@v7
         with:
           path: dist/Akasha-Protokoll-mac-arm64.zip

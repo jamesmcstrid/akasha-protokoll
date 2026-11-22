@@ -1,0 +1,10 @@
+SentencePiece 0.2.3
+commit: eafd99cf3b8bfa5101c2c5f42aab2cc39947938d
+kalla: https://github.com/google/sentencepiece (taggen v0.2.3)
+filerna: LICENSE, third_party/darts_clone/LICENSE (darts_clone-LICENSE) och third_party/libsais/LICENSE (libsais-LICENSE) vid commiten, och licenshuvudet i third_party/rapidhash/rapidhash.h (rapidhash-LICENSE)
+sha256 LICENSE: cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
+sha256 darts_clone-LICENSE: 155f59997298ee336602c49f9c1110f268ac394ca2197eb02647a3555935ad52
+sha256 libsais-LICENSE: e38f5960984c2350dba530a89395789c0ea6039a1b551511b478b94dec1d5dfa
+sha256 rapidhash-LICENSE: db672df7faf793fbe28b8074fdd10822363e1525816b45c9627754885de842b0
+hamtad: 2026-11-22
+galler: hjulet sentencepiece 0.2.3, som inte har nagon licensfil (varken Windows- eller macOS-hjulet). Hjulet har abseil (Apache-2.0, samma text som LICENSE) och protobuf (BSD-3-Clause, se protobuf.txt) statiskt inlankade enligt CMakeLists.txt i taggen (FetchContent)

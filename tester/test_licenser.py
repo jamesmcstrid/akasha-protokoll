@@ -244,6 +244,72 @@ class SamlaLicenser(unittest.TestCase):
         self.assertEqual(len(res.fel), 1)
         self.assertIn("bibl2.libs/libokandsak-0123456789abcdef.dll", res.fel[0])
 
+    def lagg_pianissimo(self, med_onnx_asr_licens=True):
+        """Paketen som Pianissimo tar med sig i Mac-programmet, som i hjulen: onnxruntime har LICENSE och
+        ThirdPartyNotices.txt i paketkatalogen, sentencepiece har ingen licensfil alls, protobuf har den i dist-info."""
+        self.p.paket("onnx-asr", "0.12.0", {"onnx_asr/__init__.py": "", "onnx_asr/preprocessors/data/fbanks.npz": "x"},
+                     licensfiler={"licenses/LICENSE": MIT} if med_onnx_asr_licens else None,
+                     metadata={"License-Expression": "MIT"})
+        self.p.paket("onnxruntime", "1.32.0",
+                     {"onnxruntime/__init__.py": "", "onnxruntime/capi/libonnxruntime.1.32.0.dylib": "x",
+                      "onnxruntime/capi/onnxruntime_pybind11_state.so": "x", "onnxruntime/LICENSE": MIT,
+                      "onnxruntime/ThirdPartyNotices.txt": "THIRD PARTY SOFTWARE NOTICES AND INFORMATION\nEigen, protobuf ...\n"},
+                     metadata={"License": "MIT License"}, top_level=["onnxruntime"])
+        self.p.paket("sentencepiece", "0.2.3", {"sentencepiece/__init__.py": "",
+                                                "sentencepiece/_sentencepiece.cpython-312-darwin.so": "x"},
+                     metadata={"License-Expression": "Apache-2.0"})
+        self.p.paket("protobuf", "7.36.2", {"google/protobuf/__init__.py": "", "google/_upb/_message.abi3.so": "x"},
+                     licensfiler={"LICENSE": "Copyright 2008 Google Inc.  All rights reserved.\n"},
+                     metadata={"License": "3-Clause BSD License"})
+
+    def pianissimo_paket(self):
+        """Som PyInstallers analys ger dem i Mac-bygget. (alla_installerade hoppar over onnxruntime: UTESLUTNA galler provet.)"""
+        dists = self.p.dists()
+        return {n: [(str(f), str(dists[n].locate_file(f))) for f in dists[n].files]
+                for n in ("onnx-asr", "onnxruntime", "sentencepiece", "protobuf")}
+
+    def test_pianissimo_i_mac_programmet_har_licens_for_varje_del(self):
+        self.lagg_pianissimo()
+        res = self.samla(self.pianissimo_paket(), plattform="mac", whisper_licens=whisper_katalog(self))
+        self.assertEqual(res.fel, [])
+        _text, rader = rader_i_forteckningen(self.ut)
+        namn = {r[0]: r for r in rader}
+        for del_ in ("onnx-asr", "onnxruntime", "sentencepiece", "protobuf"):
+            self.assertIn(del_, namn)
+            self.assertTrue(os.path.getsize(os.path.join(self.ut, namn[del_][4])) > 0, del_)
+        ort = las_fil(os.path.join(self.ut, "onnxruntime.txt"))
+        self.assertIn("THIRD PARTY SOFTWARE NOTICES AND INFORMATION", ort)  # hjulets ThirdPartyNotices.txt
+        self.assertIn("onnxruntime/capi/libonnxruntime.1.32.0.dylib (paketets eget bibliotek)", ort)
+        sp = las_fil(os.path.join(self.ut, "sentencepiece.txt"))
+        self.assertIn("Hjulet sentencepiece har ingen licensfil", sp)
+        self.assertIn("Apache License", sp)
+        self.assertIn("Copyright (c) 2008-2011, Susumu Yata", sp)  # darts_clone
+        self.assertIn("rapidhash - Very fast", sp)
+        self.assertEqual(sp.count("===== paketering/licenstexter/sentencepiece-0.2.3/LICENSE ====="), 1)
+
+    def test_pianissimo_utan_licens_ar_fel(self):
+        self.lagg_pianissimo(med_onnx_asr_licens=False)
+        res = self.samla(self.pianissimo_paket(), plattform="mac", whisper_licens=whisper_katalog(self))
+        self.assertEqual(len(res.fel), 1, res.fel)
+        self.assertIn("onnx-asr 0.12.0", res.fel[0])
+        self.assertIn("ingen licensfil", res.fel[0])
+        text, _rader = rader_i_forteckningen(self.ut)
+        self.assertTrue(text[0].startswith(sl.MARKERING_OFULLSTANDIG + ":"))
+
+    def test_sentencepiece_i_en_annan_version_utan_licensfil_ar_fel(self):
+        self.p.paket("sentencepiece", "0.2.4", {"sentencepiece/__init__.py": ""})
+        res = self.samla({"sentencepiece": self.p.filer("sentencepiece")})
+        self.assertEqual(len(res.fel), 1, res.fel)
+        self.assertIn("gäller version 0.2.3", res.fel[0])
+
+    def test_sentencepiece_med_egen_licensfil_anvander_den(self):
+        self.p.paket("sentencepiece", "0.2.4", {"sentencepiece/__init__.py": ""}, licensfiler={"LICENSE": "Hjulets egen text\n"})
+        res = self.samla({"sentencepiece": self.p.filer("sentencepiece")})
+        self.assertEqual(res.fel, [])
+        text = las_fil(os.path.join(self.ut, "sentencepiece.txt"))
+        self.assertIn("Hjulets egen text", text)
+        self.assertNotIn("darts_clone", text)
+
     def lagg_av(self, extra=None, licens="LGPL version 2.1 or later"):
         filer = {"av/__init__.py": "", "av/_core.cp312-win_amd64.pyd": "x"}
         for n in sl.FFMPEG_BIBLIOTEK:
@@ -633,7 +699,7 @@ class LicensernaISpecen(unittest.TestCase):
         miljo = {"AKASHA_WHISPER_CLI": "", "AKASHA_WHISPER_KATALOG": "", "AKASHA_IKON": "", "AKASHA_VERSIONSFIL": "",
                  "AKASHA_WHISPER_LICENS": whisper_katalog(self), "AKASHA_FFMPEG_LICENSER": "", **miljo}
         with mock.patch.object(sys, "platform", plattform), mock.patch.dict(os.environ, miljo), \
-                mock.patch("builtins.print"):
+                mock.patch.dict(sys.modules, hjalp.falska_pyinstaller_hooks()), mock.patch("builtins.print"):
             exec(compile(las("paketering", "akasha-protokoll.spec"), "spec", "exec"), ns)
         return anrop, mapp
 
@@ -748,6 +814,16 @@ class Bygget(unittest.TestCase):
         self.assertRegex(kalla, r"sha256: [0-9a-f]{64}")
         self.assertIn("commit: 33ca9628233dc8f002435e868d4c2e9f82766ca1", kalla)
         self.assertIn("Copyright (c) Microsoft Corporation", las_fil(os.path.join(katalog, "LICENSE")))
+
+    def test_licenstexterna_for_sentencepiece_finns_med_kallan(self):
+        katalog = os.path.join(PAKETERING, "licenstexter", "sentencepiece-0.2.3")
+        self.assertEqual(sorted(os.listdir(katalog)), ["KALLA.txt", "LICENSE", "darts_clone-LICENSE", "libsais-LICENSE",
+                                                       "rapidhash-LICENSE"])
+        kalla = las_fil(os.path.join(katalog, "KALLA.txt"))
+        self.assertIn("commit: eafd99cf3b8bfa5101c2c5f42aab2cc39947938d", kalla)
+        self.assertEqual(len(re.findall(r"sha256 \S+: [0-9a-f]{64}", kalla)), 4)
+        self.assertIn("Apache License", las_fil(os.path.join(katalog, "LICENSE")))
+        self.assertIn("BSD 2-Clause License", las_fil(os.path.join(katalog, "rapidhash-LICENSE")))
 
     def test_kommentarerna_har_inga_aao(self):
         for namn in ("samla_licenser.py", "kontrollera_licenser.py"):

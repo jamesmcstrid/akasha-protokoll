@@ -11,9 +11,10 @@ For ett prov utan PyInstaller (alla installerade paket utom byggverktygen och de
 
 Komponenterna:
   - Akasha Protokoll (LICENSE och NOTICE) och typsnitten (OFL-texterna i app/static/typsnitt/),
-  - varje Python-paket: licensfilerna ur paketet (LICENSE*, LICENCE*, COPYING*, NOTICE*, AUTHORS*), och licensen ur
-    License-Expression, License eller klassificeringen. Ett paket utan licensfil ar FEL, utom de i SAMMA_PROJEKT, som
-    far texten fran ett paket ur samma projekt med samma version,
+  - varje Python-paket: licensfilerna ur paketet (LICENSE*, LICENCE*, COPYING*, NOTICE*, AUTHORS*, ThirdPartyNotices*),
+    och licensen ur License-Expression, License eller klassificeringen. Ett paket utan licensfil ar FEL, utom de i
+    SAMMA_PROJEKT, som far texten fran ett paket ur samma projekt med samma version, och de i LICENSTEXT_UR_KALLKOD,
+    som far texten ur paketering/licenstexter/ (samma version kravs),
   - biblioteken som ett paket bar med sig (av.libs, numpy.libs, sherpa_onnx/lib, .dylibs ...): vart och ett ska tackas
     av FFmpeg-komponenten (PyAV), Visual C++-runtimen, ett eget bibliotek i paketet, en text i paketering/licenstexter/
     (TILLAGG) eller paketets egen licenstext (som ska namna biblioteket). Annars FEL,
@@ -46,7 +47,7 @@ MARKERING_PROV = "PROV"
 REPO = "https://github.com/jamesmcstrid/akasha-protokoll"
 PLATTFORMSNAMN = {"mac": "Mac", "windows": "Windows", "linux": "Linux (provbygge)"}
 
-LICENSFIL = re.compile(r"^(LICEN[CS]E|COPYING|NOTICE|AUTHORS)", re.I)
+LICENSFIL = re.compile(r"^(LICEN[CS]E|COPYING|NOTICE|AUTHORS|ThirdPartyNotices)", re.I)
 # Bara for --alla-installerade (provet): byggverktygen och det som spec-filen utesluter (excludes). I bygget avgor
 # PyInstallers analys vad som foljer med.
 BYGGVERKTYG = {"pip", "setuptools", "wheel", "pyinstaller", "pyinstaller-hooks-contrib", "altgraph", "macholib", "pefile",
@@ -59,6 +60,15 @@ SAMMA_PROJEKT = {
     "pyobjc-core": ("pyobjc-framework-cocoa", "Hjulet pyobjc-core har ingen licensfil. Det hör till samma projekt "
                                               "(ronaldoussoren/pyobjc) och samma version som pyobjc-framework-Cocoa, vars "
                                               "licens står nedan."),
+}
+# Hjul utan licensfil: texterna ur projektets kallkod, i paketering/licenstexter/<katalog>/ (KALLA.txt sager varifran).
+# Versionen ar hjulets: en ny version maste kontrolleras (har den fatt en licensfil, eller har licensen andrats?).
+LICENSTEXT_UR_KALLKOD = {
+    "sentencepiece": ("0.2.3", "sentencepiece-0.2.3",
+                      "Hjulet sentencepiece har ingen licensfil. Texterna nedan är ur projektets källkod (google/sentencepiece, "
+                      "taggen v0.2.3): Apache-2.0, och licenserna för det som projektet har med sig (darts_clone, libsais, "
+                      "rapidhash). Abseil (Apache-2.0, samma text) och protobuf (BSD-3-Clause, se protobuf.txt) är "
+                      "statiskt inlänkade i hjulet."),
 }
 # Licenstexter for bibliotek som ett hjul bar med sig utan texten. Texterna ligger i paketering/licenstexter/<katalog>/
 # (KALLA.txt sager varifran). Versionen ar paketets: en ny version maste kontrolleras (vilket bibliotek, vilken version).
@@ -339,11 +349,22 @@ def paketkomponent(namn, dists, filer, res, ffmpeg_bibliotek, msvc_dllar, prov=F
         else:
             texter = licensfiler(s)
             noter.append(forklaring)
+    if not texter and namn in LICENSTEXT_UR_KALLKOD:
+        version, katalog, forklaring = LICENSTEXT_UR_KALLKOD[namn]
+        sokvag = os.path.join(TILLAGGSKATALOG, katalog)
+        if version != m["Version"]:
+            res.fel.append(f"{rubrik}: hjulet saknar licensfil, och texterna i paketering/licenstexter/{katalog} gäller "
+                           f"version {version}: kontrollera om den nya versionen har en licensfil eller en ny licens")
+        elif not os.path.isdir(sokvag) or not os.listdir(sokvag):
+            res.fel.append(f"{rubrik}: paketering/licenstexter/{katalog} saknas eller är tom")
+        else:
+            texter = [(f"paketering/licenstexter/{katalog}/{f}", os.path.join(sokvag, f)) for f in sorted(os.listdir(sokvag))]
+            noter.append(forklaring)
     if not texter:
         if not any(rubrik in f for f in res.fel):
             res.fel.append(f"{rubrik}: paketet följer med programmet men har ingen licensfil (LICENSE, COPYING, NOTICE "
-                           f"eller AUTHORS) i sin dist-info. Lägg till det i SAMMA_PROJEKT eller TILLAGG i samla_licenser.py "
-                           f"med en kontrollerad text, eller ta bort paketet ur programmet.")
+                           f"eller AUTHORS) i sin dist-info. Lägg till det i SAMMA_PROJEKT, LICENSTEXT_UR_KALLKOD eller TILLAGG i "
+                           f"samla_licenser.py med en kontrollerad text, eller ta bort paketet ur programmet.")
         return None
     licenstext = text_ur_filer(texter)
     if namn in NOTER:

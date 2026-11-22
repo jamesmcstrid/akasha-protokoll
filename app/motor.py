@@ -7,7 +7,7 @@ om whisper-cli och modellen finns, annars faster-whisper):
   whispercpp  whisper.cpp:s whisper-cli (brew install whisper-cpp pa Mac), som anvander Metal (GPU) pa
               Apple Silicon. Startas en gang per transkribering och laddar modellen varje gang.
   pianissimo  Klang Pianissimo (pianissimo.py), en svensk Parakeet-modell via onnx-asr. Valfri och aldrig
-              auto: onnx-asr ingar inte i appens krav. Mycket snabbare, men ingen prompt (ORDLISTA).
+              auto: onnx-asr ingar inte i appens krav, men i Mac-programmet. Mycket snabbare; ORDLISTA via boostning.
 
 Ingen sprakmodell rattar eller sammanfattar texten. Det som whisper hor ar det som skrivs.
 """
@@ -135,9 +135,11 @@ def hinder():
         return ("MOTOR=faster går inte i programmet, eftersom faster-whisper inte följer med. "
                 "Ta bort raden MOTOR i installningar.env.")
     if MOTOR == "pianissimo" and importlib.util.find_spec("onnx_asr") is None:
-        if plattform.ar_paketerad():
+        if plattform.ar_paketerad() and plattform.system() == "Windows":  # Mac-programmet har onnx-asr med
             return ("MOTOR=pianissimo går inte i programmet, eftersom onnx-asr inte följer med än. "
                     "Ta bort raden MOTOR i installningar.env.")
+        if plattform.ar_paketerad():
+            return "onnx-asr saknas i programmet. Ladda ned Akasha Protokoll på nytt."
         return "onnx-asr saknas. Kör: pip install -r app/krav-pianissimo.txt (i appens venv)"
     if mal_motor(MOTOR) == "whispercpp" and plattform.whisper_cli() is None:  # MOTOR lases nu, inte vid def
         return _cli_saknas()
