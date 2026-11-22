@@ -23,9 +23,18 @@ import plattform
 import talare
 
 
-class TestValjMotor(unittest.TestCase):
-    def val(self, onskad="auto", system="Darwin", har_cli=True, har_ggml=True):
-        return motor.valj_motor(onskad, system, har_cli, har_ggml)
+class UtanOnnxAsr(unittest.TestCase):
+    """Utan onnx-asr, oavsett om det ar installerat dar testerna kor: annars valjer auto Pianissimo."""
+
+    def setUp(self):
+        p = mock.patch.object(motor, "har_onnx_asr", lambda: False)
+        p.start()
+        self.addCleanup(p.stop)
+
+
+class TestValjMotor(UtanOnnxAsr):
+    def val(self, onskad="auto", system="Darwin", har_cli=True, har_ggml=True, **k):
+        return motor.valj_motor(onskad, system, har_cli, har_ggml, **k)
 
     def test_auto_blir_whispercpp_nar_det_ar_installerat_pa_mac(self):
         self.assertEqual(self.val(), "whispercpp")
@@ -43,9 +52,73 @@ class TestValjMotor(unittest.TestCase):
     def test_tvingat_val_galler(self):
         self.assertEqual(self.val("faster"), "faster")
         self.assertEqual(self.val("whispercpp", system="Linux"), "whispercpp")
+        self.assertEqual(self.val("whispercpp", har_onnx=True, har_pianissimo=True), "whispercpp")
+
+    def test_auto_blir_pianissimo_med_onnx_asr_och_modellen(self):
+        for system in ("Darwin", "Windows", "Linux"):
+            self.assertEqual(self.val(system=system, har_onnx=True, har_pianissimo=True), "pianissimo")
+        self.assertEqual(self.val(har_cli=False, har_ggml=False, har_onnx=True, har_pianissimo=True), "pianissimo")
+
+    def test_utan_pianissimomodellen_blir_det_kb_whisper_tills_den_ar_hamtad(self):
+        self.assertEqual(self.val(har_onnx=True, har_pianissimo=False), "whispercpp")
+        self.assertEqual(self.val(system="Linux", har_onnx=True, har_pianissimo=False), "faster")
+
+    def test_modellen_utan_onnx_asr_racker_inte(self):
+        self.assertEqual(self.val(har_onnx=False, har_pianissimo=True), "whispercpp")
+
+    def test_modellen_kontrolleras_med_saknade(self):
+        def bara_pianissimo(nyckel, storlek=None):
+            return [] if nyckel == "pianissimo" else ["x"]
+        with mock.patch.object(modeller, "saknade", bara_pianissimo):
+            self.assertEqual(self.val(har_onnx=True), "pianissimo")
+        with mock.patch.object(modeller, "saknade", lambda nyckel, storlek=None: ["x"]):
+            self.assertEqual(self.val(har_onnx=True), "whispercpp")  # har_ggml=True fran val()
+
+    def test_standard_ar_har_onnx_asr(self):
+        with mock.patch.object(motor, "har_onnx_asr", lambda: True), \
+             mock.patch.object(modeller, "saknade", lambda *a, **k: []):
+            self.assertEqual(self.val(), "pianissimo")
 
 
-class TestMalMotor(unittest.TestCase):
+class TestHarOnnxAsr(unittest.TestCase):
+    def test_find_spec(self):
+        with mock.patch.object(motor.importlib.util, "find_spec", lambda namn: object()):
+            self.assertTrue(motor.har_onnx_asr())
+        with mock.patch.object(motor.importlib.util, "find_spec", lambda namn: None):
+            self.assertFalse(motor.har_onnx_asr())
+
+    def test_modul_utan_spec(self):
+        def fel(namn):
+            raise ValueError("onnx_asr.__spec__ is None")
+        with mock.patch.object(motor.importlib.util, "find_spec", fel), \
+             mock.patch.dict(sys.modules, {"onnx_asr": object()}):
+            self.assertTrue(motor.har_onnx_asr())
+
+
+class TestMalMotor(UtanOnnxAsr):
+    def test_med_onnx_asr_och_utan_modeller_blir_det_pianissimo(self):
+        for system, cli in (("Darwin", True), ("Windows", True), ("Linux", False)):
+            self.assertEqual(motor.mal_motor("auto", system, cli, True, False, False), "pianissimo")
+        self.assertEqual(motor.mal_motor("auto", "Darwin", True, True, True, True), "pianissimo")
+
+    def test_den_som_redan_har_kb_whisper_behaller_det(self):
+        self.assertEqual(motor.mal_motor("auto", "Darwin", True, True, False, True), "whispercpp")
+        self.assertEqual(motor.mal_motor("auto", "Linux", False, True, False, True), "faster")
+
+    def test_tvingat_val_med_onnx_asr(self):
+        self.assertEqual(motor.mal_motor("whispercpp", "Darwin", True, True, False, False), "whispercpp")
+
+    def test_modellerna_kontrolleras_med_saknade(self):
+        def bara_kb(nyckel, storlek=None):
+            return ["x"] if nyckel == "pianissimo" else []
+        with mock.patch.object(motor, "har_onnx_asr", lambda: True), \
+             mock.patch.object(modeller, "saknade", bara_kb):
+            self.assertEqual(motor.mal_motor("auto", "Darwin", True), "whispercpp")
+            self.assertEqual(motor.valj_motor("auto", "Darwin", True), "whispercpp")
+        with mock.patch.object(motor, "har_onnx_asr", lambda: True), \
+             mock.patch.object(modeller, "saknade", lambda *a, **k: ["x"]):
+            self.assertEqual(motor.mal_motor("auto", "Darwin", True), "pianissimo")
+
     def test_mac_med_cli_ger_whispercpp_aven_utan_ggml(self):
         self.assertEqual(motor.mal_motor("auto", "Darwin", True), "whispercpp")
 

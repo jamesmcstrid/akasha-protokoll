@@ -381,12 +381,17 @@ class Val(FalskMiljo):
         self.assertEqual(motor.valj_motor("pianissimo", "Linux", False, False), "pianissimo")
         self.assertEqual(motor.mal_motor("pianissimo", "Darwin", True), "pianissimo")
 
-    def test_auto_ar_oforandrat(self):
+    def test_auto_utan_onnx_asr_ar_oforandrat(self):
         for system, cli, ggml, forvantat in (("Darwin", True, True, "whispercpp"), ("Windows", True, True, "whispercpp"),
                                              ("Linux", True, True, "faster"), ("Darwin", False, False, "faster")):
-            self.assertEqual(motor.valj_motor("auto", system, cli, ggml), forvantat)
-        self.assertEqual(motor.mal_motor("auto", "Windows", True), "whispercpp")
-        self.assertEqual(motor.mal_motor("auto", "Linux", False), "faster")
+            self.assertEqual(motor.valj_motor("auto", system, cli, ggml, har_onnx=False), forvantat)
+        self.assertEqual(motor.mal_motor("auto", "Windows", True, har_onnx=False), "whispercpp")
+        self.assertEqual(motor.mal_motor("auto", "Linux", False, har_onnx=False), "faster")
+
+    def test_auto_med_den_falska_onnx_asr_blir_pianissimo(self):
+        # sys.modules har den falska onnx_asr och modellfilerna "finns" (FalskMiljo)
+        self.assertEqual(motor.valj_motor("auto", "Darwin", True, True), "pianissimo")
+        self.assertEqual(motor.mal_motor("auto", "Linux", False), "pianissimo")
 
     def test_auto_bryr_sig_inte_om_onnx_asr(self):
         with mock.patch.object(motor, "MOTOR", "auto"), \
