@@ -169,12 +169,27 @@ def mata_mote(id_, ut, prompt=""):
     text, ord_lista, sek = tid_och_ord("pianissimo", modell, samples, prompt)
     langd = len(samples) / SR
     ny = {"resultat": {"segment": [{**s, "speaker": 1} for s in motor._ord_till_segment(ord_lista)]}}
+    talar_text = None
+    antal = talare.tolka_antal((meta.get("installningar") or {}).get("talare", "2"))
+    if antal != 1 and talare.problem() is None:
+        # Samma talaruppdelning som appen, pa Pianissimos ord, sa att talarna kan jamforas med den sparade texten.
+        segment, hittade, _varning = talare.dela_upp(samples, ord_lista, antal, ord_p=motor.ord_grans())
+        ny = {"resultat": {"segment": segment}}
+        talar_text = f"{hittade} talare (sparad text: {meta['resultat'].get('talare')})"
+    elif antal != 1:
+        talar_text = f"ingen talaruppdelning ({talare.problem()})"
     a, b = jamfor.ord_med_tider(meta), jamfor.ord_med_tider(ny)
     opkoder = difflib.SequenceMatcher(None, [w[0] for w in a], [w[0] for w in b], autojunk=False).get_opcodes()
     print(f"\nMöte {id_}: {langd:.0f} s ljud")
     print(f"  Pianissimo: {sek:.0f} s, {langd / sek:.1f} x realtid, {len(b)} ord")
     print(f"  Sparad text ({meta['resultat'].get('motor')}): {len(a)} ord")
     print(f"  Ord som skiljer: {jamfor.skillnad(opkoder) / max(1, len(a)):.1%} (den sparade texten som facit)")
+    if talar_text:
+        lika = [(i1 + k, j1 + k) for tag, i1, i2, j1, _ in opkoder if tag == "equal" for k in range(i2 - i1)]
+        if lika and all(w[3] is not None for w in a):  # den sparade texten har talare
+            _karta, samma = jamfor.basta_parning([(a[i][3], b[j][3]) for i, j in lika])
+            talar_text += f", {samma / len(lika):.1%} av de gemensamma orden har samma talare"
+        print(f"  Talare: {talar_text}")
     if prompt:
         sparad = " ".join(w[1] for w in a)
         print(f"  Ordlistans ord i texten: sparad {traffar(sparad, prompt)}, Pianissimo {traffar(text, prompt)}")
