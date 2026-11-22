@@ -1,5 +1,5 @@
-"""halsokoll/jamfor_motorer.py: ordlistan fran Pianissimos tokens, ordfelsmattet, facit, manifestet
-och att --mote aldrig skriver ord ur motet. Ingen modell och ingen hamtning."""
+"""halsokoll/jamfor_motorer.py: ordfelsmattet, facit och att --mote aldrig skriver ord ur motet.
+Ingen modell och ingen hamtning. Pianissimo-motorn i sig testas i test_pianissimo.py."""
 import contextlib
 import io
 import json
@@ -15,76 +15,9 @@ import hjalp  # noqa: F401  (maste importeras forst)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from halsokoll import jamfor_motorer as jm  # noqa: E402
+from pianissimo import ord_fran_tokens  # noqa: E402
 
 SR = jm.SR
-
-
-class OrdFranTokens(unittest.TestCase):
-    def test_bitar_slas_ihop_till_ord(self):
-        ut = jm.ord_fran_tokens([" Hej", " s", "an", " och", " ▁hopp"], [0.0, 0.4, 0.56, 0.8, 1.2], 2.0)
-        self.assertEqual([o[2] for o in ut], [" Hej", " san", " och", " hopp"])
-        self.assertEqual([o[0] for o in ut], [0.0, 0.4, 0.8, 1.2])
-
-    def test_stremarkeringen_ar_samma_sak_som_mellanslag(self):
-        ut = jm.ord_fran_tokens(["▁a", "b", "▁c"], [0.0, 0.1, 0.5], 1.0)
-        self.assertEqual([o[2] for o in ut], [" ab", " c"])
-
-    def test_ord_slutar_dar_nasta_borjar(self):
-        ut = jm.ord_fran_tokens([" a", " b"], [0.0, 0.5], 3.0)
-        self.assertEqual(ut[0][:2], (0.0, 0.5))
-
-    def test_paus_efter_ordet_raknas_inte_som_tal(self):
-        ut = jm.ord_fran_tokens([" a", " b"], [0.0, 8.0], 20.0)
-        self.assertEqual(ut[0][1], jm.MAX_ORD_S)
-        self.assertEqual(ut[1][1], 8.0 + jm.MAX_ORD_S)
-
-    def test_kort_ord_far_minsta_langd(self):
-        ut = jm.ord_fran_tokens([" a", " b"], [0.0, 0.02], 0.03)
-        self.assertEqual(ut[0][1], jm.MIN_ORD_S)
-        self.assertEqual(ut[1][1], 0.02 + jm.MIN_ORD_S)
-
-    def test_sista_ordet_slutar_vid_ljudets_slut(self):
-        ut = jm.ord_fran_tokens([" a", " b"], [0.0, 1.0], 1.4)
-        self.assertEqual(ut[1][:2], (1.0, 1.4))
-
-    def test_tomma_bitar_ger_inga_ord(self):
-        self.assertEqual(jm.ord_fran_tokens([], [], 1.0), [])
-        self.assertEqual(jm.ord_fran_tokens([" ", "▁"], [0.0, 0.1], 1.0), [])
-
-    def test_passar_talaruppdelningens_format(self):
-        """Samma form som motor.transkribera: (start, slut, text) med inledande mellanslag."""
-        import talare
-        ord_lista = jm.ord_fran_tokens([" Hej", " du", ".", " Ja"], [0.0, 0.5, 0.9, 1.5], 2.0)
-        rep = talare.repliker(ord_lista, [0, 0, 1])
-        self.assertEqual([r["text"] for r in rep], ["Hej du.", "Ja"])
-
-
-class Bitar(unittest.TestCase):
-    def ljud(self, sekunder, tysta=()):
-        x = np.random.default_rng(0).normal(0, 0.1, int(sekunder * SR)).astype(np.float32)
-        for a, b in tysta:
-            x[int(a * SR):int(b * SR)] *= 0.01
-        return x
-
-    def test_kort_ljud_ar_en_bit(self):
-        x = self.ljud(25)
-        self.assertEqual(jm.dela_i_bitar(x), [(0, len(x))])
-
-    def test_klipper_i_tystnaden(self):
-        x = self.ljud(50, tysta=[(26.0, 26.3)])
-        bitar = jm.dela_i_bitar(x)
-        self.assertEqual(len(bitar), 2)
-        self.assertTrue(26.0 * SR <= bitar[0][1] <= 26.3 * SR)
-
-    def test_bitarna_ar_sammanhangande_och_hogst_30_s(self):
-        x = self.ljud(200)
-        bitar = jm.dela_i_bitar(x)
-        self.assertEqual(bitar[0][0], 0)
-        self.assertEqual(bitar[-1][1], len(x))
-        for (_, slut), (start, _) in zip(bitar, bitar[1:]):
-            self.assertEqual(slut, start)
-        self.assertTrue(all(b - a <= jm.BIT_S * SR for a, b in bitar))
-        self.assertTrue(all(b - a >= (jm.BIT_S - jm.BIT_SOK_S) * SR for a, b in bitar[:-1]))
 
 
 class Ordfel(unittest.TestCase):
@@ -137,29 +70,6 @@ class Facit(unittest.TestCase):
         self.assertEqual(n["digitalt-mote.webm"], 42 + 36 + 36)
 
 
-class Manifest(unittest.TestCase):
-    def test_pinnad_revision_och_kontrollsummor(self):
-        self.assertEqual(len(jm.PIANISSIMO), 4)
-        for f in jm.PIANISSIMO:
-            self.assertEqual(f.repo, "KlangAI/pianissimo-sv-onnx")
-            self.assertRegex(f.revision, r"^[0-9a-f]{40}$")
-            self.assertRegex(f.sha256, r"^[0-9a-f]{64}$")
-            self.assertGreater(f.storlek, 0)
-            self.assertTrue(f.url.startswith("https://huggingface.co/"), f.url)
-            self.assertIn(f.revision, f.url)
-            self.assertTrue(modeller_tillaten(f.url), f.url)
-            self.assertTrue(f.sokvag().endswith(os.path.join(jm.PIANISSIMO_KATALOG, f.namn)))
-
-    def test_filerna_onnx_asr_letar_efter(self):
-        namn = {f.namn for f in jm.PIANISSIMO}
-        self.assertEqual(namn, {"encoder-model.int8.onnx", "decoder_joint-model.int8.onnx", "vocab.txt", "config.json"})
-
-
-def modeller_tillaten(url):
-    import modeller
-    return modeller.tillaten(url)
-
-
 class Mote(unittest.TestCase):
     ID = "20260101-120000"
     SPARAD = "Vi bestämde att budgeten godkänns fredag. Kvartalsrapporten skickas senare."
@@ -175,7 +85,7 @@ class Mote(unittest.TestCase):
         with open(os.path.join(hjalp.DATA, self.ID + ".m4a"), "wb") as f:
             f.write(b"ljud")
         self.fore = sorted(os.listdir(hjalp.DATA))
-        ord_lista = jm.ord_fran_tokens(
+        ord_lista = ord_fran_tokens(
             [" " + o for o in self.PIANISSIMO.split()], [i * 0.5 for i in range(len(self.PIANISSIMO.split()))], 10.0)
         self.patchar = [
             mock.patch.object(jm.motor, "avkoda", return_value=np.zeros(20 * SR, dtype=np.float32)),

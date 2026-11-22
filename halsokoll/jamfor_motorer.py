@@ -7,12 +7,9 @@ ordfel mot facit och om ordtiderna räcker för talaruppdelningen.
 
 Pianissimo (KlangAI/pianissimo-sv-onnx, CC-BY-4.0) hämtas första gången till MODELLKATALOG, med samma
 hämtning som appens modeller (modeller.hamta: fortsätter en avbruten fil, bara Hugging Face, sha256).
-Modellen körs med onnx-asr (krav i halsokoll/krav-pianissimo.txt, inte i appens krav). Klangs egen kod
-i modellrepot (pianissimo_onnx.py, phrase_boost.py) körs inte, och ingen ordlista används.
-
-Ljudet delas vid tystaste stället i bitar om högst 30 s, så att en timmes möte går att köra utan
-att modellen får hela ljudet på en gång (och utan en andra modell för tal/tystnad). Ordtider
-kommer från onnx-asr:s tid per token (80 ms steg).
+Modellen körs med onnx-asr (krav i app/krav-pianissimo.txt, inte i appens krav) av app/pianissimo.py, som
+också är motorn MOTOR=pianissimo i appen: manifestet, delningen i bitar och ordtiderna finns bara där.
+Klangs egen kod i modellrepot (pianissimo_onnx.py, phrase_boost.py) körs inte, och ingen ordlista används.
 
 --mote skriver bara siffror: tid, hastighet och andel ord som skiljer från den sparade texten.
 Inget skrivs i datakatalogen. Texten från Pianissimo sparas bara om du anger --ut.
@@ -32,36 +29,16 @@ import numpy as np  # noqa: E402
 import lagring  # noqa: E402
 import modeller  # noqa: E402
 import motor  # noqa: E402
+import pianissimo  # noqa: E402
 import talare  # noqa: E402
 from halsokoll import jamfor, prov  # noqa: E402
-from installningar import CPU_TRADAR, DATAKATALOG  # noqa: E402
-from modeller import Fil  # noqa: E402
+from installningar import DATAKATALOG  # noqa: E402
 
-SR = 16000
+SR = pianissimo.SR
 TESTLJUD = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "testljud")
 FACIT = os.path.join(TESTLJUD, "facit.json")
 PROVFILER = ("en-talare.m4a", "tva-talare.m4a", "digitalt-mote.webm")
 MOTORER = ("kbwhisper", "pianissimo")
-
-BIT_S = 30  # längsta bit som modellen får
-BIT_SOK_S = 10  # tystaste stället söks i bitens sista så många sekunder
-RAM_S = 0.05  # nivån mäts i ramar om 50 ms
-MIN_ORD_S = 0.1  # kortaste ordet i ordlistan
-MAX_ORD_S = 1.0  # längsta ordet: en paus efter ordet räknas inte som tal i talaruppdelningen
-
-_PIANISSIMO = ("KlangAI/pianissimo-sv-onnx", "63730c6021234f26b9bbae9a07a04fec39e7a52e")
-PIANISSIMO_KATALOG = "pianissimo-sv-onnx"
-# Bara int8-filerna. nemo128.onnx behövs inte: onnx-asr räknar ut ljudegenskaperna med numpy.
-PIANISSIMO = (
-    Fil(*_PIANISSIMO, "encoder-model.int8.onnx", PIANISSIMO_KATALOG, 630313965,
-        "13288a5f4f009bf6bf8a3260044d098f6922e8caf1c564521d4962fa5749f66c"),
-    Fil(*_PIANISSIMO, "decoder_joint-model.int8.onnx", PIANISSIMO_KATALOG, 30025652,
-        "0f9213242acd8874f2717c5e3cdb888d4e7673ddf3abb9ee3a2fd2eaf0acdd03"),
-    Fil(*_PIANISSIMO, "vocab.txt", PIANISSIMO_KATALOG, 93939,
-        "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"),
-    Fil(*_PIANISSIMO, "config.json", PIANISSIMO_KATALOG, 116,
-        "f19eee59d2ba995f6d5cdb164e30dd64d2a8b7ed0ce9f2198ab68a5467445694"),
-)
 
 
 # --- ren logik (testas utan modell) --------------------------------------------------------
@@ -89,42 +66,6 @@ def wer(facit, hypotes):
     return fel / n if n else None
 
 
-def ord_fran_tokens(tokens, tider, slut_s):
-    """Pianissimos tokens (SentencePiece-bitar) och starttider -> [(start, slut, text)] som motor.transkribera.
-
-    Ett ord börjar vid en bit som inleds med mellanslag eller ▁ (onnx-asr gör om ▁ till mellanslag) och
-    får texten med inledande mellanslag, som whisper ger. Ordet slutar där nästa börjar, men inte
-    senare än MAX_ORD_S (annars räknas pauser som tal) och inte före MIN_ORD_S. Sista ordet slutar
-    vid slut_s, ljudets slut."""
-    ord_ = []
-    for bit, start in zip(tokens, tider):
-        if not ord_ or bit[:1] in (" ", "▁"):
-            ord_.append([start, " "])
-        ord_[-1][1] += bit.lstrip(" ▁")
-    ord_ = [(start, text) for start, text in ord_ if text.strip()]
-    ut = []
-    for i, (start, text) in enumerate(ord_):
-        nasta = ord_[i + 1][0] if i + 1 < len(ord_) else slut_s
-        ut.append((start, max(start + MIN_ORD_S, min(nasta, start + MAX_ORD_S)), text))
-    return ut
-
-
-def dela_i_bitar(samples, bit_s=BIT_S, sok_s=BIT_SOK_S):
-    """-> [(från, till)] i sampel: bitar om högst bit_s, klippta där ljudet är tystast under bitens
-    sista sok_s sekunder, så att ett ord sällan klipps itu."""
-    ram = int(RAM_S * SR)
-    bitar, a = [], 0
-    while len(samples) - a > bit_s * SR:
-        fran = a + int((bit_s - sok_s) * SR)
-        antal = int(sok_s * SR) // ram
-        niva = (samples[fran:fran + antal * ram].reshape(antal, ram) ** 2).mean(axis=1)
-        klipp = fran + int(np.argmin(niva)) * ram + ram // 2
-        bitar.append((a, klipp))
-        a = klipp
-    bitar.append((a, len(samples)))
-    return bitar
-
-
 # --- Pianissimo ----------------------------------------------------------------------------
 
 def _framsteg():
@@ -140,29 +81,15 @@ def _framsteg():
 def ladda_pianissimo(bara_cpu=False):
     """Hämtar filerna vid behov och laddar modellen. -> (modell, laddningstid i s).
 
-    bara_cpu: bara processorn. Pa Mac valjer onnxruntime annars CoreML, som bara klarar en del av grafen
-    (uppmatt: 348 bitar och 1648 av 4635 noder): bitarna skickas fram och tillbaka och det blir langsammare."""
-    modeller.hamta([(f.namn, f) for f in PIANISSIMO], framsteg=_framsteg())
-    import onnx_asr
-    import onnxruntime
-
-    t0 = time.perf_counter()
-    val = onnxruntime.SessionOptions()
-    val.intra_op_num_threads = CPU_TRADAR  # 0 = onnxruntime väljer, som i appen
-    kat = os.path.dirname(PIANISSIMO[0].sokvag())
-    modell = onnx_asr.load_model("nemo-conformer-tdt", kat, quantization="int8", sess_options=val,
-                                 providers=["CPUExecutionProvider"] if bara_cpu else None)
-    return modell.with_timestamps(), time.perf_counter() - t0
+    bara_cpu: se pianissimo.ladda. Här är standarden onnxruntimes eget val, så att --cpu kan jämföras med det."""
+    modeller.hamta([(f.namn, f) for f in modeller.paket("pianissimo")], framsteg=_framsteg())
+    return pianissimo.ladda(bara_cpu)
 
 
 def transkribera_pianissimo(modell, samples):
     """-> (text, ordlista). Ordlistan har samma form som motor.transkribera ger med per_ord."""
-    ord_lista = []
-    for fran, till in dela_i_bitar(samples):
-        res = modell.recognize(samples[fran:till])
-        tider = [fran / SR + t for t in res.timestamps or []]
-        ord_lista += ord_fran_tokens(res.tokens or [], tider, till / SR)
-    return " ".join("".join(o[2] for o in ord_lista).split()), ord_lista
+    ord_lista = [o for bit in pianissimo.bitar_med_ord(modell, samples) for o in bit.ord]
+    return pianissimo.ord_till_text(ord_lista), ord_lista
 
 
 BARA_CPU = False  # --cpu

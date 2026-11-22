@@ -22,6 +22,10 @@ the programs are built. Among the components:
   (ffmpeg-6.1.6-kallkod.tar.xz) is in the same GitHub Release as the programs, see licenser/ffmpeg.txt
 - On Windows, the GCC runtime and the mingw-w64 runtime (statically linked into the FFmpeg DLLs), and Khronos
   Vulkan-Headers (Apache-2.0 OR MIT) and SPIRV-Headers (MIT-style) compiled into ggml-vulkan.dll
+- Optional speech model Pianissimo (https://huggingface.co/KlangAI/pianissimo-sv-onnx) by Klang, CC-BY-4.0
+  (https://creativecommons.org/licenses/by/4.0/), built on NVIDIA Parakeet, also CC-BY-4.0. Used with MOTOR=pianissimo
+  through onnx-asr (https://github.com/istupakov/onnx-asr, MIT License). The model is downloaded on request and
+  is not part of the source code or the Mac and Windows programs. Changes: none; the int8 files are used as published.
 - ONNX Runtime (https://github.com/microsoft/onnxruntime), MIT License, included in sherpa-onnx (Apache-2.0)
 - Python (https://www.python.org), PSF License, with the software it incorporates (CPython's Doc/license.rst:
   expat, libmpdec, libffi, zlib, HACL* and others), OpenSSL 3 (Apache-2.0) and XZ Utils (liblzma, public domain)

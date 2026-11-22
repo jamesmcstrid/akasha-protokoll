@@ -392,7 +392,7 @@ class TestHamtning(Bas):
 class TestManifest(unittest.TestCase):
     def test_manifestet(self):
         self.assertEqual(set(RIKTIGT), {("faster", "medium"), ("whispercpp", "medium"),
-                                        ("faster", "large"), ("whispercpp", "large"), "talare"})
+                                        ("faster", "large"), ("whispercpp", "large"), "talare", "pianissimo"})
         for filer in RIKTIGT.values():
             for f in filer:
                 self.assertTrue(f.url.startswith("https://huggingface.co/"))
@@ -407,6 +407,7 @@ class TestManifest(unittest.TestCase):
         self.assertEqual(katalog_namn[("whispercpp", "medium")], ({"kb-whisper-medium-ggml"}, ["ggml-model.bin"]))
         self.assertEqual(katalog_namn[("whispercpp", "large")], ({"kb-whisper-large-ggml"}, ["ggml-model-q5_0.bin"]))
         self.assertEqual(katalog_namn["talare"], ({"talare"}, ["nemo_en_titanet_small.onnx"]))
+        self.assertEqual(katalog_namn["pianissimo"][0], {"pianissimo-sv-onnx"})
 
     def test_saknade(self):
         paket, innehall = falska_paket()
@@ -536,6 +537,13 @@ class TestMain(Bas):
         self.assertEqual(kod, 0)
         self.assertIn("finns: nemo_en_titanet_small.onnx", ut)
         self.assertNotIn("OK:", ut)
+
+    def test_pianissimo_hamtar_filerna_i_manifestet(self):
+        with mock.patch.object(modeller, "hamta") as hamta:
+            kod, ut, _ = self.kor(["pianissimo"])
+        self.assertEqual(kod, 0)
+        self.assertIn("== Pianissimo", ut)
+        self.assertEqual([a.args[0][0][0] for a in hamta.call_args_list], [f.namn for f in modeller.PAKET["pianissimo"]])
 
     def test_okant_lage_ger_2(self):
         kod, _, fel = self.kor(["okant"])

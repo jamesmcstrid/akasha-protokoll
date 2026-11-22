@@ -1,11 +1,13 @@
 """Taligenkanning med KB-Whisper (KBLab, Kungliga biblioteket), medium eller large (MODELL).
-Tva motorer, valj med MOTOR (standard auto: whisper.cpp pa Mac med Apple Silicon och pa Windows
+Tre motorer, valj med MOTOR (standard auto: whisper.cpp pa Mac med Apple Silicon och pa Windows
 om whisper-cli och modellen finns, annars faster-whisper):
 
   faster      faster-whisper (CTranslate2) i den har processen, pa CPU. Fungerar overallt.
               Modellen laddas vid forsta transkriberingen och ligger sedan kvar i minnet.
   whispercpp  whisper.cpp:s whisper-cli (brew install whisper-cpp pa Mac), som anvander Metal (GPU) pa
               Apple Silicon. Startas en gang per transkribering och laddar modellen varje gang.
+  pianissimo  Klang Pianissimo (pianissimo.py), en svensk Parakeet-modell via onnx-asr. Valfri och aldrig
+              auto: onnx-asr ingar inte i appens krav. Mycket snabbare, men ingen prompt (ORDLISTA).
 
 Ingen sprakmodell rattar eller sammanfattar texten. Det som whisper hor ar det som skrivs.
 """
@@ -65,7 +67,7 @@ def valj_motor(onskad=MOTOR, system=None, har_cli=None, har_ggml=None):
     mac/installera.sh installerar whisper-cpp och GGML-modellen bara pa Apple Silicon, dar Metal
     gjorde transkriberingen ungefar tre ganger snabbare an CPU (MacBook Air). Valet gors pa vad som
     ar installerat och inte pa processortyp: en Python som kor via Rosetta ser x86_64 fast datorn
-    har Apple Silicon. faster och whispercpp valjs som de ar.
+    har Apple Silicon. faster, whispercpp och pianissimo valjs som de ar.
     """
     if onskad != "auto":
         return onskad
@@ -126,12 +128,17 @@ def hinder():
     """Det en hamtning inte kan ratta: None, eller vad som ar fel med installningarna."""
     if MODELL not in STORLEKAR:
         return f"okand MODELL={MODELL!r}, anvand medium eller large"
-    if MOTOR not in ("auto", "faster", "whispercpp"):
-        return f"okand MOTOR={MOTOR!r}, anvand auto, faster eller whispercpp"
+    if MOTOR not in ("auto", "faster", "whispercpp", "pianissimo"):
+        return f"okand MOTOR={MOTOR!r}, anvand auto, faster, whispercpp eller pianissimo"
     if (plattform.ar_paketerad() and MOTOR == "faster"
             and importlib.util.find_spec("faster_whisper") is None):
         return ("MOTOR=faster går inte i programmet, eftersom faster-whisper inte följer med. "
                 "Ta bort raden MOTOR i installningar.env.")
+    if MOTOR == "pianissimo" and importlib.util.find_spec("onnx_asr") is None:
+        if plattform.ar_paketerad():
+            return ("MOTOR=pianissimo går inte i programmet, eftersom onnx-asr inte följer med än. "
+                    "Ta bort raden MOTOR i installningar.env.")
+        return "onnx-asr saknas. Kör: pip install -r app/krav-pianissimo.txt (i appens venv)"
     if mal_motor(MOTOR) == "whispercpp" and plattform.whisper_cli() is None:  # MOTOR lases nu, inte vid def
         return _cli_saknas()
     return None
@@ -145,8 +152,8 @@ def problem():
     if AKTIV == "whispercpp" and plattform.whisper_cli() is None:
         return _cli_saknas()
     if modeller.saknade(AKTIV, MODELL):
-        return "KB-Whisper (GGML) saknas. Hämta den på sidan." if AKTIV == "whispercpp" \
-            else "KB-Whisper saknas. Hämta den på sidan."
+        namn = {"whispercpp": "KB-Whisper (GGML)", "pianissimo": "Pianissimo"}.get(AKTIV, "KB-Whisper")
+        return f"{namn} saknas. Hämta den på sidan."
     return None
 
 
@@ -189,6 +196,8 @@ def grafik_aktiv(system=None):
 
 
 def modellnamn():
+    if AKTIV == "pianissimo":
+        return "Pianissimo (Klang)"
     if AKTIV != "whispercpp":
         return f"KB-Whisper {MODELL}"
     if plattform.system() == "Darwin":
@@ -225,6 +234,10 @@ def transkribera(samples, per_ord=False, prompt="", framsteg=None):
             raise Avbruten("stoppad")
         if AKTIV == "faster":
             return _faster(samples, per_ord, prompt, framsteg)
+        if AKTIV == "pianissimo":
+            import pianissimo  # inte hogst upp: pianissimo.py importerar motor
+
+            return pianissimo.transkribera(samples, per_ord, prompt, framsteg)
         return _whispercpp(samples, per_ord, prompt, framsteg)
 
 

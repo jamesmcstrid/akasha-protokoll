@@ -4,7 +4,7 @@ Alla uppgifter om modellerna (repo, revision, filnamn, katalog, storlek, sha256)
 Hamtningen gors med requests: den kan fortsatta en avbruten fil (Range), foljer omdirigeringar
 for hand (bara till Hugging Face) och kontrollerar sha256 innan filen far sitt riktiga namn.
 
-Skriptlaget (python app/modeller.py [faster] [ggml] [talare]) anvands av mac/hamta-modeller.sh och
+Skriptlaget (python app/modeller.py [faster] [ggml] [pianissimo] [talare]) anvands av mac/hamta-modeller.sh och
 mac/installera.sh. Modulen importerar bara standardbiblioteket, requests och installningar (och truststore om det
 finns), sa att den gar att kora i en venv med enbart requests.
 """
@@ -47,6 +47,7 @@ class Fil:
 _MEDIUM = ("KBLab/kb-whisper-medium", "0abe10b9d7f75d0902656e5c06c5c4d549604dc5")
 _LARGE = ("KBLab/kb-whisper-large", "d5d5984b4d8f7c4847a8ea203f1976285fb28300")
 _TALARE = ("csukuangfj/speaker-embedding-models", "0743f301363dec56491a490f6d6cbc9d67f9a3bf")
+_PIANISSIMO = ("KlangAI/pianissimo-sv-onnx", "63730c6021234f26b9bbae9a07a04fec39e7a52e")
 
 PAKET = {
     ("faster", "medium"): (
@@ -86,12 +87,24 @@ PAKET = {
         Fil(*_TALARE, "nemo_en_titanet_small.onnx", "talare", 40257283,
             "ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e"),
     ),
+    # Bara int8-filerna. nemo128.onnx behovs inte: onnx-asr raknar ut ljudegenskaperna med numpy.
+    "pianissimo": (
+        Fil(*_PIANISSIMO, "encoder-model.int8.onnx", "pianissimo-sv-onnx", 630313965,
+            "13288a5f4f009bf6bf8a3260044d098f6922e8caf1c564521d4962fa5749f66c"),
+        Fil(*_PIANISSIMO, "decoder_joint-model.int8.onnx", "pianissimo-sv-onnx", 30025652,
+            "0f9213242acd8874f2717c5e3cdb888d4e7673ddf3abb9ee3a2fd2eaf0acdd03"),
+        Fil(*_PIANISSIMO, "vocab.txt", "pianissimo-sv-onnx", 93939,
+            "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"),
+        Fil(*_PIANISSIMO, "config.json", "pianissimo-sv-onnx", 116,
+            "f19eee59d2ba995f6d5cdb164e30dd64d2a8b7ed0ce9f2198ab68a5467445694"),
+    ),
 }
 
 STORLEKAR = ("medium", "large")
 # KB-Whisper large bygger pa whisper-large-v3, darav DTW-forinstallningen i whisper.cpp.
 DTW_PER_STORLEK = {"medium": "medium", "large": "large.v3"}
 INFO = {"taligenkanning": ("KB-Whisper {storlek}", "taligenkänning på svenska från Kungliga biblioteket (KBLab)", "Apache-2.0"),
+        "pianissimo": ("Pianissimo", "svensk taligenkänning från Klang, byggd på NVIDIA Parakeet", "CC-BY-4.0"),
         "talare": ("TitaNet small", "röstmodell som delar upp texten per talare (NVIDIA)", "CC-BY-4.0")}
 TILLATNA_VARDAR = ("huggingface.co",)   # plus allt som slutar pa ".huggingface.co" eller ".hf.co"
 FORSOK = 3            # forsok utan framsteg per fil vid avbrott, tidsgrans och natfel
@@ -141,8 +154,8 @@ class HamtFel(Exception):
 
 
 def paket(nyckel, storlek=None):
-    if nyckel == "talare":
-        return PAKET["talare"]
+    if nyckel in ("talare", "pianissimo"):  # inte knutna till MODELL
+        return PAKET[nyckel]
     return PAKET[(nyckel, storlek or MODELL)]
 
 
@@ -550,14 +563,14 @@ class Hamtning:
 HAMTNING = Hamtning()
 
 
-_LAGEN = {"faster": "faster", "ggml": "whispercpp", "talare": "talare"}
+_LAGEN = {"faster": "faster", "ggml": "whispercpp", "pianissimo": "pianissimo", "talare": "talare"}
 
 
 def main(argv):
     lagen = list(argv) or ["faster", "talare"]
     for lage in lagen:
         if lage not in _LAGEN:
-            print(f"okänt läge: {lage} (faster, ggml eller talare)", file=sys.stderr)
+            print(f"okänt läge: {lage} (faster, ggml, pianissimo eller talare)", file=sys.stderr)
             return 2
     if MODELL not in STORLEKAR:
         print(f"FEL: MODELL={MODELL}, ska vara medium eller large", file=sys.stderr)
@@ -566,6 +579,7 @@ def main(argv):
     rubriker = {
         "faster": f"== KB-Whisper {MODELL} för faster-whisper (KBLab, Apache-2.0)",
         "ggml": f"== KB-Whisper {MODELL} för whisper.cpp (KBLab, Apache-2.0)",
+        "pianissimo": "== Pianissimo för onnx-asr (Klang, CC-BY-4.0, 660 MB)",
         "talare": "== Talaruppdelning: röstmodellen NeMo TitaNet small (NVIDIA, CC-BY-4.0, 40 MB)",
     }
     try:

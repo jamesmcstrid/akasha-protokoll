@@ -368,15 +368,22 @@ def att_hamta():
     return paket, None
 
 
+def _info(id_):
+    """Texterna i INFO. Taligenkanningen heter alltid sa for sidan, men texten ar malmotorns."""
+    if id_ == "taligenkanning" and motor.mal_motor() == "pianissimo":
+        id_ = "pianissimo"
+    return modeller.INFO[id_]
+
+
 def paketnamn(id_):
-    return modeller.INFO[id_][0].format(storlek=MODELL)
+    return _info(id_)[0].format(storlek=MODELL)
 
 
 def modellstatus():
     paket, hinder = att_hamta()
     saknas = []
     for id_, filer in paket:
-        _namn, beskrivning, licens = modeller.INFO[id_]
+        _namn, beskrivning, licens = _info(id_)
         saknas.append({"id": id_, "namn": paketnamn(id_), "beskrivning": beskrivning,
                        "storlek": sum(f.storlek for f in filer),
                        "kalla": f"huggingface.co/{filer[0].repo}", "licens": licens})
