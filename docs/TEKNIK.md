@@ -456,6 +456,44 @@ har inte körts på en vanlig Windows-dator.**
   4,1 s och gav 42 ord med ordtider från DTW. Siffrorna är från byggmaskinen och säger inget om hur snabbt KB-Whisper
   medium är på en vanlig dator.
 
+## Tillägg
+
+Programmet kan ladda tillägg: separat installerade paket som lägger till egna vägar, en egen del av sidan och
+egna bakgrundsjobb. Utan tillägg gör `app/tillagg.py` ingenting och allt fungerar som förut. Den här filen är hela gränssnittet.
+
+**Var de ligger.** Ett tillägg är en mapp med en fil `tillagg.py`, till exempel `akasha_x/tillagg.py`. Mappnamnet är tilläggets id
+(gemener, siffror och `_`). Programmet letar i varje katalog i `TILLAGG` (i den ordningen) och sist i `tillagg/` i
+programkatalogen, bredvid `installningar.env`. Hittas samma id på flera ställen gäller det första. Tilläggets mapp läggs sist i
+`sys.path`, så att det kan importera sina egna filer.
+
+**Vad `tillagg.py` ska ha:** `NAMN` (visas för användaren), `KRAVER_API` (heltal, måste vara lika med `tillagg.API_VERSION`, nu 1),
+`registrera(api)` och, om man vill, `VERSION`. Tilläggen laddas en gång i `forbered()`, före servern, eftersom Flask inte tar emot nya vägar
+efter den första begäran. Fel `KRAVER_API`, ett undantag vid import eller i `registrera`, eller ett ogiltigt mappnamn gör att tillägget
+inte blir aktivt: orsaken loggas, och en kort text visas i `problem` på `GET /api/tillagg`. Programmet startar ändå. Vägar som ett
+tillägg hann lägga till innan det föll svarar 404.
+
+**`api`:**
+
+| Medlem | Vad |
+|---|---|
+| `api.route(regel, **val)` | Som `app.route`, men regeln hamnar under `/api/tillagg/<id>/`. Det är enda stället ett tillägg lägger vägar. Samma skydd som programmets egna anrop gäller: Host, och `X-Akasha-Protokoll: 1` för allt utom GET |
+| `api.statisk(katalog)` | Serverar filer ur `katalog` på `/tillagg/<id>/<fil>` (bara GET, filtyperna ur `FILTYPER`, inget utanför katalogen). Sidan laddar `tillagg.js` och `tillagg.css` därifrån |
+| `api.koa(funktion)` | Kör `funktion()` i den enda bakgrundstråden, i kön bland transkriberingarna, så att ett tungt jobb pågår åt gången. Ett undantag loggas och stoppar inte tråden |
+| `api.vid_inspelning(fn)` | `fn(meta)` returnerar ett dict eller `None`. Dictet läggs i `GET /api/inspelningar/<id>` under `tillagg[<id>]` |
+| `api.vid_radera(fn)` | `fn(id)` anropas under `lagring._las` precis innan inspelningens filer tas bort, så att tillägget kan ta bort sina egna `<id>.*` |
+| `api.hindrar(fn)` | `fn(meta)` returnerar en text eller `None`. Med en text svarar radera och "Transkribera igen" 409 med texten |
+| `api.vid_start(fn)`, `api.vid_stopp(fn)` | Anropas efter programmets städning vid start, och tillsammans med `motor.stoppa()` när programmet stängs (för barnprocesser) |
+| `api.app`, `api.id`, `api.lagring`, `api.export`, `api.modeller`, `api.plattform`, `api.log` | Att läsa, inte byta ut |
+
+Ett undantag i en av funktionerna ovan loggas och hoppas över: det stoppar inte raderingen eller de andra tilläggen.
+Ett `hindrar` som kastar hindrar alltså ingenting.
+
+**Sidan.** `index.html` har en tom `<div id="tillagg-ytor">` sist i steg 3. Vid start hämtar `app.js` `GET /api/tillagg` och lägger en
+`<script src="/tillagg/<id>/tillagg.js">` och en stilmall för varje aktivt tillägg (CSP:n är oförändrad, `default-src 'self'`). Skriptet
+anropar `window.akashaTillagg.registrera(id, { visad(m, harText, byttId) {} })`. `visad` anropas i slutet av `visa()` för varje
+visad inspelning (och en gång direkt om skriptet registrerar sig efter visningen), i try/catch. `akashaTillagg.api` är sidans
+`api()`, som redan skickar rätt header, och `akashaTillagg.el` är `el()`. `/health` har fältet `tillagg` med de aktiva idn.
+
 ## Talaruppdelningen
 
 Första versionen använde pyannote för att hitta talarbyten. I det första riktiga samtalet, två

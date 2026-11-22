@@ -13,6 +13,7 @@ import logging
 import os
 import queue
 import re
+import sys
 import tempfile
 import threading
 import time
@@ -30,6 +31,7 @@ import motor
 import plattform
 import rattning
 import talare
+import tillagg
 from installningar import DATAKATALOG, MAX_MB, MODELL, ORDLISTA, PORT
 
 HEADER = "X-Akasha-Protokoll"
@@ -174,6 +176,9 @@ def koa(id_, installningar=None):
             raise lagring.Fel("Inspelningen transkriberas redan.", 409)
         if meta["status"] == "spelar_in":
             raise lagring.Fel("Inspelningen pågår fortfarande.", 409)
+        hinder = tillagg.kor_hindrar(meta)
+        if hinder:
+            raise lagring.Fel(hinder, 409)
         if installningar:
             # Kallan (rum eller digitalt) hor till inspelningen: kanalerna i filen andras inte
             # av att man stoppar eller gor om med ett annat antal talare.
@@ -279,9 +284,24 @@ def _skriv_status(id_, **falt):
         log.exception("kunde inte spara status %s for %s", falt.get("status"), id_)
 
 
+def _kor_tillagg(funktion):
+    """Ett jobb fran ett tillagg (api.koa): samma trad och samma halla-vaken som transkriberingarna, men
+    ett undantag loggas bara."""
+    try:
+        with plattform.hall_vaken():
+            funktion()
+    except Exception:  # noqa: BLE001 - jobbet far aldrig ta ner arbetstraden
+        log.exception("ovantat fel i ett jobb fran ett tillagg")
+    finally:
+        _ko.task_done()
+
+
 def _arbetare():
     while True:
         id_ = _ko.get()
+        if callable(id_):
+            _kor_tillagg(id_)
+            continue
         try:
             with plattform.hall_vaken():
                 kor(id_)
@@ -326,6 +346,7 @@ def health():
         problem=fel,
         talare=talare.problem() or "ok",
         datakatalog=DATAKATALOG,
+        tillagg=[t["id"] for t in tillagg.status()["aktiva"]],
     ), (200 if fel is None else 503)
 
 
@@ -397,6 +418,11 @@ def modeller_avbryt():
     return jsonify(modellstatus()), (202 if pagick else 200)
 
 
+@app.get("/api/tillagg")
+def tillagg_status():
+    return jsonify(tillagg.status())
+
+
 @app.get("/api/inspelningar")
 def inspelningar():
     return jsonify(inspelningar=[sammanfattning(m) for m in lagring.sammanfattningar()])
@@ -460,6 +486,9 @@ def en_inspelning(id_):
     m["rattad"] = "segment_original" in res
     if m["rattad"]:
         m["resultat"] = {k: v for k, v in res.items() if k != "segment_original"}
+    extra = tillagg.kor_vid_inspelning(m)
+    if extra:
+        m["tillagg"] = extra
     return jsonify(m)
 
 
@@ -575,8 +604,13 @@ def ljud(id_):
 def radera(id_):
     # Under samma las: annars kan koa() hinna emellan, och ett jobb i kon far sin inspelning raderad.
     with lagring._las:
-        if lagring.las(id_)["status"] in lagring.PAGAENDE:
+        meta = lagring.las(id_)
+        if meta["status"] in lagring.PAGAENDE:
             raise lagring.Fel("Vänta tills transkriberingen är klar.", 409)
+        hinder = tillagg.kor_hindrar(meta)
+        if hinder:
+            raise lagring.Fel(hinder, 409)
+        tillagg.kor_vid_radera(id_)  # under samma las, precis fore programmets egna filer
         lagring.radera(id_)
     return jsonify(raderad=id_)
 
@@ -639,6 +673,9 @@ def forbered():
     motor.stada_kvarglomda()
     lagring.stada_halvfardiga()
     lagring.aterstall_avbrutna()
+    # Tilläggen laddas här, före servern: Flask tar inte emot nya vägar efter den första begäran.
+    tillagg.ladda(sys.modules[__name__])
+    tillagg.kor_vid_start()
     starta_arbetare()
 
 

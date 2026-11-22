@@ -1429,6 +1429,7 @@ async function visa(id, tyst = false, fokus = false) {
   if (PAGAENDE.has(m.status)) uppdateraLista();
   markeraVisad();
   uppdateraSpelare();
+  tillaggVisad(m, harText, byttId);
   return true;
 }
 
@@ -2259,7 +2260,41 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+// Tillagg (se docs/TEKNIK.md). Ett tillagg laddas som /tillagg/<id>/tillagg.js och anropar
+// akashaTillagg.registrera(id, { visad(m, harText, byttId) }). visad anropas nar en inspelning har
+// visats. Utan tillagg ar det har tomt och inget syns.
+const tillaggSidor = new Map();
+let tillaggSenast = null; // den inspelning som visas, for ett tillagg som registreras efter visningen
+
+function tillaggVisad(m, harText, byttId) {
+  tillaggSenast = { m, harText };
+  for (const [id, sida] of tillaggSidor) {
+    try { if (sida.visad) sida.visad(m, harText, byttId); } catch (e) { console.error(`tillagg ${id}:`, e); }
+  }
+}
+
+window.akashaTillagg = {
+  registrera(id, sida) {
+    tillaggSidor.set(id, sida);
+    if (tillaggSenast) {
+      try { if (sida.visad) sida.visad(tillaggSenast.m, tillaggSenast.harText, true); } catch (e) { console.error(`tillagg ${id}:`, e); }
+    }
+  },
+  api,
+  el,
+};
+
+async function laddaTillagg() {
+  let status;
+  try { status = await (await fetch("/api/tillagg")).json(); } catch { return; } // tyst: sidan fungerar utan
+  for (const t of status.aktiva || []) {
+    document.head.append(el("link", { rel: "stylesheet", href: `/tillagg/${t.id}/tillagg.css` }));
+    document.head.append(el("script", { src: `/tillagg/${t.id}/tillagg.js` }));
+  }
+}
+
 for (const g of document.querySelectorAll(".forlopp-stapel .gang")) g.append(vandrare());
+laddaTillagg();
 hamtaVal();
 kollaTjanst();
 kollaModeller();

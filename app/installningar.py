@@ -89,3 +89,5 @@ TALARE_TROSKEL = _tal("TALARE_TROSKEL", 0.6, float, 0.0, 1.0, "ett tal mellan 0 
 # Ord som alltid hjalper whisper att stava ratt (namn pa foretaget, facktermer).
 ORDLISTA = _env("ORDLISTA", "")
 MAX_MB = _tal("MAX_MB", 1024, int, 1, 100000, "ett heltal 1–100000")
+# Kataloger (skilda med ; pa Windows, annars :) med tillagg, se tillagg.py. Tillagg i programkatalogen laddas ocksa.
+TILLAGG = _env("TILLAGG", "")

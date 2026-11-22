@@ -329,6 +329,7 @@ class Tjanst:
     def stang(self):
         """Stanger servern och stoppar whisper-cli. Far anropas flera ganger."""
         import motor
+        import tillagg
         from waitress import wasyncore
 
         server, self.server = self.server, None
@@ -344,6 +345,7 @@ class Tjanst:
             except Exception:
                 log.exception("kunde inte stanga servern")
         motor.stoppa()
+        tillagg.kor_vid_stopp()
         if self.trad is not None:
             self.trad.join(5)
             if self.trad.is_alive():

@@ -158,6 +158,7 @@ Har filen ett fel säger programmet till och använder standardvärdet.
 | `PORT` | `8611` | Webbsidans port |
 | `TALARE_TROSKEL` | `0.6` | Röster som liknar varandra mer än så räknas som samma person (0–1) |
 | `MAX_MB` | `1024` | Största fil som går att ladda upp |
+| `TILLAGG` | tom | Kataloger med tillägg (separat installerade paket), skilda med `;` på Windows och annars `:`. Se `docs/TEKNIK.md` |
 | `MOTOR` | `auto` | whisper.cpp (Metal på Mac, processorn på Windows). `faster` väljer faster-whisper, bara från Terminal |
 | `GRAFIK` | `av` | Windows: `pa` provar grafikkretsen (Vulkan). Var långsammare på Intels inbyggda grafik |
 | `HTTPS_PROXY`, `REQUESTS_CA_BUNDLE` | tom | Proxy och certifikat för hämtning på ett företagsnät |
