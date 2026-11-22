@@ -610,6 +610,7 @@ def radera(id_):
         hinder = tillagg.kor_hindrar(meta)
         if hinder:
             raise lagring.Fel(hinder, 409)
+        tillagg.kor_vid_radera(id_)  # under samma las, precis fore programmets egna filer
         lagring.radera(id_)
     return jsonify(raderad=id_)
 

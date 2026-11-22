@@ -15,7 +15,6 @@ import threading
 import time
 from datetime import datetime
 
-import tillagg
 from installningar import DATAKATALOG
 
 ID_RE = re.compile(r"^\d{8}-\d{6}(-\d{1,3})?$")
@@ -320,7 +319,6 @@ def sammanfattningar():
 def radera(id_):
     with _las:
         meta = las(id_)
-        tillagg.kor_vid_radera(id_)
         for sokvag in (ljudfil(meta), textfil(id_), _sokvag(id_, ".json")):
             try:
                 os.remove(sokvag)
