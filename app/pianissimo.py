@@ -1,7 +1,7 @@
 """Taligenkanning med Klang Pianissimo (KlangAI/pianissimo-sv-onnx, CC-BY-4.0), en svensk Parakeet-modell, via onnx-asr.
 
-MOTOR=pianissimo, och auto nar onnx-asr finns: det ingar inte i appens krav utan i app/krav-pianissimo.txt. Modellen
-hamtas av modeller.py som de andra. Pa processorn var den 6-8 ganger snabbare an KB-Whisper medium (Windows-
+MOTOR=pianissimo, och auto nar onnx-asr finns: det ingar inte i appens krav utan i app/krav-pianissimo.txt, och foljer
+med Mac- och Windows-programmen. Modellen hamtas av modeller.py som de andra. Pa processorn var den 6-8 ganger snabbare an KB-Whisper medium (Windows-
 laptop) och ungefar 6 ganger snabbare an KB-Whisper med Metal (MacBook Air, 49 ganger realtid).
 
 Ljudet delas vid tystaste stallet i bitar om hogst 30 s, sa att en timmes mote gar att kora utan att modellen

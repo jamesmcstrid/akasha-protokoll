@@ -13,9 +13,10 @@ Pa Windows (sys.platform == "win32") ar miljon USERPROFILE, LOCALAPPDATA och TEM
 a-ring och o-prickar och mellanslag i namnet), programmet avslutas med TerminateProcess, ett steg provar den andra
 kopian (mutexen) och whisper-cli-processer letas med tasklist.
 
---pianissimo (bara Mac): sist startas programmet om med MOTOR=pianissimo i installningar.env, som en anvandare satter
+--pianissimo (Mac och Windows): sist startas programmet om med MOTOR=pianissimo i installningar.env, som en anvandare satter
 den. Modellen (660 MB) hamtas genom sidan, och tva-talare.m4a transkriberas med talaruppdelning genom /transcribe, sa att
-onnx-asr, onnxruntime och sentencepiece i programmet kors i samma process som sherpa-onnx, som har sin egen onnxruntime.
+onnx-asr, onnxruntime och sentencepiece i programmet kors i samma process som sherpa-onnx, som har sin egen onnxruntime
+(pa Windows heter bada onnxruntime.dll: det ar det som provas).
 """
 import argparse
 import os
@@ -193,7 +194,7 @@ def vanta_pa_health():
 
 
 def kontrollera_pianissimo(program, miljo, hem):
-    """Mac: programmet startas om med MOTOR=pianissimo i installningar.env (det en anvandare gor), modellen hamtas genom
+    """Mac och Windows: programmet startas om med MOTOR=pianissimo i installningar.env (det en anvandare gor), modellen hamtas genom
     sidan, och tva-talare.m4a transkriberas med tva talare genom /transcribe. Provar att onnx-asr, onnxruntime och
     sentencepiece gar att importera i programmet, att motorn laddar modellen och att sherpa-onnx (talaruppdelningen, med
     sin egen onnxruntime) fungerar i samma process. Modellens kvalitet provas inte: texten ska bara ha ett ord ur facit,
@@ -252,13 +253,17 @@ def kontrollera_pianissimo(program, miljo, hem):
     text = open(logg, encoding="utf-8", errors="replace").read() if os.path.isfile(logg) else ""
     kontrollera("Pianissimo: modellen laddades" in text, "loggen har raden 'Pianissimo: modellen laddades'",
                 "loggen saknar raden 'Pianissimo: modellen laddades'")
-    proc.send_signal(signal.SIGTERM)
+    stopp = "TerminateProcess" if WIN else "SIGTERM"  # som i steg 10
+    if WIN:
+        proc.terminate()
+    else:
+        proc.send_signal(signal.SIGTERM)
     try:
         proc.wait(10)
     except subprocess.TimeoutExpired:
-        slut("programmet avslutades inte inom 10 s efter SIGTERM (Pianissimo)")
+        slut(f"programmet avslutades inte inom 10 s efter {stopp} (Pianissimo)")
     kontrollera(port_ledig(), f"programmet avslutades (kod {proc.returncode}) och porten är ledig",
-                "porten är inte ledig efter SIGTERM (Pianissimo)")
+                f"porten är inte ledig efter {stopp} (Pianissimo)")
 
 
 def tasklist(avbildning):
@@ -297,14 +302,14 @@ def main():
     ap.add_argument("--vantat-jobbfel", required=True)
     ap.add_argument("--riktig-rostmodell", action="store_true")
     ap.add_argument("--pianissimo", action="store_true",
-                    help="bara Mac, med --riktig-rostmodell: starta om med MOTOR=pianissimo, hamta modellen och transkribera")
+                    help="Mac och Windows, med --riktig-rostmodell: starta om med MOTOR=pianissimo, hamta modellen och transkribera")
     ap.add_argument("--fortsatt-efter-fel", action="store_true",
                     help="skriv varje misslyckat villkor som FEL och fortsatt; stoppa bara nar det inte gar att fortsatta "
                          "(programmet startar eller svarar inte). Sist en lista over alla FEL och slutkod 1")
     args = ap.parse_args()
     FORTSATT = args.fortsatt_efter_fel
-    if args.pianissimo and not (MAC and args.riktig_rostmodell):
-        ap.error("--pianissimo kraver Mac och --riktig-rostmodell (talaruppdelningen behover rostmodellen)")
+    if args.pianissimo and not ((MAC or WIN) and args.riktig_rostmodell):
+        ap.error("--pianissimo kraver Mac eller Windows och --riktig-rostmodell (talaruppdelningen behover rostmodellen)")
     hem = os.path.abspath(args.hem)
     program = os.path.abspath(args.program)
     if WIN and not os.path.isfile(program):  # ett tydligt FEL i stallet for en traceback om bygget inte gav nagon exe
@@ -522,7 +527,7 @@ def main():
         kvar = subprocess.run(["pgrep", "-f", "whisper-cli"], capture_output=True)
         kontrollera(kvar.returncode != 0, "ingen whisper-cli kvar", "en whisper-cli är kvar efter SIGTERM")
 
-    # 10b. Mac: Pianissimo i programmet (programmet startas om, och avslutas igen).
+    # 10b. Mac och Windows: Pianissimo i programmet (programmet startas om, och avslutas igen).
     if args.pianissimo:
         kontrollera_pianissimo(program, miljo, hem)
 

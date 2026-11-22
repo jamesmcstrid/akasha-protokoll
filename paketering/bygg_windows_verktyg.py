@@ -5,11 +5,13 @@
     python paketering/bygg_windows_verktyg.py versionsfil UTFIL VERSION BYGGNUMMER
     python paketering/bygg_windows_verktyg.py exeinfo EXE            versionsresurs, ikon och fonsterprogram (pefile)
     python paketering/bygg_windows_verktyg.py forbjudet KATALOG
+    python paketering/bygg_windows_verktyg.py pianissimo KATALOG    onnx-asr, onnxruntime och sentencepiece ska vara med
     python paketering/bygg_windows_verktyg.py storlekar KATALOG
     python paketering/bygg_windows_verktyg.py zip KATALOG ZIPFIL
     python paketering/bygg_windows_verktyg.py uppacka ZIPFIL MAPP
 Varje kommando skriver OK:, FEL: eller INFO: och ger slutkod 1 vid FEL.
 """
+import fnmatch
 import glob
 import os
 import shutil
@@ -66,12 +68,10 @@ def versionstext(version, byggnummer):
 
 def ar_forbjudet(namn, ar_katalog):
     """Namnet pa en fil eller katalog som inte ska finnas i programmet: faster-whisper-stacken och tkinter.
-    sherpa-onnx har en egen onnxruntime.dll som SKA vara med, och matchas darfor inte."""
+    onnxruntime ska vara med (Pianissimo, och sherpa-onnx har en egen onnxruntime.dll), och matchas darfor inte."""
     n = namn.lower()
-    if n.startswith(("faster_whisper", "ctranslate2", "tokenizers", "huggingface_hub", "hf_xet",
-                     "tkinter", "_tkinter", "tcl86", "tk86")):
-        return True
-    return n.startswith(("onnxruntime_", "onnxruntime-")) or (n == "onnxruntime" and ar_katalog)
+    return n.startswith(("faster_whisper", "ctranslate2", "tokenizers", "huggingface_hub", "hf_xet",
+                         "tkinter", "_tkinter", "tcl86", "tk86"))
 
 
 def hitta_forbjudna(rot):
@@ -84,6 +84,20 @@ def hitta_forbjudna(rot):
             if ar_forbjudet(namn, False):
                 funna.append(os.path.join(mapp, namn))
     return sorted(funna)
+
+
+# Pianissimo (MOTOR=pianissimo) i programmet: filer (med * som joker) som onnx-asr, onnxruntime och sentencepiece behover.
+PIANISSIMO_FILER = ("onnx_asr/preprocessors/data/fbanks.npz", "onnx_asr-*.dist-info/METADATA",
+                    "onnxruntime/capi/onnxruntime.dll", "onnxruntime/capi/onnxruntime_pybind11_state*.pyd",
+                    "sentencepiece/_sentencepiece*.pyd")
+
+
+def saknad_pianissimo(rot):
+    """De mönster i PIANISSIMO_FILER som ingen fil i trädet under rot motsvarar."""
+    alla = [os.path.relpath(os.path.join(mapp, f), rot).replace(os.sep, "/").lower()
+            for mapp, _k, filer in os.walk(rot) for f in filer]
+    return [m for m in PIANISSIMO_FILER
+            if not any(fnmatch.fnmatchcase(a, "*/" + m.lower()) or fnmatch.fnmatchcase(a, m.lower()) for a in alla)]
 
 
 def katalogstorlek(rot):
@@ -306,12 +320,19 @@ def main(argv=None):
             for f in funna:
                 res.fel(f"finns i programmet men ska inte: {f}")
             if not funna:
-                res.ok("ingen faster-whisper-stack (faster_whisper, ctranslate2, onnxruntime-paketet, tokenizers, "
-                       "huggingface_hub, hf_xet) och inget tkinter finns i programmet")
+                res.ok("ingen faster-whisper-stack (faster_whisper, ctranslate2, tokenizers, huggingface_hub, hf_xet) "
+                       "och inget tkinter finns i programmet")
             for mapp, _k, filer in os.walk(rest[0]):
                 for f in filer:
                     if f.lower() == "onnxruntime.dll":
-                        res.info(f"{os.path.relpath(os.path.join(mapp, f), rest[0])} (sherpa-onnx egen, ska vara med)")
+                        res.info(f"{os.path.relpath(os.path.join(mapp, f), rest[0])} (onnxruntime.dll: ska vara med, "
+                                 "i sherpa_onnx/lib och i onnxruntime/capi)")
+        elif kmd == "pianissimo" and len(rest) == 1:
+            saknas = saknad_pianissimo(rest[0])
+            for m in saknas:
+                res.fel(f"programmet har ingen fil som motsvarar {m} (Pianissimo)")
+            if not saknas:
+                res.ok("onnx-asr (data och dist-info), onnxruntime och sentencepiece finns i programmet")
         elif kmd == "storlekar" and len(rest) == 1:
             total = katalogstorlek(rest[0])
             print(f"Hela {rest[0]}: {total / 1e6:.1f} MB")

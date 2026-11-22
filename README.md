@@ -159,7 +159,7 @@ Har filen ett fel säger programmet till och använder standardvärdet.
 | `TALARE_TROSKEL` | `0.6` | Röster som liknar varandra mer än så räknas som samma person (0–1) |
 | `MAX_MB` | `1024` | Största fil som går att ladda upp |
 | `TILLAGG` | tom | Kataloger med tillägg (separat installerade paket), skilda med `;` på Windows och annars `:`. Se `docs/TEKNIK.md` |
-| `MOTOR` | `auto` | Klangs svenska taligenkänning Pianissimo (Parakeet) när den går att köra: många gånger snabbare, och `ORDLISTA` fungerar. I Mac-programmet är den med: en ny installation hämtar Pianissimo (660 MB) på sidan. Har du redan KB-Whisper fortsätter den, tills du skriver `MOTOR=pianissimo` i `installningar.env`. Från Terminal: efter `pip install -r app/krav-pianissimo.txt`. Annars whisper.cpp (Metal på Mac, processorn på Windows). `whispercpp` behåller KB-Whisper, `faster` väljer faster-whisper (bara från Terminal), `pianissimo` kräver Pianissimo. Windows-programmet har den inte än |
+| `MOTOR` | `auto` | Klangs svenska taligenkänning Pianissimo (Parakeet) när den går att köra: många gånger snabbare, och `ORDLISTA` fungerar. I Mac- och Windows-programmen är den med: en ny installation hämtar Pianissimo (660 MB) på sidan. Har du redan KB-Whisper fortsätter den, tills du skriver `MOTOR=pianissimo` i `installningar.env`. Från Terminal: efter `pip install -r app/krav-pianissimo.txt`. Annars whisper.cpp (Metal på Mac, processorn på Windows). `whispercpp` behåller KB-Whisper, `faster` väljer faster-whisper (bara från Terminal), `pianissimo` kräver Pianissimo |
 | `GRAFIK` | `av` | Windows: `pa` provar grafikkretsen (Vulkan). Var långsammare på Intels inbyggda grafik |
 | `HTTPS_PROXY`, `REQUESTS_CA_BUNDLE` | tom | Proxy och certifikat för hämtning på ett företagsnät |
 
@@ -202,7 +202,7 @@ Akasha Protokoll är © 2026 Dennis Fredin under Apache-2.0, se [LICENSE](LICENS
 | [whisper.cpp](https://github.com/ggml-org/whisper.cpp), [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT |
 | NeMo TitaNet small (NVIDIA), testljud från [Google FLEURS](https://huggingface.co/datasets/google/fleurs) | CC-BY-4.0 |
 | [Pianissimo](https://huggingface.co/KlangAI/pianissimo-sv-onnx) (Klang, byggd på NVIDIA Parakeet), valfri modell som hämtas på begäran | CC-BY-4.0 |
-| [onnx-asr](https://github.com/istupakov/onnx-asr) (MIT), [sentencepiece](https://github.com/google/sentencepiece) (Apache-2.0), [ONNX Runtime](https://github.com/microsoft/onnxruntime) (MIT): med i Mac-programmet, för Pianissimo | Var och en sin licens |
+| [onnx-asr](https://github.com/istupakov/onnx-asr) (MIT), [sentencepiece](https://github.com/google/sentencepiece) (Apache-2.0), [ONNX Runtime](https://github.com/microsoft/onnxruntime) (MIT): med i Mac- och Windows-programmen, för Pianissimo | Var och en sin licens |
 | [FFmpeg](https://ffmpeg.org), eget bygge ([paketering/bygg-ffmpeg.sh](paketering/bygg-ffmpeg.sh)) | LGPL-2.1-or-later. Källkoden finns i samma release som programmen |
 | [pystray](https://github.com/moses-palmer/pystray) (Windows) | LGPL-3.0, som vanliga `.py`-filer så att den går att byta ut |
 | Typsnitten Anton och Instrument Sans | SIL Open Font License 1.1 |

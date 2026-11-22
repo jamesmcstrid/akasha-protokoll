@@ -191,14 +191,13 @@ class TestPaketerad(unittest.TestCase):
                 self.assertIsNone(motor.hinder())
 
     def test_pianissimo_i_programmet_pa_mac_och_windows(self):
-        """Mac-programmet har onnx-asr med: då går motorn. Windows-programmet har det inte, och säger det."""
-        windows = ("MOTOR=pianissimo går inte i programmet, eftersom onnx-asr inte följer med än. "
-                   "Ta bort raden MOTOR i installningar.env.")
-        mac = "onnx-asr saknas i programmet. Ladda ned Akasha Protokoll på nytt."
+        """Båda programmen har onnx-asr med: då går motorn. Utan det säger paketerat program att det ska laddas ned igen."""
+        paketerat = "onnx-asr saknas i programmet. Ladda ned Akasha Protokoll på nytt."
         terminal = "onnx-asr saknas. Kör: pip install -r app/krav-pianissimo.txt (i appens venv)"
         saknas, finns = (lambda namn: None), (lambda namn: object())
-        for paketerad, system, find_spec, vantat in ((True, "Windows", saknas, windows), (True, "Darwin", saknas, mac),
-                                                     (False, "Darwin", saknas, terminal), (True, "Darwin", finns, None)):
+        for paketerad, system, find_spec, vantat in ((True, "Windows", saknas, paketerat), (True, "Darwin", saknas, paketerat),
+                                                     (False, "Darwin", saknas, terminal), (False, "Windows", saknas, terminal),
+                                                     (True, "Darwin", finns, None), (True, "Windows", finns, None)):
             with mock.patch.object(motor, "MOTOR", "pianissimo"), \
                  mock.patch.object(plattform, "ar_paketerad", lambda: paketerad), \
                  mock.patch.object(plattform, "system", lambda: system), \

@@ -436,14 +436,14 @@ class Byggverktyg(unittest.TestCase):
 
     def test_forbjudna_namn(self):
         for namn, katalog in (("faster_whisper", True), ("ctranslate2", True), ("ctranslate2.dll", False),
-                              ("tokenizers", True), ("huggingface_hub", True), ("hf_xet", True), ("onnxruntime", True),
-                              ("onnxruntime_pybind11_state.pyd", False), ("onnxruntime-1.32.0.dist-info", True),
+                              ("tokenizers", True), ("huggingface_hub", True), ("hf_xet", True),
                               ("tkinter", True), ("_tkinter.pyd", False), ("tcl86t.dll", False)):
             self.assertTrue(verktyg.ar_forbjudet(namn, katalog), namn)
-        # sherpa-onnx har en egen onnxruntime.dll som ska vara med
-        for namn in ("onnxruntime.dll", "sherpa_onnx", "av", "numpy", "static"):
+        # onnxruntime ska vara med (Pianissimo), och sherpa-onnx har en egen onnxruntime.dll
+        for namn in ("onnxruntime.dll", "onnxruntime_pybind11_state.pyd", "sherpa_onnx", "av", "numpy", "static"):
             self.assertFalse(verktyg.ar_forbjudet(namn, False), namn)
-        self.assertFalse(verktyg.ar_forbjudet("onnxruntime.dll", True))
+        for namn in ("onnxruntime", "onnxruntime-1.32.0.dist-info", "onnx_asr", "sentencepiece"):
+            self.assertFalse(verktyg.ar_forbjudet(namn, True), namn)
 
     def test_hitta_forbjudna_i_ett_trad(self):
         mapp = tempfile.mkdtemp(prefix="akasha-verktyg-")
@@ -453,7 +453,22 @@ class Byggverktyg(unittest.TestCase):
             os.makedirs(os.path.join(mapp, os.path.dirname(sokvag)), exist_ok=True)
             skriv(os.path.join(mapp, sokvag), b"x")
         funna = [os.path.relpath(f, mapp).replace(os.sep, "/") for f in verktyg.hitta_forbjudna(mapp)]
-        self.assertEqual(funna, ["_internal/ctranslate2", "_internal/ctranslate2/ctranslate2.dll", "_internal/onnxruntime"])
+        self.assertEqual(funna, ["_internal/ctranslate2", "_internal/ctranslate2/ctranslate2.dll"])
+
+    def test_pianissimo_i_ett_trad(self):
+        mapp = tempfile.mkdtemp(prefix="akasha-verktyg-")
+        self.addCleanup(shutil.rmtree, mapp, True)
+        filer = ("_internal/onnx_asr/preprocessors/data/fbanks.npz", "_internal/onnx_asr-0.12.0.dist-info/METADATA",
+                 "_internal/onnxruntime/capi/onnxruntime.dll", "_internal/onnxruntime/capi/onnxruntime_pybind11_state.pyd",
+                 "_internal/sentencepiece/_sentencepiece.cp312-win_amd64.pyd")
+        for sokvag in filer:
+            os.makedirs(os.path.join(mapp, os.path.dirname(sokvag)), exist_ok=True)
+            skriv(os.path.join(mapp, sokvag), b"x")
+        self.assertEqual(verktyg.saknad_pianissimo(mapp), [])
+        os.remove(os.path.join(mapp, filer[2]))  # sherpa-onnx egen onnxruntime.dll racker inte
+        os.makedirs(os.path.join(mapp, "_internal/sherpa_onnx/lib"))
+        skriv(os.path.join(mapp, "_internal/sherpa_onnx/lib/onnxruntime.dll"), b"x")
+        self.assertEqual(verktyg.saknad_pianissimo(mapp), ["onnxruntime/capi/onnxruntime.dll"])
 
     def test_zip_har_katalogen_overst_och_uppackningen_kan_ligga_under_asa_olund(self):
         mapp = tempfile.mkdtemp(prefix="akasha-verktyg-")
