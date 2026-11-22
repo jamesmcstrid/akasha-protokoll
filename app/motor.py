@@ -1,13 +1,14 @@
 """Taligenkanning med KB-Whisper (KBLab, Kungliga biblioteket), medium eller large (MODELL).
-Tre motorer, valj med MOTOR (standard auto: whisper.cpp pa Mac med Apple Silicon och pa Windows
-om whisper-cli och modellen finns, annars faster-whisper):
+Tre motorer, valj med MOTOR (standard auto: pianissimo om onnx-asr och modellen finns, annars whisper.cpp
+pa Mac med Apple Silicon och pa Windows om whisper-cli och modellen finns, annars faster-whisper):
 
   faster      faster-whisper (CTranslate2) i den har processen, pa CPU. Fungerar overallt.
               Modellen laddas vid forsta transkriberingen och ligger sedan kvar i minnet.
   whispercpp  whisper.cpp:s whisper-cli (brew install whisper-cpp pa Mac), som anvander Metal (GPU) pa
               Apple Silicon. Startas en gang per transkribering och laddar modellen varje gang.
-  pianissimo  Klang Pianissimo (pianissimo.py), en svensk Parakeet-modell via onnx-asr. Valfri och aldrig
-              auto: onnx-asr ingar inte i appens krav, men i Mac-programmet. Mycket snabbare; ORDLISTA via boostning.
+  pianissimo  Klang Pianissimo (pianissimo.py), en svensk Parakeet-modell via onnx-asr. auto valjer den
+              nar onnx-asr finns: det ingar i Mac-programmet, inte i appens krav. Mycket snabbare;
+              ORDLISTA via boostning.
 
 Ingen sprakmodell rattar eller sammanfattar texten. Det som whisper hor ar det som skrivs.
 """
@@ -21,6 +22,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -61,8 +63,22 @@ _las = threading.Lock()  # en transkribering at gangen: modellen tar 1-2 GB minn
 _faster_modell = None
 
 
-def valj_motor(onskad=MOTOR, system=None, har_cli=None, har_ggml=None):
-    """auto -> whispercpp pa Mac och Windows om whisper-cli och GGML-modellen finns, annars faster.
+def har_onnx_asr():
+    """Ar onnx-asr installerat (i Mac-programmet, eller med pip install -r app/krav-pianissimo.txt)?
+    Da kan Pianissimo koras."""
+    try:
+        return importlib.util.find_spec("onnx_asr") is not None
+    except ValueError:  # en modul i sys.modules utan __spec__
+        return "onnx_asr" in sys.modules
+
+
+def valj_motor(onskad=MOTOR, system=None, har_cli=None, har_ggml=None, har_onnx=None, har_pianissimo=None):
+    """auto -> pianissimo om onnx-asr och Pianissimo-modellen finns, annars whispercpp pa Mac och Windows om
+    whisper-cli och GGML-modellen finns, annars faster.
+
+    Pianissimo var 6-13 ganger snabbare an KB-Whisper i matningarna (docs/TEKNIK.md, Pianissimo) och har
+    ORDLISTA, sa den gar fore nar den kan koras. Saknas modellen transkriberar KB-Whisper tills den har
+    hamtats: mal_motor() ger pianissimo, sa det ar den modellen sidan erbjuder.
 
     mac/installera.sh installerar whisper-cpp och GGML-modellen bara pa Apple Silicon, dar Metal
     gjorde transkriberingen ungefar tre ganger snabbare an CPU (MacBook Air). Valet gors pa vad som
@@ -71,6 +87,15 @@ def valj_motor(onskad=MOTOR, system=None, har_cli=None, har_ggml=None):
     """
     if onskad != "auto":
         return onskad
+    har_onnx = har_onnx_asr() if har_onnx is None else har_onnx
+    if har_onnx:
+        if har_pianissimo is None:
+            try:
+                har_pianissimo = not modeller.saknade("pianissimo", MODELL)
+            except KeyError:  # okand MODELL: hinder() sager ifran
+                har_pianissimo = False
+        if har_pianissimo:
+            return "pianissimo"
     system = system or plattform.system()
     har_cli = plattform.whisper_cli() is not None if har_cli is None else har_cli
     if har_ggml is None:
@@ -83,11 +108,14 @@ def valj_motor(onskad=MOTOR, system=None, har_cli=None, har_ggml=None):
     return "faster"
 
 
-def mal_motor(onskad=MOTOR, system=None, har_cli=None):
-    """Vilken motor modellerna ska hamtas for. Pa en Mac eller Windows med whisper-cli blir det
-    whisper.cpp aven nar GGML-filen saknas (valj_motor() ger da faster tills den har hamtats)."""
+def mal_motor(onskad=MOTOR, system=None, har_cli=None, har_onnx=None):
+    """Vilken motor modellerna ska hamtas for. Med onnx-asr blir det pianissimo, aven nar modellen saknas.
+    Annars, pa en Mac eller Windows med whisper-cli, whisper.cpp aven nar GGML-filen saknas
+    (valj_motor() ger da KB-Whisper respektive faster tills modellen har hamtats)."""
     if onskad != "auto":
         return onskad
+    if har_onnx_asr() if har_onnx is None else har_onnx:
+        return "pianissimo"
     system = system or plattform.system()
     har_cli = plattform.whisper_cli() is not None if har_cli is None else har_cli
     return "whispercpp" if system in ("Darwin", "Windows") and har_cli else "faster"
@@ -134,7 +162,7 @@ def hinder():
             and importlib.util.find_spec("faster_whisper") is None):
         return ("MOTOR=faster går inte i programmet, eftersom faster-whisper inte följer med. "
                 "Ta bort raden MOTOR i installningar.env.")
-    if MOTOR == "pianissimo" and importlib.util.find_spec("onnx_asr") is None:
+    if MOTOR == "pianissimo" and not har_onnx_asr():
         if plattform.ar_paketerad() and plattform.system() == "Windows":  # Mac-programmet har onnx-asr med
             return ("MOTOR=pianissimo går inte i programmet, eftersom onnx-asr inte följer med än. "
                     "Ta bort raden MOTOR i installningar.env.")

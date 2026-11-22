@@ -159,7 +159,7 @@ Har filen ett fel säger programmet till och använder standardvärdet.
 | `TALARE_TROSKEL` | `0.6` | Röster som liknar varandra mer än så räknas som samma person (0–1) |
 | `MAX_MB` | `1024` | Största fil som går att ladda upp |
 | `TILLAGG` | tom | Kataloger med tillägg (separat installerade paket), skilda med `;` på Windows och annars `:`. Se `docs/TEKNIK.md` |
-| `MOTOR` | `auto` | whisper.cpp (Metal på Mac, processorn på Windows). `faster` väljer faster-whisper, bara från Terminal. `pianissimo` väljer Klangs svenska taligenkänning (Parakeet): många gånger snabbare, och `ORDLISTA` fungerar. I Mac-programmet: skriv `MOTOR=pianissimo` i `installningar.env`, starta om, och hämta modellen (660 MB) på sidan. Från Terminal: efter `pip install -r app/krav-pianissimo.txt`. Windows-programmet har den inte än |
+| `MOTOR` | `auto` | Klangs svenska taligenkänning Pianissimo (Parakeet) när den går att köra: många gånger snabbare, och `ORDLISTA` fungerar. I Mac-programmet är den med: hämta modellen (660 MB) på sidan, så används den, och till dess KB-Whisper. Från Terminal: efter `pip install -r app/krav-pianissimo.txt`. Annars whisper.cpp (Metal på Mac, processorn på Windows). `whispercpp` behåller KB-Whisper, `faster` väljer faster-whisper (bara från Terminal), `pianissimo` kräver Pianissimo. Windows-programmet har den inte än |
 | `GRAFIK` | `av` | Windows: `pa` provar grafikkretsen (Vulkan). Var långsammare på Intels inbyggda grafik |
 | `HTTPS_PROXY`, `REQUESTS_CA_BUNDLE` | tom | Proxy och certifikat för hämtning på ett företagsnät |
 

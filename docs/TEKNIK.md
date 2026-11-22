@@ -658,12 +658,15 @@ upp:
 Det som avgör är ett riktigt möte: transkribera samma ljud med båda och jämför med
 `halsokoll/jamfor.sh` (nedan).
 
-## Pianissimo (valfri motor)
+## Pianissimo
 
 `MOTOR=pianissimo` kör Klangs svenska Parakeet-modell (`KlangAI/pianissimo-sv-onnx`, CC-BY-4.0, int8,
-660 MB) i stället för KB-Whisper. Den är aldrig `auto`: onnx-asr, som kör modellen, ingår inte i
-`app/requirements.txt`, och Windows-programmet har det inte med än (`motor.hinder()` säger det), men Mac-programmet har
-det: där räcker `MOTOR=pianissimo` i `installningar.env`. I terminalinstallationen installeras det med
+660 MB) i stället för KB-Whisper. `auto` väljer den när onnx-asr, som kör modellen, går att importera
+(`motor.har_onnx_asr()`). Mac-programmet har onnx-asr med, så där blir Pianissimo standard: sidan erbjuder
+modellen, och tills den är hämtad transkriberar KB-Whisper som förut (`valj_motor()` kräver att modellen finns,
+`mal_motor()` gör det inte). `MOTOR=whispercpp` i `installningar.env` behåller KB-Whisper. onnx-asr ingår inte i
+`app/requirements.txt`, och Windows-programmet har det inte med än (`motor.hinder()` säger det vid
+`MOTOR=pianissimo`). I terminalinstallationen installeras det med
 `pip install -r app/krav-pianissimo.txt`, och modellen hämtas på
 sidan eller med `python app/modeller.py pianissimo`, som de andra modellerna (manifestet är `PAKET["pianissimo"]`).
 
