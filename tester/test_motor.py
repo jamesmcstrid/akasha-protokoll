@@ -117,6 +117,22 @@ class TestPaketerad(unittest.TestCase):
             with mock.patch.object(plattform, "ar_paketerad", lambda: False):
                 self.assertIsNone(motor.hinder())
 
+    def test_pianissimo_i_programmet_pa_mac_och_windows(self):
+        """Mac-programmet har onnx-asr med: då går motorn. Windows-programmet har det inte, och säger det."""
+        windows = ("MOTOR=pianissimo går inte i programmet, eftersom onnx-asr inte följer med än. "
+                   "Ta bort raden MOTOR i installningar.env.")
+        mac = "onnx-asr saknas i programmet. Ladda ned Akasha Protokoll på nytt."
+        terminal = "onnx-asr saknas. Kör: pip install -r app/krav-pianissimo.txt (i appens venv)"
+        saknas, finns = (lambda namn: None), (lambda namn: object())
+        for paketerad, system, find_spec, vantat in ((True, "Windows", saknas, windows), (True, "Darwin", saknas, mac),
+                                                     (False, "Darwin", saknas, terminal), (True, "Darwin", finns, None)):
+            with mock.patch.object(motor, "MOTOR", "pianissimo"), \
+                 mock.patch.object(plattform, "ar_paketerad", lambda: paketerad), \
+                 mock.patch.object(plattform, "system", lambda: system), \
+                 mock.patch.object(plattform, "whisper_cli", lambda: None), \
+                 mock.patch.object(motor.importlib.util, "find_spec", find_spec):
+                self.assertEqual(motor.hinder(), vantat, (paketerad, system))
+
     def test_auto_i_programmet_ger_inte_faster_texten(self):
         with mock.patch.object(motor, "MOTOR", "auto"), \
              mock.patch.object(plattform, "ar_paketerad", lambda: True), \

@@ -307,7 +307,7 @@ class WindowsBygget(unittest.TestCase):
         ns.update(SPECPATH=PAKETERING, workpath=os.path.join(mapp, "pyi"), DISTPATH=mapp)
         miljo = {"AKASHA_WHISPER_CLI": "", "AKASHA_WHISPER_KATALOG": "", "AKASHA_IKON": "", "AKASHA_VERSIONSFIL": "", **miljo}
         # (utskriften tystas: spec-filen skriver raderna LICENSER: fran samla_licenser.py)
-        with mock.patch.object(sys, "platform", plattform), mock.patch.dict(os.environ, miljo), mock.patch("builtins.print"):
+        with mock.patch.object(sys, "platform", plattform), mock.patch.dict(os.environ, miljo),                 mock.patch.dict(sys.modules, hjalp.falska_pyinstaller_hooks()), mock.patch("builtins.print"):
             exec(compile(las("paketering", "akasha-protokoll.spec"), "spec", "exec"), ns)
         return anrop
 
@@ -325,6 +325,9 @@ class WindowsBygget(unittest.TestCase):
         self.assertEqual(a[1]["binaries"], [])
         self.assertEqual(a[1]["datas"], [(os.path.join(APP, "static"), "static")])
         self.assertNotIn("module_collection_mode", a[1])
+        self.assertIn("onnxruntime", a[1]["excludes"])  # Pianissimo bara i Mac-programmet
+        for modul in ("onnx_asr", "sentencepiece", "pianissimo"):
+            self.assertNotIn(modul, a[1]["hiddenimports"])
         self.assertTrue(e[1]["console"])
         self.assertNotIn("icon", e[1])
         self.assertEqual((e[1]["name"], c[1]["name"]), ("akasha-protokoll", "akasha-protokoll"))
@@ -334,6 +337,13 @@ class WindowsBygget(unittest.TestCase):
         a, e = k["Analysis"], k["EXE"]
         self.assertEqual(os.path.basename(a[0][0][0]), "mac_app.py")
         self.assertEqual(a[1]["binaries"], [("/x/whisper-cli", ".")])
+        # Pianissimo: onnx-asr med dist-info och data, onnxruntime inte utesluten, och paketen namnda
+        self.assertEqual(a[1]["datas"][1:], [("/falsk/onnx_asr", "onnx_asr/data"), ("/falsk/onnx-asr.dist-info", "onnx-asr.dist-info")])
+        for modul in ("pianissimo", "pianissimo_boost", "onnx_asr", "onnxruntime", "sentencepiece"):
+            self.assertIn(modul, a[1]["hiddenimports"])
+        self.assertNotIn("onnxruntime", a[1]["excludes"])
+        for modul in ("faster_whisper", "ctranslate2", "tokenizers", "huggingface_hub", "tkinter"):
+            self.assertIn(modul, a[1]["excludes"])
         self.assertFalse(e[1]["console"])
         self.assertEqual(e[1]["target_arch"], "arm64")
         self.assertEqual(k["BUNDLE"][1]["name"], "Akasha Protokoll.app")
@@ -357,6 +367,8 @@ class WindowsBygget(unittest.TestCase):
         self.assertEqual(a[1]["module_collection_mode"], {"pystray": "py"})  # LGPL: kallkoden ska ga att byta ut
         for modul in ("faster_whisper", "ctranslate2", "onnxruntime", "tkinter"):
             self.assertIn(modul, a[1]["excludes"])
+        for modul in ("onnx_asr", "sentencepiece", "pianissimo"):  # Windows: Pianissimo ingar inte an
+            self.assertNotIn(modul, a[1]["hiddenimports"])
         self.assertFalse(e[1]["console"])
         self.assertEqual((e[1]["icon"], e[1]["version"]), ("C:/b/ikon.ico", "C:/b/versionsfil.txt"))
         self.assertEqual((e[1]["name"], c[1]["name"]), ("Akasha Protokoll", "Akasha Protokoll"))
@@ -1075,6 +1087,64 @@ class PyavHjulet(unittest.TestCase):
         for delar in (("paketering", "bygg-pyav.sh"), ("paketering", "krav-ffmpeg.txt")):
             for k in re.findall(r"(?:^|\s)#(?!!).*", las(*delar), re.M):
                 self.assertIsNone(re.search("[åäöÅÄÖ]", k), k)
+
+
+class PianissimoIProgrammet(unittest.TestCase):
+    """MOTOR=pianissimo i Mac-programmet: beroenden, bygget och kontrollen i Actions. Windows och Linux har det inte."""
+
+    def test_kraven_ar_last_och_flodet_installerar_dem(self):
+        rader = [r.split("#")[0].strip() for r in las("app", "krav-pianissimo.txt").splitlines()]
+        rader = [r for r in rader if r]
+        self.assertTrue(rader)
+        for r in rader:
+            self.assertIn("==", r)
+        self.assertRegex(las("app", "krav-pianissimo.txt"), r"(?m)^onnx-asr\[cpu\]==")
+        mac = las(".github", "workflows", "mac-app.yml")
+        self.assertIn("-r build/krav.txt -r app/krav-pianissimo.txt -r paketering/krav-bygg.txt", mac)
+        self.assertIn("            app/krav-pianissimo.txt\n", mac)  # pip-cachens nyckel
+        for fil in ("windows-app.yml", "tester.yml"):
+            self.assertNotIn("krav-pianissimo", las(".github", "workflows", fil), fil)
+        self.assertNotIn("krav-pianissimo", las("paketering", "prova-linux.sh"))
+
+    def test_flodet_kor_pianissimo_i_kontrollen_med_tid_nog(self):
+        mac = las(".github", "workflows", "mac-app.yml")
+        self.assertIn("--riktig-rostmodell --pianissimo\n", mac)
+        self.assertNotIn("--pianissimo", las(".github", "workflows", "windows-app.yml"))
+        tid = int(re.search(r"timeout-minutes: (\d+)", mac).group(1))
+        kontroll = las("paketering", "kontrollera.py")
+        hamtning = int(re.search(r"PIANISSIMO_HAMTNING_TIDSGRANS = (\d+)", kontroll).group(1))
+        transkribering = int(re.search(r"PIANISSIMO_TRANSKRIBERING_TIDSGRANS = (\d+)", kontroll).group(1))
+        self.assertGreater(tid * 60, 15 * 60 + hamtning + transkribering)  # bygget (5 till 10 min), hamtningen, transkriberingen
+
+    def test_kontrollen_provar_det_en_anvandare_gor(self):
+        text = las("paketering", "kontrollera.py")
+        for stycke in ('f.write("MOTOR=pianissimo\\n")', '"installningar.env"', "/api/modeller/hamta", "/transcribe",
+                       '"testljud", "tva-talare.m4a"', 'data={"speakers": "2"}', "Pianissimo: modellen laddades",
+                       "kontrollera_pianissimo(program, miljo, hem)"):
+            self.assertIn(stycke, text)
+
+    def test_pianissimo_kraver_mac_och_riktig_rostmodell(self):
+        ut = subprocess.run([sys.executable, os.path.join(PAKETERING, "kontrollera.py"), "--program", "x", "--hem", "y",
+                             "--vantad-motor", "whispercpp", "--vantat-jobbfel", "z", "--pianissimo"],
+                            capture_output=True, text=True, timeout=60)
+        self.assertEqual(ut.returncode, 2)
+        self.assertIn("--pianissimo kraver Mac och --riktig-rostmodell", ut.stderr)
+
+    def test_bygg_mac_kraver_pianissimo_i_paketet_men_inte_faster_whisper(self):
+        text = las("paketering", "bygg-mac.sh")
+        forbjudet = text[text.index("== 5. ingen faster-whisper-stack"):text.index("== 5b.")]
+        for namn in ("faster_whisper", "ctranslate2", "tokenizers", "huggingface_hub", "hf_xet"):
+            self.assertIn(f"-iname '{namn}*'", forbjudet)
+        self.assertNotIn("onnxruntime*", forbjudet)
+        for monster in ("onnx_asr/preprocessors/data/fbanks.npz", "onnx_asr-*.dist-info/METADATA",
+                        "onnxruntime/capi/libonnxruntime.*.dylib", "sentencepiece/_sentencepiece*.so"):
+            self.assertIn(monster, text)
+
+    def test_specen_tar_med_pianissimo_bara_pa_mac(self):
+        spec = las("paketering", "akasha-protokoll.spec")
+        self.assertIn('+ ([] if MAC else ["onnxruntime"])', spec)
+        self.assertIn("if MAC:\n    from PyInstaller.utils.hooks import collect_data_files, copy_metadata", spec)
+        self.assertIn('+ (["pianissimo", "pianissimo_boost", "onnx_asr", "onnxruntime", "sentencepiece"] if MAC else [])', spec)
 
 
 class ProvaLinuxMedEgetFfmpeg(unittest.TestCase):

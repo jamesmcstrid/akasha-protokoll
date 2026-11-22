@@ -3,7 +3,7 @@
 Kors med en vanlig Python som har requests (inte inuti programmet):
 
     python paketering/kontrollera.py --program SOKVAG --hem KATALOG [--port 8611]
-           --vantad-motor whispercpp|faster --vantat-jobbfel TEXT [--riktig-rostmodell]
+           --vantad-motor whispercpp|faster --vantat-jobbfel TEXT [--riktig-rostmodell] [--pianissimo]
 
 Varje steg skriver "OK: ..." eller "FEL: ...". Forsta FEL ger slutkod 1 (och de sista raderna av
 programmets utskrift och logg). Sist "KONTROLL: OK". Forst, innan programmet startas, kontrolleras licenserna i
@@ -12,6 +12,10 @@ programmet (kontrollera_licenser.py: forteckningen, filerna och att varje Python
 Pa Windows (sys.platform == "win32") ar miljon USERPROFILE, LOCALAPPDATA och TEMP under --hem (ge en katalog med
 a-ring och o-prickar och mellanslag i namnet), programmet avslutas med TerminateProcess, ett steg provar den andra
 kopian (mutexen) och whisper-cli-processer letas med tasklist.
+
+--pianissimo (bara Mac): sist startas programmet om med MOTOR=pianissimo i installningar.env, som en anvandare satter
+den. Modellen (660 MB) hamtas genom sidan, och tva-talare.m4a transkriberas med talaruppdelning genom /transcribe, sa att
+onnx-asr, onnxruntime och sentencepiece i programmet kors i samma process som sherpa-onnx, som har sin egen onnxruntime.
 """
 import argparse
 import os
@@ -40,6 +44,8 @@ GAMMAL_PROGRAMKATALOG = ("Library", "Application Support", "Akasha Meet") if MAC
 NY_PROGRAMKATALOG = ("Library", "Application Support", "Akasha Protokoll") if MAC else \
     ("AppData", "Local", "Akasha Protokoll") if WIN else (".local", "share", "akasha-protokoll")
 START_TIDSGRANS = 120 if WIN else 60  # Windows: Defender granskar en nyuppackad exe och dess DLL-filer forsta gangen
+PIANISSIMO_HAMTNING_TIDSGRANS = 900  # 660 MB fran Hugging Face (rostmodellen, 40 MB, tog 6-9 s i Actions)
+PIANISSIMO_TRANSKRIBERING_TIDSGRANS = 600  # laddar modellen och transkriberar 1 min ljud pa tre karnor
 ANDRA_KOPIAN_TIDSGRANS = 40
 # Windows: variabler som programmet behover ur den egna miljon (utan SYSTEMROOT fungerar inte Pythons nat och slumptal).
 WINDOWS_MILJO = ("SYSTEMROOT", "WINDIR", "COMSPEC", "SYSTEMDRIVE", "PATHEXT", "PROCESSOR_ARCHITECTURE",
@@ -169,6 +175,92 @@ def kontrollera_format(katalog):
                     f"{namn}: ljudet kunde inte läsas av det paketerade programmet (svar {status}: {text.strip()[:200]})")
 
 
+def vanta_pa_health():
+    """Vantar tills programmet svarar pa /health (svaret kan vara 503: motorn ar inte redo, men tjansten kor)."""
+    start = time.monotonic()
+    while True:
+        if proc.poll() is not None:
+            slut(f"programmet avslutades med kod {proc.returncode} innan det svarade")
+        try:
+            hamta("/health")
+            break
+        except requests.RequestException:
+            pass
+        if time.monotonic() - start > START_TIDSGRANS:
+            slut(f"programmet svarade inte på /health inom {START_TIDSGRANS} s")
+        time.sleep(0.5)
+    ok(f"/health svarar efter {time.monotonic() - start:.1f} s")
+
+
+def kontrollera_pianissimo(program, miljo, hem):
+    """Mac: programmet startas om med MOTOR=pianissimo i installningar.env (det en anvandare gor), modellen hamtas genom
+    sidan, och tva-talare.m4a transkriberas med tva talare genom /transcribe. Provar att onnx-asr, onnxruntime och
+    sentencepiece gar att importera i programmet, att motorn laddar modellen och att sherpa-onnx (talaruppdelningen, med
+    sin egen onnxruntime) fungerar i samma process. Modellens kvalitet provas inte: texten ska bara ha ett ord ur facit,
+    och talaruppdelningen ska ha korts utan varning (inte hitta ratt antal talare)."""
+    global proc
+    with open(os.path.join(hem, *NY_PROGRAMKATALOG, "installningar.env"), "w", encoding="utf-8") as f:
+        f.write("MOTOR=pianissimo\n")
+    with open(utskrift, "ab") as ut:
+        proc = subprocess.Popen([program], env=miljo, stdout=ut, stderr=subprocess.STDOUT)
+    ok(f"programmet startat om med MOTOR=pianissimo (pid {proc.pid})")
+    vanta_pa_health()
+    h = hamta("/health").json()
+    kontrollera(h.get("motor") == "pianissimo", "motor är pianissimo", f"motor är {h.get('motor')!r}, väntade 'pianissimo'")
+
+    # Hamtningen genom sidans API, som for de andra modellerna. Hade onnx-asr inte foljt med hade hinder() sagt att
+    # motorn inte gar i programmet. Rostmodellen hamtades i steg 7: bara Pianissimo ska saknas.
+    m = hamta("/api/modeller").json()
+    kontrollera(m.get("hinder") is None, "hinder är null med MOTOR=pianissimo (onnx-asr följer med)",
+                f"hinder är {m.get('hinder')!r}")
+    namn = [s["namn"] for s in m.get("saknas", [])]
+    kontrollera(namn == ["Pianissimo"], "bara Pianissimo saknas", f"saknas är {namn}, väntade ['Pianissimo']")
+    t0 = time.monotonic()
+    r = requests.post(f"http://127.0.0.1:{args.port}/api/modeller/hamta", timeout=10,
+                      headers={**HEADERS, "Origin": f"http://127.0.0.1:{args.port}"})
+    kontrollera(r.status_code == 202, "POST /api/modeller/hamta ger 202", f"hamta gav {r.status_code}: {r.text}")
+    while True:
+        m = hamta("/api/modeller").json()
+        if m["hamtning"]["tillstand"] in ("klar", "fel"):
+            break
+        if time.monotonic() - t0 > PIANISSIMO_HAMTNING_TIDSGRANS:
+            slut(f"hämtningen av Pianissimo blev inte klar inom {PIANISSIMO_HAMTNING_TIDSGRANS} s: {m['hamtning']}")
+        time.sleep(2)
+    kontrollera(m["hamtning"]["tillstand"] == "klar" and m["saknas"] == [],
+                f"Pianissimo hämtad och verifierad (sha256) på {time.monotonic() - t0:.0f} s",
+                f"hämtningen gav {m['hamtning']}, saknas är {m['saknas']}")
+    r = hamta("/health")
+    kontrollera(r.status_code == 200 and r.json().get("problem") is None, "/health ger 200 utan problem efter hämtningen",
+                f"/health gav {r.status_code}: {r.text[:300]}")
+
+    # Transkriberingen. Pianissimo hoppar over korta inpass, sa bara ett ord ur facit kravs.
+    t0 = time.monotonic()
+    with open(os.path.join(ROT, "testljud", "tva-talare.m4a"), "rb") as f:
+        r = requests.post(f"http://127.0.0.1:{args.port}/transcribe", timeout=PIANISSIMO_TRANSKRIBERING_TIDSGRANS,
+                          headers={**HEADERS, "Origin": f"http://127.0.0.1:{args.port}"},
+                          files={"audio": ("tva-talare.m4a", f, "audio/mp4")}, data={"speakers": "2"})
+    if not kontrollera(r.status_code == 200, f"/transcribe med Pianissimo ger 200 efter {time.monotonic() - t0:.1f} s",
+                       f"/transcribe gav {r.status_code}: {r.text[:500]}"):
+        return
+    svar = r.json()
+    kontrollera("dinosaurie" in svar["text"].lower(), f"texten innehåller 'dinosaurie' ({len(svar['text'])} tecken)",
+                f"texten saknar 'dinosaurie': {svar['text'][:300]!r}")
+    kontrollera("Pianissimo" in svar["model"], f"modellen är {svar['model']}", f"modellen är {svar['model']!r}")
+    kontrollera("speakers" in svar and "warning" not in svar,
+                f"talaruppdelningen kördes i samma process utan varning ({svar.get('speakers')} talare)",
+                f"talaruppdelningen gav ingen uppdelning eller en varning: {svar.get('warning')!r}")
+    text = open(logg, encoding="utf-8", errors="replace").read() if os.path.isfile(logg) else ""
+    kontrollera("Pianissimo: modellen laddades" in text, "loggen har raden 'Pianissimo: modellen laddades'",
+                "loggen saknar raden 'Pianissimo: modellen laddades'")
+    proc.send_signal(signal.SIGTERM)
+    try:
+        proc.wait(10)
+    except subprocess.TimeoutExpired:
+        slut("programmet avslutades inte inom 10 s efter SIGTERM (Pianissimo)")
+    kontrollera(port_ledig(), f"programmet avslutades (kod {proc.returncode}) och porten är ledig",
+                "porten är inte ledig efter SIGTERM (Pianissimo)")
+
+
 def tasklist(avbildning):
     """Namn pa processer med den avbildningen (tasklist; MSYS omskriver inte argument som startas fran Python)."""
     ut = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {avbildning}", "/NH", "/FO", "CSV"], capture_output=True,
@@ -204,11 +296,15 @@ def main():
     ap.add_argument("--vantad-motor", required=True, choices=["whispercpp", "faster"])
     ap.add_argument("--vantat-jobbfel", required=True)
     ap.add_argument("--riktig-rostmodell", action="store_true")
+    ap.add_argument("--pianissimo", action="store_true",
+                    help="bara Mac, med --riktig-rostmodell: starta om med MOTOR=pianissimo, hamta modellen och transkribera")
     ap.add_argument("--fortsatt-efter-fel", action="store_true",
                     help="skriv varje misslyckat villkor som FEL och fortsatt; stoppa bara nar det inte gar att fortsatta "
                          "(programmet startar eller svarar inte). Sist en lista over alla FEL och slutkod 1")
     args = ap.parse_args()
     FORTSATT = args.fortsatt_efter_fel
+    if args.pianissimo and not (MAC and args.riktig_rostmodell):
+        ap.error("--pianissimo kraver Mac och --riktig-rostmodell (talaruppdelningen behover rostmodellen)")
     hem = os.path.abspath(args.hem)
     program = os.path.abspath(args.program)
     if WIN and not os.path.isfile(program):  # ett tydligt FEL i stallet for en traceback om bygget inte gav nagon exe
@@ -267,19 +363,7 @@ def main():
     ok(f"programmet startat (pid {proc.pid}, port {args.port})")
 
     # 3. Vanta pa /health.
-    start = time.monotonic()
-    while True:
-        if proc.poll() is not None:
-            slut(f"programmet avslutades med kod {proc.returncode} innan det svarade")
-        try:
-            hamta("/health")
-            break
-        except requests.RequestException:
-            pass
-        if time.monotonic() - start > START_TIDSGRANS:
-            slut(f"programmet svarade inte på /health inom {START_TIDSGRANS} s")
-        time.sleep(0.5)
-    ok(f"/health svarar efter {time.monotonic() - start:.1f} s")
+    vanta_pa_health()
 
     # 4. Sidan och dess skript.
     r = hamta("/")
@@ -437,6 +521,10 @@ def main():
     if MAC:
         kvar = subprocess.run(["pgrep", "-f", "whisper-cli"], capture_output=True)
         kontrollera(kvar.returncode != 0, "ingen whisper-cli kvar", "en whisper-cli är kvar efter SIGTERM")
+
+    # 10b. Mac: Pianissimo i programmet (programmet startas om, och avslutas igen).
+    if args.pianissimo:
+        kontrollera_pianissimo(program, miljo, hem)
 
     # 11. Storlek.
     rot, total = programstorlek(program)

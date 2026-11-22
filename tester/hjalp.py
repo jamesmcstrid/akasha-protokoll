@@ -4,6 +4,7 @@ import os
 import shutil
 import sys
 import tempfile
+import types
 
 DATA = tempfile.mkdtemp(prefix="akasha-protokoll-test-")
 # Ingen test far rora den riktiga hemkatalogen (flytten av mapparna i start.py och plattform.py
@@ -19,6 +20,16 @@ os.environ["MODELLKATALOG"] = os.path.join(DATA, "inga-modeller")
 os.environ["MOTOR"] = "faster"
 os.environ["MODELL"] = "medium"
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app"))
+
+
+def falska_pyinstaller_hooks():
+    """sys.modules-poster for PyInstaller.utils.hooks, som spec-filen importerar pa Mac (PyInstaller finns inte i
+    testmiljon): collect_data_files(paket) och copy_metadata(paket) ger en post var, sa att ett test ser vad som begardes."""
+    hooks = types.ModuleType("PyInstaller.utils.hooks")
+    hooks.collect_data_files = lambda paket: [(f"/falsk/{paket}", f"{paket}/data")]
+    hooks.copy_metadata = lambda paket: [(f"/falsk/{paket}.dist-info", f"{paket}.dist-info")]
+    return {"PyInstaller": types.ModuleType("PyInstaller"), "PyInstaller.utils": types.ModuleType("PyInstaller.utils"),
+            "PyInstaller.utils.hooks": hooks}
 
 
 def tom_datakatalog():

@@ -1,5 +1,5 @@
 # För motorn MOTOR=pianissimo (app/pianissimo.py, Klang Pianissimo) och halsokoll/jamfor_motorer.py. Inte en del av appens
-# krav: installera i samma venv med
+# krav: installera i samma venv med (Mac-programmet byggs med dem, mac-app.yml; Windows-programmet har dem inte)
 #   venv/bin/pip install -r app/krav-pianissimo.txt        (Windows: venv\Scripts\pip)
 # Modellen hämtas av modeller.py, inte av Hugging Face-biblioteket, så extrat "hub" behövs inte.
 onnx-asr[cpu]==0.12.0

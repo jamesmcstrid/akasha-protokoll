@@ -151,10 +151,29 @@ Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-2
   behörigheter och signatur. Bygget är ad hoc-signerat, inte signerat med ett Apple Developer ID. Flödet i
   Actions (`.github/workflows/mac-app.yml`) körs bara för hand.
 - **Vad som följer med.** Flask, waitress, requests, sherpa-onnx, numpy, PyAV (`av`), `truststore`
-  och `whisper-cli`, samt PyObjC för Dock-ikonen och menyn. faster-whisper, ctranslate2,
-  tokenizers, huggingface_hub och onnxruntime följer inte med, eftersom programmet använder
-  whisper.cpp. Därför avkodas ljudet med `app/ljud.py` (PyAV) i stället för med faster-whisper.
-  Sätts `MOTOR=faster` i programmet visar sidan "Inte redo" med en förklaring.
+  och `whisper-cli`, samt PyObjC för Dock-ikonen och menyn, och för Pianissimo onnx-asr, onnxruntime,
+  sentencepiece och protobuf (se nedan). faster-whisper, ctranslate2, tokenizers och huggingface_hub följer
+  inte med, eftersom programmet använder whisper.cpp. Därför avkodas ljudet med `app/ljud.py` (PyAV) i
+  stället för med faster-whisper. Sätts `MOTOR=faster` i programmet visar sidan "Inte redo" med en förklaring.
+- **Pianissimo i programmet.** `MOTOR=pianissimo` i `installningar.env` fungerar i Mac-programmet (Windows: se
+  nedan, där det inte följer med än). `mac-app.yml` installerar `app/krav-pianissimo.txt` i byggets venv
+  (fastlåsta versioner, utan hashar, som `krav-bygg.txt`), och spec-filen tar med det enligt nedan; modellen
+  (660 MB) hämtas på sidan som de andra. `hinder()` släpper igenom motorn när `onnx_asr` går att importera, och
+  säger annars att den saknas i programmet. Vad som krävdes, och hur det provades i ett fruset program (Windows,
+  samma spec-val, riktig modell): `onnx_asr/__init__.py` läser sin version ur dist-info (`copy_metadata`, utan den
+  `PackageNotFoundError` vid import), och `onnx_asr/preprocessors/data` (`collect_data_files`, 6,7 MB; `fbanks.npz`
+  läses vid inladdningen) följer inte med av sig själv. onnxruntime-hjulet för macOS arm64 (`macosx_14_0`) har
+  `libonnxruntime.1.32.0.dylib` (35 MB) och `onnxruntime_pybind11_state.so` (44 MB), båda med lägsta macOS 14.0, och
+  inga separata leverantörsbibliotek (CoreML finns inbyggt i dylib:en, men motorn använder bara processorn, se nedan), så
+  det finns inga extra bibliotek att signera. PyInstallers krok `hook-onnxruntime` tar biblioteken; `onnxruntime` är därför inte
+  längre i `excludes` på Mac (men fortfarande på Windows och Linux). sentencepiece 0.2.3 och protobuf 7.36.2 följer
+  med (sentencepiece importerar `sentencepiece_pb2`, som kräver protobuf, i en funktion); flatbuffers, som
+  onnxruntime kräver av pip, importeras av ingen modul och följer inte med. sherpa-onnx har sin egen
+  onnxruntime (`sherpa_onnx/lib/libonnxruntime.dylib`, version 1.28.2); hjulets heter `libonnxruntime.1.32.0.dylib` och
+  ligger i `onnxruntime/capi`, så de kolliderar inte på filnamn, och macOS tvånivånamnrymd (two-level namespace) håller deras symboler isär.
+  På Windows kördes båda i samma process utan problem. På Mac provas det i Actions, se Kontrollen i Actions. Storleken
+  är inte uppmätt än: onnxruntime-hjulet är 22,5 MB packat och 80 MB uppackat, så väntat 90 MB → cirka 180 MB och zip-filen
+  33 MB → cirka 60 MB. `bygg-mac.sh` steg 5b kontrollerar att filerna finns i paketet.
 - **Licenserna.** `paketering/samla_licenser.py` körs av spec-filen direkt efter PyInstallers analys och
   skriver katalogen `licenser/`: en fil per komponent med hela licenstexten och upphovsrättsraderna, och
   förteckningen `LICENSER.txt` (namn, version, licens, källa, fil). Python-paketen är de distributioner
@@ -164,8 +183,10 @@ Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-2
   utom `sherpa-onnx-core` och `pyobjc-core`, som får texten från ett paket ur samma projekt med samma
   version. Bibliotek som ett hjul bär med sig (`numpy.libs`, `sherpa_onnx/lib`, `av.libs`) ska täckas av
   paketets licenstext, av FFmpeg, av Visual C++-runtimen eller av en text i `paketering/licenstexter/`
-  (ONNX Runtime 1.28.2 i sherpa-onnx-core 2.0.1). Dessutom Python (`LICENSE.txt` ur den Python som
-  bygger), whisper.cpp (`build/whisper/licens/`, som `bygg-whisper-cli.sh` kopierar ur källkoden och flödet
+  (ONNX Runtime 1.28.2 i sherpa-onnx-core 2.0.1). onnxruntime-hjulets egen `LICENSE` och `ThirdPartyNotices.txt`
+  följer med hjulets text, och sentencepiece-hjulet, som saknar licensfil, får texterna ur projektets källkod
+  (`paketering/licenstexter/sentencepiece-0.2.3`, `LICENSTEXT_UR_KALLKOD`, samma version krävs). Dessutom Python
+  (`LICENSE.txt` ur den Python som bygger), whisper.cpp (`build/whisper/licens/`, som `bygg-whisper-cli.sh` kopierar ur källkoden och flödet
   cachar med `whisper-cli`), FFmpeg (`AKASHA_FFMPEG_LICENSER`, katalogen `ut/ffmpeg` från `bygg-ffmpeg.sh`)
   och typsnitten. Katalogen hamnar i `Contents/Resources/licenser/`, före signeringen. Saknas en text byggs
   programmet ändå, med `LICENSER.txt` markerad `OFULLSTÄNDIG`, och `kontrollera_licenser.py` (i
@@ -239,7 +260,13 @@ Flödet `.github/workflows/mac-app.yml` bygger programmet för hand på `macos-2
   modeller och motorvalet provas utan att 1,5 GB hämtas. Röstmodellen (40 MB) hämtas på riktigt
   genom programmets eget API. Ett testljud laddas upp, avkodningen ska lyckas och jobbet ska
   misslyckas med ett fel från den medföljande `whisper-cli` (den gles filen är ingen modell). Sist
-  skickas SIGTERM och porten ska vara ledig. Dessutom ska den medföljande `whisper-cli`
+  skickas SIGTERM och porten ska vara ledig. Med `--pianissimo` (Mac, i flödet) startas programmet sedan om med
+  `MOTOR=pianissimo` i `installningar.env`, modellen hämtas på riktigt genom API:t (cirka 2 minuter om hämtningen går
+  som röstmodellens: 6 MB/s) och `tva-talare.m4a` transkriberas med två talare genom `/transcribe`: texten ska ha
+  "dinosaurie", loggen "Pianissimo: modellen laddades" och talaruppdelningen ska köras utan varning, så att onnx-asr,
+  onnxruntime och sentencepiece i det frysta programmet och sherpa-onnx med sin onnxruntime syns fungera i en process.
+  Modellen cachas inte: flödet körs bara för hand, och cachen skulle hamna i programkatalogen som flytten av den gamla
+  mappen (steg 1b) kräver att den inte finns. Dessutom ska den medföljande `whisper-cli`
   transkribera ett testljud med en liten riktig modell. Samma kontrollskript
   (`paketering/kontrollera.py`) körs mot provbygget på Linux. Kontrollen visar att programmet
   startar, att standardplatserna, flytten av modeller och av de gamla mapparna, motorvalet, sherpa-onnx, PyAV, requests och
@@ -306,7 +333,8 @@ har inte körts på en vanlig Windows-dator.**
   14.52.37029.0, ur Visual Studios Redist-katalog, eftersom hos användaren inte alltid finns Visual C++
   Redistributable). `parakeet.dll` och de andra programmen ur whisper.cpp-bygget följer inte med.
   faster-whisper, ctranslate2, tokenizers, huggingface_hub, onnxruntime och tkinter följer inte med
-  (`bygg-windows.sh` kontrollerar det). pystray är LGPL-3.0, så dess kod ligger som vanliga `.py`-filer i
+  (`bygg-windows.sh` kontrollerar det), så `MOTOR=pianissimo` säger där att onnx-asr inte följer med än. pystray är
+  LGPL-3.0, så dess kod ligger som vanliga `.py`-filer i
   programmet (`module_collection_mode`), inte inbakad i arkivet. `plattform.whisper_cli()` letar efter
   `_internal\whisper\whisper-cli.exe` i det paketerade programmet.
 - **Licenserna.** Som på Mac (se där), men katalogen `licenser\` ligger bredvid `Akasha Protokoll.exe`, inte
@@ -634,8 +662,9 @@ Det som avgör är ett riktigt möte: transkribera samma ljud med båda och jäm
 
 `MOTOR=pianissimo` kör Klangs svenska Parakeet-modell (`KlangAI/pianissimo-sv-onnx`, CC-BY-4.0, int8,
 660 MB) i stället för KB-Whisper. Den är aldrig `auto`: onnx-asr, som kör modellen, ingår inte i
-`app/requirements.txt` och inte i programmen för Mac och Windows (`motor.hinder()` säger det). I
-terminalinstallationen installeras det med `pip install -r app/krav-pianissimo.txt`, och modellen hämtas på
+`app/requirements.txt`, och Windows-programmet har det inte med än (`motor.hinder()` säger det), men Mac-programmet har
+det: där räcker `MOTOR=pianissimo` i `installningar.env`. I terminalinstallationen installeras det med
+`pip install -r app/krav-pianissimo.txt`, och modellen hämtas på
 sidan eller med `python app/modeller.py pianissimo`, som de andra modellerna (manifestet är `PAKET["pianissimo"]`).
 
 - **Hastighet (uppmätt):** 6–8 gånger snabbare än KB-Whisper medium på en Windows-laptop (bara processorn) och
