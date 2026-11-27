@@ -161,6 +161,7 @@ Har filen ett fel säger programmet till och använder standardvärdet.
 | `TILLAGG` | tom | Kataloger med tillägg (separat installerade paket), skilda med `;` på Windows och annars `:`. Se `docs/TEKNIK.md` |
 | `MOTOR` | `auto` | Klangs svenska taligenkänning Pianissimo (Parakeet) när den går att köra: många gånger snabbare, och `ORDLISTA` fungerar. I Mac- och Windows-programmen är den med: en ny installation hämtar Pianissimo (660 MB) på sidan. Har du redan KB-Whisper fortsätter den, tills du skriver `MOTOR=pianissimo` i `installningar.env`. Från Terminal: efter `pip install -r app/krav-pianissimo.txt`. Annars whisper.cpp (Metal på Mac, processorn på Windows). `whispercpp` behåller KB-Whisper, `faster` väljer faster-whisper (bara från Terminal), `pianissimo` kräver Pianissimo |
 | `GRAFIK` | `av` | Windows: `pa` provar grafikkretsen (Vulkan). Var långsammare på Intels inbyggda grafik |
+| `SIGNATUR` | `pa` | En rad sist i texten om att den är transkriberad med Akasha Protokoll, med länk. `av` tar bort den |
 | `HTTPS_PROXY`, `REQUESTS_CA_BUNDLE` | tom | Proxy och certifikat för hämtning på ett företagsnät |
 
 ## Felsökning

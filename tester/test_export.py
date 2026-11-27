@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 import hjalp  # noqa: F401
 import export
@@ -49,6 +50,37 @@ class TestExport(unittest.TestCase):
         self.assertTrue(txt.startswith("Avstämning\n"))
         self.assertIn("[00:01] Bara jag.", txt)
         self.assertIn("Obs: Texten är inte uppdelad per talare.", txt)
+
+
+class TestSignatur(unittest.TestCase):
+    def test_standard_sist_i_markdown_och_text(self):
+        md = export.som_markdown(META)
+        self.assertTrue(md.endswith(
+            "Hej Anna.\n\n---\n\n_Transkriberat med [Akasha Protokoll](" + export.LANK_REPO + "), "
+            "lokalt på den egna datorn. Vill du testa själv? [Ladda ner här](" + export.LANK_HAMTA + ")._\n"), md)
+        txt = export.som_text(META)
+        self.assertTrue(txt.endswith(
+            "Hej Anna.\n\nTranskriberat med Akasha Protokoll, lokalt på den egna datorn.\n"
+            "Vill du testa själv? " + export.LANK_HAMTA + "\n"), txt)
+        self.assertEqual(export.LANK_HAMTA, "https://github.com/jamesmcstrid/akasha-protokoll/releases/latest")
+
+    def test_signatur_false_tar_bort_den(self):
+        for text in (export.som_markdown(META, signatur=False), export.som_text(META, signatur=False)):
+            self.assertNotIn("Akasha Protokoll", text)
+            self.assertNotIn(export.LANK_REPO, text)
+            self.assertTrue(text.endswith("Hej Anna.\n"), text)
+
+    def test_installningen_av(self):
+        with mock.patch.object(export.installningar, "SIGNATUR", "av"):
+            self.assertNotIn("Akasha Protokoll", export.som_markdown(META))
+            self.assertNotIn("Akasha Protokoll", export.som_text(META))
+            self.assertIn("Akasha Protokoll", export.som_text(META, signatur=True))
+
+    def test_en_enda_radbrytning_sist(self):
+        for text in (export.som_markdown(META), export.som_text(META),
+                     export.som_markdown({}), export.som_text({})):
+            self.assertTrue(text.endswith("\n"))
+            self.assertFalse(text.endswith("\n\n"))
 
 
 if __name__ == "__main__":

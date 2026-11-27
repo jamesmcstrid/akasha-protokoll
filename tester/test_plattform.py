@@ -393,6 +393,13 @@ class TestVarden(unittest.TestCase):
         self.assertIn("av eller pa", i.PROBLEM[0])
         self.assertNotIn("kanske", i.PROBLEM[0])
 
+    def test_signatur_standard_giltiga_och_ogiltigt_varde(self):
+        self.assertEqual(self.ladda().SIGNATUR, "pa")
+        self.assertEqual(self.ladda(SIGNATUR=" AV ").SIGNATUR, "av")
+        i = self.ladda(SIGNATUR="nej")
+        self.assertEqual(i.SIGNATUR, "pa")
+        self.assertIn("SIGNATUR", i.PROBLEM[0])
+
     def test_max_mb_och_cpu_tradar(self):
         i = self.ladda(MAX_MB="0", CPU_TRADAR="300")
         self.assertEqual((i.MAX_MB, i.CPU_TRADAR), (1024, 0))

@@ -1,6 +1,11 @@
 """Transkriberingen som Markdown eller ren text. Talarna far de namn som angetts i webbsidan."""
 from datetime import datetime
 
+import installningar
+
+LANK_REPO = "https://github.com/jamesmcstrid/akasha-protokoll"
+LANK_HAMTA = LANK_REPO + "/releases/latest"
+
 VARNING_KONTROLL = "Transkriberat lokalt med KB-Whisper. Kontrollera mot ljudet innan texten används."
 
 
@@ -63,7 +68,12 @@ def _rader(meta):
     return ut
 
 
-def som_markdown(meta):
+def _med_signatur(signatur):
+    """None: installningen SIGNATUR avgor. Sant/falskt: tvingar fram eller tar bort signaturen."""
+    return installningar.SIGNATUR == "pa" if signatur is None else bool(signatur)
+
+
+def som_markdown(meta, signatur=None):
     res = meta.get("resultat") or {}
     delar = [f"# {rubrik(meta)}", "", info(meta), "", f"_{varning_kontroll(meta)}_", ""]
     if res.get("varning"):
@@ -73,14 +83,21 @@ def som_markdown(meta):
             delar += [f"**{namn}** ({tid(start)}): {text}", ""]
         else:
             delar += [f"({tid(start)}) {text}", ""]
+    if _med_signatur(signatur):
+        delar += ["---", "",
+                  f"_Transkriberat med [Akasha Protokoll]({LANK_REPO}), lokalt på den egna datorn. "
+                  f"Vill du testa själv? [Ladda ner här]({LANK_HAMTA})._"]
     return "\n".join(delar).rstrip() + "\n"
 
 
-def som_text(meta):
+def som_text(meta, signatur=None):
     res = meta.get("resultat") or {}
     delar = [rubrik(meta), info(meta), varning_kontroll(meta), ""]
     if res.get("varning"):
         delar += [f"Obs: {res['varning']}", ""]
     for start, namn, text in _rader(meta):
         delar += [f"[{tid(start)}] {namn}: {text}" if namn else f"[{tid(start)}] {text}", ""]
+    if _med_signatur(signatur):
+        delar += ["Transkriberat med Akasha Protokoll, lokalt på den egna datorn.",
+                  f"Vill du testa själv? {LANK_HAMTA}"]
     return "\n".join(delar).rstrip() + "\n"
