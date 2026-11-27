@@ -81,6 +81,8 @@ MODELL = _env("MODELL", "medium").lower()
 # Grafikkretsen (whisper.cpp med Vulkan, Windows): av = bara processorn (standard), pa = prova grafikkretsen.
 # Ett prov: gar det fel gar motorn tillbaka till processorn (se motor.py, filen grafik-fungerade-inte).
 GRAFIK = _val("GRAFIK", "av", ("av", "pa"))
+# Signatur sist i den exporterade texten (en rad om programmet, med lank): pa (standard) eller av.
+SIGNATUR = _val("SIGNATUR", "pa", ("pa", "av"))
 CPU_TRADAR = _tal("CPU_TRADAR", 0, int, 0, 256, "ett heltal 0–256")  # 0 = motorn valjer
 WHISPERCPP_BIN = _env("WHISPERCPP_BIN", "whisper-cli")
 # Tva rostgrupper som liknar varandra mer an sa har raknas som samma person. Uppmatt med TitaNet:
